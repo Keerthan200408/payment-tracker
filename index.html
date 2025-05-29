@@ -498,7 +498,7 @@
       };
     });
 
-    fetch('http://localhost:3001/api/save-payments', {
+    fetch('https://payment-tracker-aswa.onrender.com/api/save-payments', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -793,7 +793,7 @@
       };
     });
 
-    fetch('http://localhost:3001/api/save-payments', {
+    fetch('https://payment-tracker-aswa.onrender.com/api/save-payments', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -814,7 +814,7 @@
   }
 
   function fetchClients() {
-    fetch('http://localhost:3001/api/get-clients')
+    fetch('https://payment-tracker-aswa.onrender.com/api/get-clients')
       .then(response => {
         if (!response.ok) throw new Error('Failed to fetch clients');
         return response.json();
@@ -863,7 +863,7 @@
   document.addEventListener('DOMContentLoaded', () => {
     setTimeout(()=>{
       fetchClients();
-    fetch('http://localhost:3001/api/get-payments')
+    fetch('https://payment-tracker-aswa.onrender.com/api/get-payments')
       .then(response => {
         if (!response.ok) throw new Error('Failed to fetch payments');
         return response.json();
