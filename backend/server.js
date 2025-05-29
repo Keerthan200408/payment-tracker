@@ -9,13 +9,26 @@ app.use(cors());
 app.use(express.json());
 
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
-const CREDENTIALS_PATH = path.join(__dirname, 'credentials', 'paymenttracker-461218-b6147a7a3f80.json');
+// const CREDENTIALS_PATH = path.join(__dirname, 'credentials', 'paymenttracker-461218-b6147a7a3f80.json');
+// added
+// Parse the GOOGLE_CREDENTIALS environment variable with error handling
+let credentials;
+try {
+  credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+} catch (error) {
+  console.error('Error parsing GOOGLE_CREDENTIALS:', error);
+  process.exit(1); // Exit the process if credentials are invalid
+}
 
 async function getSheetsClient() {
+  // const auth = new GoogleAuth({
+  //   // keyFile: CREDENTIALS_PATH,
+  //   scopes: SCOPES,
+  // });
   const auth = new GoogleAuth({
-    keyFile: CREDENTIALS_PATH,
-    scopes: SCOPES,
-  });
+  credentials,
+  scopes: SCOPES,
+});
   return google.sheets({ version: 'v4', auth });
 }
 
