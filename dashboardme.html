@@ -1,0 +1,888 @@
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Editable Payment Table with Row Insert/Delete Feature</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #fff;
+      overflow-x: hidden;
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    .container-fluid {
+      flex-grow: 1;
+      padding: 0 1rem 1rem 1rem;
+      max-width: 100vw !important;
+      width: 100vw !important;
+    }
+    .header-section {
+      background: linear-gradient(90deg, #4f46e5, #3b82f6);
+      color: white;
+      font-weight: 1000;
+      font-size: 1.5rem;
+      padding: 1rem 0;
+      border-radius: 0;
+      text-align: center;
+      box-shadow: 0 4px 8px rgb(59 130 246 / 0.4);
+      user-select: none;
+      margin-bottom: 1.5rem;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      box-sizing: border-box;
+    }
+    .menu-toggle {
+      position: absolute;
+      left: 1rem;
+      top: 50%;
+      transform: translateY(-50%);
+      cursor: pointer;
+      width: 28px;
+      height: 22px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      z-index: 1051;
+    }
+    .menu-toggle span {
+      display: block;
+      height: 3.5px;
+      background: white;
+      border-radius: 2px;
+    }
+    #sidebarMenu {
+      position: fixed;
+      top: 0;
+      left: -250px;
+      width: 250px;
+      height: 100vh;
+      background: #3b82f6;
+      color: white;
+      padding-top: 4rem;
+      transition: left 0.3s ease;
+      z-index: 1050;
+      box-shadow: 2px 0 8px rgb(59 130 246 / 0.5);
+      overflow-y: auto;
+    }
+    #sidebarMenu.show {
+      left: 0;
+    }
+    #sidebarMenu ul {
+      list-style: none;
+      padding-left: 0;
+      margin: 0;
+    }
+    #sidebarMenu ul li {
+      padding: 1rem 1.5rem;
+      cursor: pointer;
+      font-weight: 600;
+      border-bottom: 1px solid rgba(255,255,255,0.2);
+      user-select: none;
+      transition: background-color 0.2s ease;
+    }
+    #sidebarMenu ul li:hover {
+      background-color: rgba(255,255,255,0.2);
+    }
+    #sidebarOverlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0,0,0,0.3);
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.3s ease;
+      z-index: 1049;
+    }
+    #sidebarOverlay.show {
+      opacity: 1;
+      visibility: visible;
+    }
+    .btn-add-new {
+      background-color: #dc2626 !important;
+      color: white !important;
+      font-weight: 600;
+      border: none;
+      transition: background-color 0.3s ease;
+      white-space: nowrap;
+    }
+    .btn-add-new:hover, .btn-add-new:focus {
+      background-color: #b91c1c !important;
+      color: white !important;
+      box-shadow: 0 0 8px #b91c1caa;
+    }
+    .table thead th {
+      vertical-align: middle;
+      text-align: center;
+      background-color: #e9ecef;
+      font-weight: 600;
+      border-color: #dee2e6;
+      white-space: nowrap;
+      padding: 0.5rem 0.75rem;
+    }
+    .table tbody td {
+      vertical-align: middle;
+      padding: 0.3rem 0.5rem;
+      position: relative;
+    }
+    .manual-entry-cell {
+      background-color: #dbeafe !important;
+    }
+    input.form-control, select.form-control {
+      font-size: 0.875rem;
+      padding: 0.25rem 0.5rem;
+      height: 2rem;
+      min-width: 60px;
+    }
+    .due-payment-cell {
+      min-width: 140px;
+    }
+    @media (max-width: 768px) {
+      .table-responsive {
+        font-size: 0.75rem;
+      }
+      input.form-control, select.form-control {
+        height: 1.75rem;
+        font-size: 0.75rem;
+        min-width: 40px;
+      }
+    }
+    .table-responsive {
+      width: 100vw;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .search-group {
+      max-width: 320px;
+      width: 100%;
+    }
+    .controls-container {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 1rem;
+      gap: 0.5rem;
+      width: 100vw;
+      box-sizing: border-box;
+      padding: 0 1rem;
+    }
+    .btn-add-new {
+      flex-shrink: 0;
+    }
+    .search-group {
+      flex-grow: 1;
+      max-width: 320px;
+      margin-left: auto;
+    }
+    /* Context menu styles */
+    #contextMenu {
+      position: absolute;
+      background: white;
+      border: 1px solid #ccc;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+      border-radius: 0.25rem;
+      z-index: 2000;
+      display: none;
+      min-width: 140px;
+      font-size: 0.9rem;
+    }
+    #contextMenu button {
+      width: 100%;
+      padding: 0.5rem 1rem;
+      border: none;
+      background: none;
+      text-align: left;
+      cursor: pointer;
+      color: #212529;
+      border-bottom: 1px solid #eee;
+      transition: background-color 0.15s ease;
+    }
+    #contextMenu button:last-child {
+      border-bottom: none;
+    }
+    #contextMenu button:hover, #contextMenu button:focus {
+      background-color: #e9ecef;
+      outline: none;
+    }
+    /* New styles for payment status colors */
+    .payment-full {
+      background-color: #d1fae5 !important; /* Green for full payment */
+    }
+    .payment-partial {
+      background-color: #ffedd5 !important; /* Orange for partial payment */
+    }
+    .payment-none {
+      background-color: #fee2e2 !important; /* Red for no payment */
+    }
+  </style>
+</head>
+<body>
+  <!-- Sidebar -->
+  <nav id="sidebarMenu" aria-label="Sidebar menu">
+    <ul>
+      <li>
+        <a href="{% url 'logout' %}" class="text-white text-decoration-none fw-bold d-block">Logout</a>
+      </li>
+    </ul>
+  </nav>
+  <div id="sidebarOverlay"></div>
+
+  <div class="header-section" role="banner" aria-label="Page header">
+    <div class="menu-toggle" id="menuToggle" aria-label="Toggle menu" role="button" tabindex="0" aria-expanded="false" aria-controls="sidebarMenu">
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
+    Payment Tracking App
+  </div>
+
+  <div class="controls-container">
+    <button id="addRowBtn" class="btn btn-add-new px-3 py-1">Add new +</button>
+    <div class="input-group search-group">
+      <input id="searchInput" type="text" class="form-control" placeholder="Search Client Name" aria-label="Search Client Name" />
+      <button id="searchBtn" class="btn btn-outline-primary" type="button">Search</button>
+      <button id="clearSearchBtn" class="btn btn-outline-secondary" type="button" title="Clear Search">&times;</button>
+    </div>
+    <button onclick="saveDataToDB()" class="btn btn-success">Save to DB</button>
+  </div>
+
+  <div class="table-responsive">
+    <table id="mainTable" class="table table-bordered align-middle text-center mb-0">
+      <thead>
+        <tr>
+          <th rowspan="2" class="align-middle" style="width: 40px;">Sr.No</th>
+          <th rowspan="2" class="align-middle">Client Name</th>
+          <th rowspan="2" class="align-middle">Type</th>
+          <th rowspan="2" class="align-middle">Amount To be Paid</th>
+          <th colspan="12">Jan - Dec</th>
+          <!-- {% comment %} <th colspan="6">July - Dec</th> {% endcomment %} -->
+          <th rowspan="2" class="align-middle due-payment-cell">Due Payment</th>
+        </tr>
+        <tr>
+         <th class="manual-entry-cell">january</th>
+         <th class="manual-entry-cell">february</th>
+         <th class="manual-entry-cell">march</th>
+         <th class="manual-entry-cell">april</th>
+         <th class="manual-entry-cell">may</th>
+         <th class="manual-entry-cell">june</th>
+         <th>july</th>
+         <th>august</th>
+         <th>september</th>
+         <th>october</th>
+         <th>november</th>
+         <th>december</th>
+        </tr>
+
+      </thead>
+      <tbody id="tableBody">
+        <tr>
+        <td class="serial-cell"></td>
+        <!-- <td><input type="text" class="form-control client-name-input" placeholder="Client Name" /></td>
+        <td><input type="text" class="form-control" placeholder="Type" /></td> -->
+        <!-- added -->
+        <td>
+            <select class="form-control client-name-input" aria-label="Select Client Name">
+              <option value="">Select Client</option>
+            </select>
+          </td>
+          <td>
+            <select class="form-control type-input" aria-label="Select Type">
+              <option value="">Select Type</option>
+            </select>
+          </td>
+        <td><input type="text" class="form-control" placeholder="Amount To be Paid" /></td>
+        <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="january" /></td>
+        <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="february" /></td>
+        <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="march" /></td>
+        <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="april" /></td>
+        <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="may" /></td>
+        <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="june" /></td>
+        <td><input type="text" class="form-control" placeholder="july" /></td>
+        <td><input type="text" class="form-control" placeholder="august" /></td>
+        <td><input type="text" class="form-control" placeholder="september" /></td>
+        <td><input type="text" class="form-control" placeholder="october" /></td>
+        <td><input type="text" class="form-control" placeholder="november" /></td>
+        <td><input type="text" class="form-control" placeholder="december" /></td>
+        <td><input type="text" class="form-control due-payment-display" readonly value="0.00" /></td>
+    </tr>
+
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Context menu for row actions -->
+  <div id="contextMenu" role="menu" aria-hidden="true" tabindex="-1">
+    <button type="button" id="insertRowBtn" role="menuitem">Add Row Above</button>
+    <button type="button" id="deleteRowBtn" role="menuitem">Delete This Row</button>
+  </div>
+
+  
+  <script>
+  const addRowBtn = document.getElementById('addRowBtn');
+  const tableBody = document.getElementById('tableBody');
+  const searchInput = document.getElementById('searchInput');
+  const searchBtn = document.getElementById('searchBtn');
+  const clearSearchBtn = document.getElementById('clearSearchBtn');
+  const menuToggle = document.getElementById('menuToggle');
+  const sidebarMenu = document.getElementById('sidebarMenu');
+  const sidebarOverlay = document.getElementById('sidebarOverlay');
+  const contextMenu = document.getElementById('contextMenu');
+  const insertRowBtn = document.getElementById('insertRowBtn');
+  const deleteRowBtn = document.getElementById('deleteRowBtn');
+
+  let contextTargetRow = null;
+  let clientsData = [];
+
+  function updateSerialNumbers() {
+    const rows = tableBody.querySelectorAll('tr');
+    rows.forEach((row, index) => {
+      const serialCell = row.querySelector('.serial-cell');
+      if (serialCell) {
+        serialCell.textContent = index + 1;
+      }
+    });
+  }
+
+  function createEditableRow(clientName = '', type = '') {
+    const tr = document.createElement('tr');
+
+    let td = document.createElement('td');
+    td.className = 'serial-cell';
+    tr.appendChild(td);
+
+    td = document.createElement('td');
+    let select = document.createElement('select');
+    select.className = 'form-control client-name-input';
+    select.setAttribute('aria-label', 'Select Client Name');
+    let option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'Select Client';
+    select.appendChild(option);
+    clientsData.forEach(client => {
+      option = document.createElement('option');
+      option.value = client.client_name;
+      option.textContent = client.client_name;
+      select.appendChild(option);
+    });
+    select.value = clientName;
+    td.appendChild(select);
+    tr.appendChild(td);
+
+    td = document.createElement('td');
+    select = document.createElement('select');
+    select.className = 'form-control type-input';
+    select.setAttribute('aria-label', 'Select Type');
+    option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'Select Type';
+    select.appendChild(option);
+    const uniqueTypes = [...new Set(clientsData.map(client => client.type))];
+    uniqueTypes.forEach(typeOption => {
+      option = document.createElement('option');
+      option.value = typeOption;
+      option.textContent = typeOption;
+      select.appendChild(option);
+    });
+    select.value = type;
+    td.appendChild(select);
+    tr.appendChild(td);
+
+    td = document.createElement('td');
+    let input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = 'Amount To be Paid';
+    input.className = 'form-control';
+    td.appendChild(input);
+    tr.appendChild(td);
+
+    const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+    months.forEach(month => {
+      td = document.createElement('td');
+      input = document.createElement('input');
+      input.type = 'text';
+      input.placeholder = month;
+      input.className = 'form-control';
+      td.appendChild(input);
+      tr.appendChild(td);
+    });
+
+    td = document.createElement('td');
+    td.className = 'due-payment-cell';
+    input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'form-control due-payment-display';
+    input.readOnly = true;
+    input.value = '0.00';
+    td.appendChild(input);
+    tr.appendChild(td);
+
+    return tr;
+  }
+
+  function updateDuePayment(row) {
+    const amountInput = row.cells[3].querySelector('input');
+    const monthInputs = Array.from(row.cells).slice(4, 16).map(cell => cell.querySelector('input'));
+    const duePaymentDisplay = row.querySelector('.due-payment-display');
+
+    const amountToBePaidPerMonth = parseFloat(amountInput.value) || 0;
+    const activeMonths = monthInputs.filter(input => input.value.trim() !== '' && parseFloat(input.value) >= 0).length;
+
+    if (activeMonths === 0) {
+      duePaymentDisplay.value = '0.00';
+      row.querySelectorAll('td input').forEach(input => input.classList.remove('payment-full', 'payment-partial', 'payment-none'));
+      return;
+    }
+
+    const expectedPayment = amountToBePaidPerMonth * activeMonths;
+    const totalPayments = monthInputs.reduce((sum, input) => {
+      const value = parseFloat(input.value) || 0;
+      return sum + value;
+    }, 0);
+
+    const duePayment = Math.max(expectedPayment - totalPayments, 0);
+    duePaymentDisplay.value = duePayment.toFixed(2);
+
+    monthInputs.forEach(input => updatePaymentStatus(input));
+  }
+
+  function updatePaymentStatus(cellInput) {
+    const row = cellInput.closest('tr');
+    const amountInput = row.cells[3].querySelector('input');
+    const amountToBePaid = parseFloat(amountInput.value) || 0;
+    const enteredValue = parseFloat(cellInput.value) || 0;
+
+    cellInput.classList.remove('payment-full', 'payment-partial', 'payment-none');
+
+    if (enteredValue === 0 || cellInput.value.trim() === '') {
+      cellInput.classList.add('payment-none');
+    } else if (enteredValue >= amountToBePaid && amountToBePaid > 0) {
+      cellInput.classList.add('payment-full');
+    } else if (enteredValue > 0 && enteredValue < amountToBePaid) {
+      cellInput.classList.add('payment-partial');
+    }
+  }
+
+  function saveToGoogleSheets() {
+    const rows = tableBody.querySelectorAll('tr');
+    const data = Array.from(rows).map(row => {
+      const inputs = row.querySelectorAll('.form-control');
+      return {
+        client_name: inputs[0].value,
+        type: inputs[1].value,
+        amount_to_be_paid: inputs[2].value,
+        january: inputs[3].value,
+        february: inputs[4].value,
+        march: inputs[5].value,
+        april: inputs[6].value,
+        may: inputs[7].value,
+        june: inputs[8].value,
+        july: inputs[9].value,
+        august: inputs[10].value,
+        september: inputs[11].value,
+        october: inputs[12].value,
+        november: inputs[13].value,
+        december: inputs[14].value,
+        due_payment: inputs[15].value
+      };
+    });
+
+    fetch('http://localhost:3001/api/save-payments', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(data)
+    })
+      .then(response => {
+        if (!response.ok) throw new Error('Failed to save to Google Sheets');
+      })
+      .catch(error => {
+        console.error('Error saving to Google Sheets:', error);
+      });
+  }
+
+  tableBody.addEventListener('input', e => {
+    const cellInput = e.target;
+    const row = cellInput.closest('tr');
+    const cellIndex = cellInput.closest('td').cellIndex;
+
+    if (cellIndex >= 4 && cellIndex <= 15) {
+      updatePaymentStatus(cellInput);
+    }
+
+    if (cellIndex === 3 || (cellIndex >= 4 && cellIndex <= 15)) {
+      updateDuePayment(row);
+    }
+    saveToGoogleSheets();
+  });
+
+  tableBody.addEventListener('change', e => {
+    if (e.target.classList.contains('client-name-input') || e.target.classList.contains('type-input')) {
+      saveToGoogleSheets();
+    }
+  });
+
+  addRowBtn.addEventListener('click', () => {
+    const newRow = createEditableRow();
+    tableBody.appendChild(newRow);
+    updateSerialNumbers();
+    saveToGoogleSheets();
+  });
+
+  updateSerialNumbers();
+
+  function searchClients() {
+    const filter = searchInput.value.trim().toLowerCase();
+    const rows = tableBody.querySelectorAll('tr');
+    let anyVisible = false;
+    rows.forEach(row => {
+      const clientSelect = row.querySelector('.client-name-input');
+      if (!clientSelect) return;
+      const clientName = clientSelect.value.toLowerCase();
+      if (clientName.includes(filter)) {
+        row.style.display = '';
+        anyVisible = true;
+      } else {
+        row.style.display = 'none';
+      }
+    });
+    updateSerialNumbers();
+    if (!filter || !anyVisible) {
+      rows.forEach(row => (row.style.display = ''));
+      updateSerialNumbers();
+    }
+  }
+
+  searchBtn.addEventListener('click', searchClients);
+
+  searchInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      searchClients();
+    }
+  });
+
+  clearSearchBtn.addEventListener('click', () => {
+    searchInput.value = '';
+    const rows = tableBody.querySelectorAll('tr');
+    rows.forEach(row => (row.style.display = ''));
+    updateSerialNumbers();
+    searchInput.focus();
+  });
+
+  tableBody.addEventListener('keydown', e => {
+    const arrowKeys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
+    if (!arrowKeys.includes(e.key)) return;
+
+    const inputs = Array.from(tableBody.querySelectorAll('.form-control'));
+    const currentInput = e.target;
+    const currentIndex = inputs.indexOf(currentInput);
+    if (currentIndex === -1) return;
+
+    e.preventDefault();
+
+    const inputsPerRow = 16;
+    const totalInputs = inputs.length;
+
+    let nextIndex = currentIndex;
+
+    switch (e.key) {
+      case 'ArrowRight':
+        nextIndex = currentIndex + 1;
+        if (nextIndex >= totalInputs) nextIndex = 0;
+        break;
+      case 'ArrowLeft':
+        nextIndex = currentIndex - 1;
+        if (nextIndex < 0) nextIndex = totalInputs - 1;
+        break;
+      case 'ArrowDown':
+        nextIndex = currentIndex + inputsPerRow;
+        if (nextIndex >= totalInputs) nextIndex = currentIndex % inputsPerRow;
+        break;
+      case 'ArrowUp':
+        nextIndex = currentIndex - inputsPerRow;
+        if (nextIndex < 0) {
+          const rowsCount = Math.floor(totalInputs / inputsPerRow);
+          nextIndex = currentIndex + inputsPerRow * (rowsCount - 1);
+          if (nextIndex >= totalInputs) nextIndex = totalInputs - 1;
+        }
+        break;
+    }
+
+    inputs[nextIndex].focus();
+    if (inputs[nextIndex].tagName === 'INPUT') {
+      inputs[nextIndex].select();
+    }
+  });
+
+  function openSidebar() {
+    sidebarMenu.classList.add('show');
+    sidebarOverlay.classList.add('show');
+    menuToggle.setAttribute('aria-expanded', 'true');
+  }
+  function closeSidebar() {
+    sidebarMenu.classList.remove('show');
+    sidebarOverlay.classList.remove('show');
+    menuToggle.setAttribute('aria-expanded', 'false');
+  }
+
+  menuToggle.addEventListener('click', () => {
+    if (sidebarMenu.classList.contains('show')) {
+      closeSidebar();
+    } else {
+      openSidebar();
+    }
+  });
+
+  sidebarOverlay.addEventListener('click', closeSidebar);
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && sidebarMenu.classList.contains('show')) {
+      closeSidebar();
+      menuToggle.focus();
+    }
+    if (e.key === 'Escape' && contextMenu.style.display === 'block') {
+      hideContextMenu();
+    }
+  });
+
+  const sidebarItems = sidebarMenu.querySelectorAll('li');
+  sidebarItems.forEach(item => {
+    item.addEventListener('click', () => {
+      alert(`Selected: ${item.textContent}`);
+      closeSidebar();
+    });
+    item.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        item.click();
+      }
+    });
+  });
+
+  function showContextMenu(x, y, targetRow) {
+    contextTargetRow = targetRow;
+    contextMenu.style.left = x + 'px';
+    contextMenu.style.top = y + 'px';
+    contextMenu.style.display = 'block';
+    contextMenu.setAttribute('aria-hidden', 'false');
+    contextMenu.focus();
+  }
+  function hideContextMenu() {
+    contextMenu.style.display = 'none';
+    contextMenu.setAttribute('aria-hidden', 'true');
+    contextTargetRow = null;
+  }
+
+  insertRowBtn.addEventListener('click', () => {
+    if (!contextTargetRow) return;
+    const newRow = createEditableRow();
+    tableBody.insertBefore(newRow, contextTargetRow);
+    updateSerialNumbers();
+    saveToGoogleSheets();
+    hideContextMenu();
+    const firstInput = newRow.querySelector('.form-control');
+    if (firstInput) {
+      firstInput.focus();
+    }
+  });
+
+  deleteRowBtn.addEventListener('click', () => {
+    if (!contextTargetRow) return;
+    if (tableBody.rows.length === 1) {
+      alert('Cannot delete the last row.');
+      hideContextMenu();
+      return;
+    }
+    contextTargetRow.remove();
+    updateSerialNumbers();
+    saveToGoogleSheets();
+    updateTotalDuePayment();
+    
+    hideContextMenu();
+  });
+
+  tableBody.addEventListener('contextmenu', e => {
+    if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') return;
+    e.preventDefault();
+    const tr = e.target.closest('tr');
+    if (!tr) return;
+    showContextMenu(e.pageX, e.pageY, tr);
+  });
+
+  tableBody.addEventListener('keydown', e => {
+    if ((e.shiftKey && e.key === 'F10') || e.key === 'ContextMenu') {
+      if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') return;
+      e.preventDefault();
+      const tr = e.target.closest('tr');
+      if (!tr) return;
+      const rect = e.target.getBoundingClientRect();
+      showContextMenu(rect.left + window.pageXOffset, rect.bottom + window.pageYOffset, tr);
+    }
+  });
+
+  document.addEventListener('click', e => {
+    if (!contextMenu.contains(e.target)) {
+      hideContextMenu();
+    }
+  });
+  window.addEventListener('scroll', () => {
+    if (contextMenu.style.display === 'block') {
+      hideContextMenu();
+    }
+  }, true);
+
+  function addRowToTable(rowData) {
+    const tableBody = document.querySelector('#mainTable tbody');
+    const newRow = createEditableRow(rowData.client_name || '', rowData.type || ''); // Changed service_type to type
+    const inputs = newRow.querySelectorAll('.form-control');
+    inputs[2].value = rowData.amount_to_be_paid || '';
+    inputs[3].value = rowData.january || '';
+    inputs[4].value = rowData.february || '';
+    inputs[5].value = rowData.march || '';
+    inputs[6].value = rowData.april || '';
+    inputs[7].value = rowData.may || '';
+    inputs[8].value = rowData.june || '';
+    inputs[9].value = rowData.july || '';
+    inputs[10].value = rowData.august || '';
+    inputs[11].value = rowData.september || '';
+    inputs[12].value = rowData.october || '';
+    inputs[13].value = rowData.november || '';
+    inputs[14].value = rowData.december || '';
+    inputs[15].value = rowData.due_payment || '0.00';
+
+    tableBody.appendChild(newRow);
+    updateDuePayment(newRow);
+    const monthInputs = Array.from(inputs).slice(3, 15);
+    monthInputs.forEach(input => updatePaymentStatus(input));
+  }
+
+  function saveDataToDB() {
+    const rows = tableBody.querySelectorAll('tr');
+    const data = Array.from(rows).map(row => {
+      const inputs = row.querySelectorAll('.form-control');
+      return {
+        client_name: inputs[0].value,
+        type: inputs[1].value,
+        amount_to_be_paid: inputs[2].value,
+        january: inputs[3].value,
+        february: inputs[4].value,
+        march: inputs[5].value,
+        april: inputs[6].value,
+        may: inputs[7].value,
+        june: inputs[8].value,
+        july: inputs[9].value,
+        august: inputs[10].value,
+        september: inputs[11].value,
+        october: inputs[12].value,
+        november: inputs[13].value,
+        december: inputs[14].value,
+        due_payment: inputs[15].value
+      };
+    });
+
+    fetch('http://localhost:3001/api/save-payments', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(data)
+    })
+      .then(response => {
+        if (!response.ok) throw new Error('Failed to save to Google Sheets');
+        return response.json();
+      })
+      .then(result => {
+        alert('Data saved successfully!');
+      })
+      .catch(error => {
+        console.error('Error saving to Google Sheets:', error);
+        alert('Failed to save data to Google Sheets. Please try again.');
+      });
+  }
+
+  function fetchClients() {
+    fetch('http://localhost:3001/api/get-clients')
+      .then(response => {
+        if (!response.ok) throw new Error('Failed to fetch clients');
+        return response.json();
+      })
+      .then(data => {
+        clientsData = data;
+        const rows = tableBody.querySelectorAll('tr');
+        rows.forEach(row => {
+          const clientSelect = row.querySelector('.client-name-input');
+          const typeSelect = row.querySelector('.type-input');
+          const currentClient = clientSelect.value;
+          const currentType = typeSelect.value;
+          clientSelect.innerHTML = '<option value="">Select Client</option>';
+          typeSelect.innerHTML = '<option value="">Select Type</option>';
+          clientsData.forEach(client => {
+            const option = document.createElement('option');
+            option.value = client.client_name;
+            option.textContent = client.client_name;
+            clientSelect.appendChild(option);
+          });
+          const uniqueTypes = [...new Set(clientsData.map(client => client.type))];
+          uniqueTypes.forEach(type => {
+            const option = document.createElement('option');
+            option.value = type;
+            option.textContent = type;
+            typeSelect.appendChild(option);
+          });
+          clientSelect.value = currentClient;
+          typeSelect.value = currentType;
+        });
+      })
+      .catch(error => {
+        console.error('Error fetching clients:', error);
+        alert('Failed to load client data from Google Sheets.');
+        clientsData = [{ client_name: 'Test Client', type: 'Test Type' }];
+        const rows = tableBody.querySelectorAll('tr');
+        rows.forEach(row => {
+          const clientSelect = row.querySelector('.client-name-input');
+          const typeSelect = row.querySelector('.type-input');
+          clientSelect.innerHTML = '<option value="">Select Client</option><option value="Test Client">Test Client</option>';
+          typeSelect.innerHTML = '<option value="">Select Type</option><option value="Test Type">Test Type</option>';
+        });
+      });
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(()=>{
+      fetchClients();
+    fetch('http://localhost:3001/api/get-payments')
+      .then(response => {
+        if (!response.ok) throw new Error('Failed to fetch payments');
+        return response.json();
+      })
+      .then(data => {
+        if (data.length > 0) {
+          tableBody.innerHTML = '';
+          data.forEach(row => addRowToTable(row));
+        }
+        updateSerialNumbers();
+      })
+      .catch(error => {
+        console.error('Error fetching payments:', error);
+        alert('Failed to load payments from Google Sheets.');
+      });
+    }, 100);
+    
+  });
+</script>
+
+</body>
+</html>
