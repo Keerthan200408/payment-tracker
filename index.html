@@ -33,7 +33,7 @@
       border-radius: 0;
       text-align: center;
       box-shadow: 0 4px 8px rgb(59 130 246 / 0.4);
-      user-select: none;
+      User-select: none;
       margin-bottom: 1.5rem;
       position: relative;
       display: flex;
@@ -88,7 +88,7 @@
       cursor: pointer;
       font-weight: 600;
       border-bottom: 1px solid rgba(255,255,255,0.2);
-      user-select: none;
+      User-select: none;
       transition: background-color 0.2s ease;
     }
     #sidebarMenu ul li:hover {
@@ -226,18 +226,92 @@
     .payment-none {
       background-color: #fee2e2 !important; /* Red for no payment */
     }
+    /* added */
+    .btn-add-client {
+      background-color: #4f46e5 !important;
+      color: white !important;
+      font-weight: 600;
+      border: none;
+      transition: background-color 0.3s ease;
+      white-space: nowrap;
+    }
+    .btn-add-client:hover, .btn-add-client:focus {
+      background-color: #3b82f6 !important;
+      color: white !important;
+      box-shadow: 0 0 8px #3b82f6aa;
+    }
+    .btn-cancel {
+      background-color: #6c757d !important;
+      color: white !important;
+      font-weight: 600;
+      border: none;
+      transition: background-color 0.3s ease;
+    }
+    .btn-cancel:hover, .btn-cancel:focus {
+      background-color: #5a6268 !important;
+      color: white !important;
+      box-shadow: 0 0 8px #5a6268aa;
+    }
+    /* Sign-in page styles */
+    .sign-in-container {
+      max-width: 400px;
+      margin: 50px auto;
+      padding: 2rem;
+      border: 1px solid #dee2e6;
+      border-radius: 0.5rem;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    /* Add Client page styles */
+    .add-client-container {
+      max-width: 500px;
+      margin: 20px auto;
+      padding: 2rem;
+      border: 1px solid #dee2e6;
+      border-radius: 0.5rem;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    .add-client-container h2 {
+      font-size: 1.75rem;
+      margin-bottom: 1.5rem;
+      text-align: center;
+    }
+    .add-client-container .form-label {
+      font-weight: 500;
+    }
   </style>
 </head>
 <body>
   <!-- Sidebar -->
   <nav id="sidebarMenu" aria-label="Sidebar menu">
     <ul>
+      <!-- added -->
+      <li id="dashboardLink">Dashboard</li>
+      <li id="addClientLink">Add Client</li>
+      <li id="paymentsLink">Payments</li>
+      <li id="reportsLink">Reports</li>
       <li>
-        <a href="{% url 'logout' %}" class="text-white text-decoration-none fw-bold d-block">Logout</a>
+        <a href="#" id ="logoutLink" class="text-white text-decoration-none fw-bold d-block">Logout</a>
       </li>
     </ul>
   </nav>
   <div id="sidebarOverlay"></div>
+
+  <!-- added -->
+   <!-- Sign-in Page -->
+  <div id="signInPage" class="sign-in-container" style="display: none;">
+    <h2 class="text-center mb-4">Sign In</h2>
+    <div class="mb-3">
+      <label for="UsernameInput" class="form-label">Username</label>
+      <input type="text" class="form-control" id="UsernameInput" placeholder="Enter Username">
+    </div>
+    <div class="mb-3">
+      <label for="passwordInput" class="form-label">Password</label>
+      <input type="password" class="form-control" id="passwordInput" placeholder="Enter password">
+    </div>
+    <div class="d-flex justify-content-between">
+      <button id="signInBtn" class="btn btn-primary px-3 py-1">Sign In</button>
+    </div>
+  </div>
 
   <div class="header-section" role="banner" aria-label="Page header">
     <div class="menu-toggle" id="menuToggle" aria-label="Toggle menu" role="button" tabindex="0" aria-expanded="false" aria-controls="sidebarMenu">
@@ -248,86 +322,109 @@
     Payment Tracking App
   </div>
 
-  <div class="controls-container">
-    <button id="addRowBtn" class="btn btn-add-new px-3 py-1">Add new +</button>
-    <div class="input-group search-group">
-      <input id="searchInput" type="text" class="form-control" placeholder="Search Client Name" aria-label="Search Client Name" />
-      <button id="searchBtn" class="btn btn-outline-primary" type="button">Search</button>
-      <button id="clearSearchBtn" class="btn btn-outline-secondary" type="button" title="Clear Search">&times;</button>
+  <div id="homePage" style="display: none;">
+    <div class="controls-container">
+      <button id="addRowBtn" class="btn btn-add-new px-3 py-1">Add new +</button>
+      <div class="input-group search-group">
+        <input id="searchInput" type="text" class="form-control" placeholder="Search Client Name" aria-label="Search Client Name" />
+        <button id="searchBtn" class="btn btn-outline-primary" type="button">Search</button>
+        <button id="clearSearchBtn" class="btn btn-outline-secondary" type="button" title="Clear Search">×</button>
+      </div>
+      <button onclick="saveDataToDB()" class="btn btn-success">Save to DB</button>
     </div>
-    <button onclick="saveDataToDB()" class="btn btn-success">Save to DB</button>
+
+    <div class="table-responsive">
+      <table id="mainTable" class="table table-bordered align-middle text-center mb-0">
+        <thead>
+          <tr>
+            <th rowspan="2" class="align-middle" style="width: 40px;">Sr.No</th>
+            <th rowspan="2" class="align-middle">Client Name</th>
+            <th rowspan="2" class="align-middle">Type</th>
+            <th rowspan="2" class="align-middle">Amount To be Paid</th>
+            <th colspan="12">Jan - Dec</th>
+            <th rowspan="2" class="align-middle due-payment-cell">Due Payment</th>
+          </tr>
+          <tr>
+            <th class="manual-entry-cell">january</th>
+            <th class="manual-entry-cell">february</th>
+            <th class="manual-entry-cell">march</th>
+            <th class="manual-entry-cell">april</th>
+            <th class="manual-entry-cell">may</th>
+            <th class="manual-entry-cell">june</th>
+            <th>july</th>
+            <th>august</th>
+            <th>september</th>
+            <th>october</th>
+            <th>november</th>
+            <th>december</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody">
+          <tr>
+            <td class="serial-cell"></td>
+            <td>
+              <select class="form-control client-name-input" aria-label="Select Client Name">
+                <option value="">Select Client</option>
+              </select>
+            </td>
+            <td>
+              <select class="form-control type-input" aria-label="Select Type">
+                <option value="">Select Type</option>
+              </select>
+            </td>
+            <td>
+              <select class="form-control amount-input" aria-label="Select Amount To be Paid">
+                <option value="">Select Amount</option>
+              </select>
+            </td>
+            <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="january" /></td>
+            <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="february" /></td>
+            <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="march" /></td>
+            <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="april" /></td>
+            <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="may" /></td>
+            <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="june" /></td>
+            <td><input type="text" class="form-control" placeholder="july" /></td>
+            <td><input type="text" class="form-control" placeholder="august" /></td>
+            <td><input type="text" class="form-control" placeholder="september" /></td>
+            <td><input type="text" class="form-control" placeholder="october" /></td>
+            <td><input type="text" class="form-control" placeholder="november" /></td>
+            <td><input type="text" class="form-control" placeholder="december" /></td>
+            <td><input type="text" class="form-control due-payment-display" readonly value="0.00" /></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Context menu for row actions -->
+    <div id="contextMenu" role="menu" aria-hidden="true" tabindex="-1">
+      <button type="button" id="insertRowBtn" role="menuitem">Add Row Above</button>
+      <button type="button" id="deleteRowBtn" role="menuitem">Delete This Row</button>
+    </div>
   </div>
 
-  <div class="table-responsive">
-    <table id="mainTable" class="table table-bordered align-middle text-center mb-0">
-      <thead>
-        <tr>
-          <th rowspan="2" class="align-middle" style="width: 40px;">Sr.No</th>
-          <th rowspan="2" class="align-middle">Client Name</th>
-          <th rowspan="2" class="align-middle">Type</th>
-          <th rowspan="2" class="align-middle">Amount To be Paid</th>
-          <th colspan="12">Jan - Dec</th>
-          <!-- {% comment %} <th colspan="6">July - Dec</th> {% endcomment %} -->
-          <th rowspan="2" class="align-middle due-payment-cell">Due Payment</th>
-        </tr>
-        <tr>
-         <th class="manual-entry-cell">january</th>
-         <th class="manual-entry-cell">february</th>
-         <th class="manual-entry-cell">march</th>
-         <th class="manual-entry-cell">april</th>
-         <th class="manual-entry-cell">may</th>
-         <th class="manual-entry-cell">june</th>
-         <th>july</th>
-         <th>august</th>
-         <th>september</th>
-         <th>october</th>
-         <th>november</th>
-         <th>december</th>
-        </tr>
-
-      </thead>
-      <tbody id="tableBody">
-        <tr>
-        <td class="serial-cell"></td>
-        <!-- <td><input type="text" class="form-control client-name-input" placeholder="Client Name" /></td>
-        <td><input type="text" class="form-control" placeholder="Type" /></td> -->
-        <!-- added -->
-        <td>
-            <select class="form-control client-name-input" aria-label="Select Client Name">
-              <option value="">Select Client</option>
-            </select>
-          </td>
-          <td>
-            <select class="form-control type-input" aria-label="Select Type">
-              <option value="">Select Type</option>
-            </select>
-          </td>
-        <td><input type="text" class="form-control" placeholder="Amount To be Paid" /></td>
-        <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="january" /></td>
-        <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="february" /></td>
-        <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="march" /></td>
-        <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="april" /></td>
-        <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="may" /></td>
-        <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="june" /></td>
-        <td><input type="text" class="form-control" placeholder="july" /></td>
-        <td><input type="text" class="form-control" placeholder="august" /></td>
-        <td><input type="text" class="form-control" placeholder="september" /></td>
-        <td><input type="text" class="form-control" placeholder="october" /></td>
-        <td><input type="text" class="form-control" placeholder="november" /></td>
-        <td><input type="text" class="form-control" placeholder="december" /></td>
-        <td><input type="text" class="form-control due-payment-display" readonly value="0.00" /></td>
-    </tr>
-
-      </tbody>
-    </table>
+  <!-- added -->
+   <!-- Add Client Page -->
+  <div id="addClientPage" class="add-client-container" style="display: none;">
+    <h2>Add New Client</h2>
+    <div class="mb-3">
+      <label for="clientNameInput" class="form-label">Client Name</label>
+      <input type="text" class="form-control" id="clientNameInput" placeholder="Enter client name">
+    </div>
+    <div class="mb-3">
+      <label for="typeInput" class="form-label">Type</label>
+      <input type="text" class="form-control" id="typeInput" placeholder="Enter type">
+    </div>
+    <div class="mb-3">
+      <label for="monthlyPaymentInput" class="form-label">Monthly Payment Amount</label>
+      <input type="text" class="form-control" id="monthlyPaymentInput" placeholder="Enter amount">
+    </div>
+    <div class="d-flex justify-content-end gap-2">
+      <button id="cancelAddClientBtn" class="btn btn-cancel px-3 py-1">Cancel</button>
+      <button id="saveClientBtn" class="btn btn-add-client px-3 py-1">Add Client</button>
+    </div>
   </div>
 
-  <!-- Context menu for row actions -->
-  <div id="contextMenu" role="menu" aria-hidden="true" tabindex="-1">
-    <button type="button" id="insertRowBtn" role="menuitem">Add Row Above</button>
-    <button type="button" id="deleteRowBtn" role="menuitem">Delete This Row</button>
-  </div>
-
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   
   <script>
   const addRowBtn = document.getElementById('addRowBtn');
@@ -341,9 +438,89 @@
   const contextMenu = document.getElementById('contextMenu');
   const insertRowBtn = document.getElementById('insertRowBtn');
   const deleteRowBtn = document.getElementById('deleteRowBtn');
+  // added
+  const signInPage = document.getElementById('signInPage');
+  const homePage = document.getElementById('homePage');
+  const addClientPage = document.getElementById('addClientPage');
+  const headerSection = document.getElementById('headerSection');
+  const UsernameInput = document.getElementById('UsernameInput');
+  const passwordInput = document.getElementById('passwordInput');
+  const signInBtn = document.getElementById('signInBtn');
+  const dashboardLink = document.getElementById('dashboardLink');
+  const addClientLink = document.getElementById('addClientLink');
+  const paymentsLink = document.getElementById('paymentsLink');
+  const reportsLink = document.getElementById('reportsLink');
+  const logoutLink = document.getElementById('logoutLink');
+  const clientNameInput = document.getElementById('clientNameInput');
+  const typeInput = document.getElementById('typeInput');
+  const monthlyPaymentInput = document.getElementById('monthlyPaymentInput');
+  const saveClientBtn = document.getElementById('saveClientBtn');
+  const cancelAddClientBtn = document.getElementById('cancelAddClientBtn');
 
   let contextTargetRow = null;
   let clientsData = [];
+  let currentUser = null;
+
+  // added
+  // Simple client-side User storage (for demo purposes)
+  const Users = {
+    'User1': { password: 'pass1', clients: [] },
+    'User2': { password: 'pass2', clients: [] }
+  };
+
+  // Page navigation
+  function showSignInPage() {
+    signInPage.style.display = 'block';
+    homePage.style.display = 'none';
+    addClientPage.style.display = 'none';
+    headerSection.style.display = 'none';
+    sidebarMenu.style.display = 'none';
+  }
+
+  function showHomePage() {
+    signInPage.style.display = 'none';
+    homePage.style.display = 'block';
+    addClientPage.style.display = 'none';
+    headerSection.style.display = 'flex';
+    sidebarMenu.style.display = 'block';
+  }
+
+  function showAddClientPage() {
+    signInPage.style.display = 'none';
+    homePage.style.display = 'none';
+    addClientPage.style.display = 'block';
+    headerSection.style.display = 'flex';
+    sidebarMenu.style.display = 'block';
+  }
+
+  // Sign-in logic
+  signInBtn.addEventListener('click', () => {
+    const Username = UsernameInput.value.trim();
+    const password = passwordInput.value.trim();
+
+    if (Users[Username] && Users[Username].password === password) {
+      currentUser = Username;
+      fetchClients();
+      fetchPayments();
+      showHomePage();
+    } else {
+      alert('Invalid Username or password.');
+    }
+  });
+
+  // Logout logic
+  logoutLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    currentUser = null;
+    clientsData = [];
+    tableBody.innerHTML = '';
+    showSignInPage();
+  });
+
+  // Initial page load
+  document.addEventListener('DOMContentLoaded', () => {
+    showSignInPage();
+  });
 
   function updateSerialNumbers() {
     const rows = tableBody.querySelectorAll('tr');
@@ -354,8 +531,8 @@
       }
     });
   }
-
-  function createEditableRow(clientName = '', type = '') {
+  // changed
+  function createEditableRow(clientName = '', type = '', amount = '') {
     const tr = document.createElement('tr');
 
     let td = document.createElement('td');
@@ -370,10 +547,11 @@
     option.value = '';
     option.textContent = 'Select Client';
     select.appendChild(option);
-    clientsData.forEach(client => {
+    const UserClients = clientsData.filter(client => client.User === currentUser);
+    UserClients.forEach(client => {
       option = document.createElement('option');
-      option.value = client.client_name;
-      option.textContent = client.client_name;
+      option.value = client.Client_Name;
+      option.textContent = client.Client_Name;
       select.appendChild(option);
     });
     select.value = clientName;
@@ -388,7 +566,7 @@
     option.value = '';
     option.textContent = 'Select Type';
     select.appendChild(option);
-    const uniqueTypes = [...new Set(clientsData.map(client => client.type))];
+    const uniqueTypes = [...new Set(UserClients.map(client => client.Type))];
     uniqueTypes.forEach(typeOption => {
       option = document.createElement('option');
       option.value = typeOption;
@@ -400,17 +578,28 @@
     tr.appendChild(td);
 
     td = document.createElement('td');
-    let input = document.createElement('input');
-    input.type = 'text';
-    input.placeholder = 'Amount To be Paid';
-    input.className = 'form-control';
-    td.appendChild(input);
+    select = document.createElement('select');
+    select.className = 'form-control amount-input';
+    select.setAttribute('aria-label', 'Select Amount To be Paid');
+    option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'Select Amount';
+    select.appendChild(option);
+    const uniqueAmounts = [...new Set(UserClients.map(client => client.monthly_payment))];
+    uniqueAmounts.forEach(amountOption => {
+      option = document.createElement('option');
+      option.value = amountOption;
+      option.textContent = amountOption;
+      select.appendChild(option);
+    });
+    select.value = amount;
+    td.appendChild(select);
     tr.appendChild(td);
 
     const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
     months.forEach(month => {
       td = document.createElement('td');
-      input = document.createElement('input');
+      let input = document.createElement('input');
       input.type = 'text';
       input.placeholder = month;
       input.className = 'form-control';
@@ -420,7 +609,7 @@
 
     td = document.createElement('td');
     td.className = 'due-payment-cell';
-    input = document.createElement('input');
+    let input = document.createElement('input');
     input.type = 'text';
     input.className = 'form-control due-payment-display';
     input.readOnly = true;
@@ -432,7 +621,7 @@
   }
 
   function updateDuePayment(row) {
-    const amountInput = row.cells[3].querySelector('input');
+    const amountInput = row.cells[3].querySelector('select');
     const monthInputs = Array.from(row.cells).slice(4, 16).map(cell => cell.querySelector('input'));
     const duePaymentDisplay = row.querySelector('.due-payment-display');
 
@@ -459,7 +648,7 @@
 
   function updatePaymentStatus(cellInput) {
     const row = cellInput.closest('tr');
-    const amountInput = row.cells[3].querySelector('input');
+    const amountInput = row.cells[3].querySelector('select');
     const amountToBePaid = parseFloat(amountInput.value) || 0;
     const enteredValue = parseFloat(cellInput.value) || 0;
 
@@ -479,9 +668,9 @@
     const data = Array.from(rows).map(row => {
       const inputs = row.querySelectorAll('.form-control');
       return {
-        client_name: inputs[0].value,
-        type: inputs[1].value,
-        amount_to_be_paid: inputs[2].value,
+        Client_Name: inputs[0].value,
+        Type: inputs[1].value,
+        Amount_To_Be_Paid: inputs[2].value,
         january: inputs[3].value,
         february: inputs[4].value,
         march: inputs[5].value,
@@ -494,13 +683,14 @@
         october: inputs[12].value,
         november: inputs[13].value,
         december: inputs[14].value,
-        due_payment: inputs[15].value
+        Due_Payment: inputs[15].value
       };
     });
 
     fetch('https://payment-tracker-aswa.onrender.com/api/save-payments', {
       method: 'POST',
       headers: {
+        'User': currentUser,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(data)
@@ -529,7 +719,7 @@
   });
 
   tableBody.addEventListener('change', e => {
-    if (e.target.classList.contains('client-name-input') || e.target.classList.contains('type-input')) {
+    if (e.target.classList.contains('client-name-input') || e.target.classList.contains('type-input') || e.target.classList.contains('amount-input')) {
       saveToGoogleSheets();
     }
   });
@@ -661,8 +851,14 @@
   const sidebarItems = sidebarMenu.querySelectorAll('li');
   sidebarItems.forEach(item => {
     item.addEventListener('click', () => {
-      alert(`Selected: ${item.textContent}`);
       closeSidebar();
+      if (item.id === 'dashboardLink') {
+        showHomePage();
+      } else if (item.id === 'addClientLink') {
+        showAddClientPage();
+      } else if (item.id === 'paymentsLink' || item.id === 'reportsLink') {
+        alert(`Navigating to: ${item.textContent}`);
+      }
     });
     item.addEventListener('keydown', e => {
       if (e.key === 'Enter' || e.key === ' ') {
@@ -710,7 +906,6 @@
     updateSerialNumbers();
     saveToGoogleSheets();
     updateTotalDuePayment();
-    
     hideContextMenu();
   });
 
@@ -746,9 +941,9 @@
 
   function addRowToTable(rowData) {
     const tableBody = document.querySelector('#mainTable tbody');
-    const newRow = createEditableRow(rowData.client_name || '', rowData.type || ''); // Changed service_type to type
+    const newRow = createEditableRow(rowData.Client_Name || '', rowData.Type || '', rowData.Amount_To_Be_Paid || ''); // Changed service_type to type
     const inputs = newRow.querySelectorAll('.form-control');
-    inputs[2].value = rowData.amount_to_be_paid || '';
+    inputs[2].value = rowData.Amount_To_Be_Paid || '';
     inputs[3].value = rowData.january || '';
     inputs[4].value = rowData.february || '';
     inputs[5].value = rowData.march || '';
@@ -761,7 +956,7 @@
     inputs[12].value = rowData.october || '';
     inputs[13].value = rowData.november || '';
     inputs[14].value = rowData.december || '';
-    inputs[15].value = rowData.due_payment || '0.00';
+    inputs[15].value = rowData.Due_Payment || '0.00';
 
     tableBody.appendChild(newRow);
     updateDuePayment(newRow);
@@ -774,9 +969,10 @@
     const data = Array.from(rows).map(row => {
       const inputs = row.querySelectorAll('.form-control');
       return {
-        client_name: inputs[0].value,
-        type: inputs[1].value,
-        amount_to_be_paid: inputs[2].value,
+        User: currentUser,
+        Client_Name: inputs[0].value,
+        Type: inputs[1].value,
+        Amount_To_Be_Paid: inputs[2].value,
         january: inputs[3].value,
         february: inputs[4].value,
         march: inputs[5].value,
@@ -789,7 +985,7 @@
         october: inputs[12].value,
         november: inputs[13].value,
         december: inputs[14].value,
-        due_payment: inputs[15].value
+        Due_Payment: inputs[15].value
       };
     });
 
@@ -825,53 +1021,66 @@
         rows.forEach(row => {
           const clientSelect = row.querySelector('.client-name-input');
           const typeSelect = row.querySelector('.type-input');
+          const amountSelect = row.querySelector('.amount-input');
           const currentClient = clientSelect.value;
           const currentType = typeSelect.value;
+          const currentAmount = amountSelect.value;
           clientSelect.innerHTML = '<option value="">Select Client</option>';
           typeSelect.innerHTML = '<option value="">Select Type</option>';
-          clientsData.forEach(client => {
+          amountSelect.innerHTML = '<option value="">Select Amount</option>';
+          const UserClients = clientsData.filter(client => client.User === currentUser);
+          UserClients.forEach(client => {
             const option = document.createElement('option');
-            option.value = client.client_name;
-            option.textContent = client.client_name;
+            option.value = client.Client_Name;
+            option.textContent = client.Client_Name;
             clientSelect.appendChild(option);
           });
-          const uniqueTypes = [...new Set(clientsData.map(client => client.type))];
+          const uniqueTypes = [...new Set(UserClients.map(client => client.type))];
           uniqueTypes.forEach(type => {
             const option = document.createElement('option');
             option.value = type;
             option.textContent = type;
             typeSelect.appendChild(option);
           });
+          const uniqueAmounts = [...new Set(UserClients.map(client => client.monthly_payment))];
+          uniqueAmounts.forEach(amount => {
+            const option = document.createElement('option');
+            option.value = amount;
+            option.textContent = amount;
+            amountSelect.appendChild(option);
+          });
           clientSelect.value = currentClient;
           typeSelect.value = currentType;
+          amountSelect.value = currentAmount;
         });
       })
       .catch(error => {
         console.error('Error fetching clients:', error);
         alert('Failed to load client data from Google Sheets.');
-        clientsData = [{ client_name: 'Test Client', type: 'Test Type' }];
+        clientsData = [{ User: currentUser, Client_Name: 'Test Client', type: 'Test Type', monthly_payment: '100' }];
         const rows = tableBody.querySelectorAll('tr');
         rows.forEach(row => {
           const clientSelect = row.querySelector('.client-name-input');
           const typeSelect = row.querySelector('.type-input');
+          const amountSelect = row.querySelector('.amount-input');
           clientSelect.innerHTML = '<option value="">Select Client</option><option value="Test Client">Test Client</option>';
           typeSelect.innerHTML = '<option value="">Select Type</option><option value="Test Type">Test Type</option>';
+          amountSelect.innerHTML = '<option value="">Select Amount</option><option value="100">100</option>';
         });
       });
   }
 
-  document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(()=>{
-      fetchClients();
+  function fetchPayments() {
     fetch('https://payment-tracker-aswa.onrender.com/api/get-payments')
       .then(response => {
         if (!response.ok) throw new Error('Failed to fetch payments');
         return response.json();
       })
       .then(data => {
-        if (data.length > 0) {
+        const UserPayments = data.filter(payment => payment.User === currentUser);
+        if (UserPayments.length > 0) {
           tableBody.innerHTML = '';
-          data.forEach(row => addRowToTable(row));
+          UserPayments.forEach(row => addRowToTable(row));
         }
         updateSerialNumbers();
       })
@@ -879,8 +1088,57 @@
         console.error('Error fetching payments:', error);
         alert('Failed to load payments from Google Sheets.');
       });
-    }, 100);
-    
+  }
+
+  function addNewClient() {
+    const clientName = clientNameInput.value.trim();
+    const type = typeInput.value.trim();
+    const monthlyPayment = monthlyPaymentInput.value.trim();
+
+    if (!clientName || !type || !monthlyPayment) {
+      alert('All fields are required.');
+      return;
+    }
+
+    const newClient = {
+      User: currentUser,
+      Client_Name: clientName,
+      Type: type,
+      monthly_payment: parseFloat(monthlyPayment) || 0
+    };
+
+    fetch('https://payment-tracker-aswa.onrender.com/api/add-client', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(newClient)
+    })
+      .then(response => {
+        if (!response.ok) throw new Error('Failed to add client');
+        return response.json();
+      })
+      .then(data => {
+        alert('Client added successfully!');
+        clientNameInput.value = '';
+        typeInput.value = '';
+        monthlyPaymentInput.value = '';
+        fetchClients();
+        showHomePage();
+      })
+      .catch(error => {
+        console.error('Error adding client:', error);
+        alert('Failed to add client to Google Sheets. Please try again.');
+      });
+  }
+
+  saveClientBtn.addEventListener('click', addNewClient);
+
+  cancelAddClientBtn.addEventListener('click', () => {
+    clientNameInput.value = '';
+    typeInput.value = '';
+    monthlyPaymentInput.value = '';
+    showHomePage();
   });
 </script>
 
