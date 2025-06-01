@@ -9,148 +9,109 @@ app.use(cors());
 app.use(express.json());
 
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
-// const CREDENTIALS_PATH = path.join(__dirname, 'credentials', 'paymenttracker-461218-b6147a7a3f80.json');
-// added
-// Parse the GOOGLE_CREDENTIALS environment variable with error handling
+
+//If directly running it on terminal Use This
+//const CREDENTIALS_PATH = path.join(__dirname, 'credentials', 'paymenttracker-461218-b6147a7a3f80.json');
+
+// Using on Render, Parse the GOOGLE_CREDENTIALS environment variable with error handling
 let credentials;
 try {
   credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
 } catch (error) {
   console.error('Error parsing GOOGLE_CREDENTIALS:', error);
-  process.exit(1); // Exit the process if credentials are invalid
+  process.exit(1); 
 }
 
 async function getSheetsClient() {
+  //If directly running it on terminal use this
   // const auth = new GoogleAuth({
-  //   // keyFile: CREDENTIALS_PATH,
+  //   keyFile: CREDENTIALS_PATH,
   //   scopes: SCOPES,
   // });
+  // If running it on Render use this
   const auth = new GoogleAuth({
   credentials,
   scopes: SCOPES,
-});
+  });
   return google.sheets({ version: 'v4', auth });
 }
 
-// Get clients from Clients worksheet
-// app.get('/api/get-clients', async (req, res) => {
-//   try {
-//     const sheets = await getSheetsClient();
-//     const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
-//     const response = await sheets.spreadsheets.values.get({
-//       spreadsheetId,
-//       range: 'Clients!A2:B',
-//     });
-//     const data = response.data.values
-//       ? response.data.values.map(row => ({
-//           client_name: row[0] || '',
-//           type: row[1] || '',
-//         }))
-//       : [];
-//     res.json(data);
-//   } catch (error) {
-//     console.error('Error fetching clients:', error);
-//     res.status(500).json({ error: 'Failed to fetch clients' });
-//   }
-// });
-
-// // Get payments from Payments worksheet
-// app.get('/api/get-payments', async (req, res) => {
-//   try {
-//     const sheets = await getSheetsClient();
-//     const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
-//     const response = await sheets.spreadsheets.values.get({
-//       spreadsheetId,
-//       range: 'Payments!A2:P',
-//     });
-//     const data = response.data.values
-//       ? response.data.values.map(row => ({
-//           client_name: row[0] || '',
-//           type: row[1] || '',
-//           amount_to_be_paid: row[2] || '',
-//           january: row[3] || '',
-//           february: row[4] || '',
-//           march: row[5] || '',
-//           april: row[6] || '',
-//           may: row[7] || '',
-//           june: row[8] || '',
-//           july: row[9] || '',
-//           august: row[10] || '',
-//           september: row[11] || '',
-//           october: row[12] || '',
-//           november: row[13] || '',
-//           december: row[14] || '',
-//           due_payment: row[15] || '',
-//         }))
-//       : [];
-//     res.json(data);
-//   } catch (error) {
-//     console.error('Error fetching payments:', error);
-//     res.status(500).json({ error: 'Failed to fetch payments' });
-//   }
-// });
-
+// Get clients from Clients worksheet (filtered by User)
 app.get('/api/get-clients', async (req, res) => {
   try {
     const sheets = await getSheetsClient();
+    const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
     const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8',
-      range: 'Clients!A2:B',
+      spreadsheetId,
+      range: 'Clients!A2:D', // Updated range to include User, Client Name, Type, Monthly Payment
     });
     const rows = response.data.values || [];
     const clients = rows.map(row => ({
-      client_name: row[0] || '',
-      type: row[1] || '',
+      User: row[0] || '',
+      Client_Name: row[1] || '',
+      Type: row[2] || '',
+      monthly_payment: row[3] || '',
     }));
-    res.json(clients);
+    // Filter clients by User from the request header
+    const User = req.headers.User || '';
+    const UserClients = clients.filter(client => client.User === User);
+    res.json(UserClients);
   } catch (error) {
     console.error('Error fetching clients:', error);
     res.status(500).json({ error: 'Failed to fetch clients' });
   }
 });
 
+// Get payments from Payments worksheet (filtered by User)
 app.get('/api/get-payments', async (req, res) => {
   try {
     const sheets = await getSheetsClient();
+    const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
     const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8',
-      range: 'Payments!A2:P',
+      spreadsheetId,
+      range: 'Payments!A2:Q', // Updated range to include User column
     });
     const rows = response.data.values || [];
     const payments = rows.map(row => ({
-      client_name: row[0] || '',
-      type: row[1] || '',
-      amount_to_be_paid: row[2] || '',
-      january: row[3] || '',
-      february: row[4] || '',
-      march: row[5] || '',
-      april: row[6] || '',
-      may: row[7] || '',
-      june: row[8] || '',
-      july: row[9] || '',
-      august: row[10] || '',
-      september: row[11] || '',
-      october: row[12] || '',
-      november: row[13] || '',
-      december: row[14] || '',
-      due_payment: row[15] || '',
+      User: row[0] || '',
+      Client_Name: row[1] || '',
+      Type: row[2] || '',
+      Amount_To_Be_Paid: row[3] || '',
+      january: row[4] || '',
+      february: row[5] || '',
+      march: row[6] || '',
+      april: row[7] || '',
+      may: row[8] || '',
+      june: row[9] || '',
+      july: row[10] || '',
+      august: row[11] || '',
+      september: row[12] || '',
+      october: row[13] || '',
+      november: row[14] || '',
+      december: row[15] || '',
+      Due_Payment: row[16] || '',
     }));
-    res.json(payments);
+    // Filter payments by User from the request header
+    const User = req.headers.User || '';
+    const UserPayments = payments.filter(payment => payment.User === User);
+    res.json(UserPayments);
   } catch (error) {
     console.error('Error fetching payments:', error);
     res.status(500).json({ error: 'Failed to fetch payments' });
   }
 });
+
 // Save payments to Payments worksheet
 app.post('/api/save-payments', async (req, res) => {
   try {
     const sheets = await getSheetsClient();
-    const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
+    const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8'; 
     const data = req.body;
     const values = data.map(row => [
-      row.client_name || '',
-      row.type || '',
-      row.amount_to_be_paid || '',
+      row.User || '',
+      row.Client_Name || '',
+      row.Type || '',
+      row.Amount_To_Be_Paid || '',
       row.january || '',
       row.february || '',
       row.march || '',
@@ -163,15 +124,31 @@ app.post('/api/save-payments', async (req, res) => {
       row.october || '',
       row.november || '',
       row.december || '',
-      row.due_payment || '',
+      row.Due_Payment || '',
     ]);
-    // Clear existing data (excluding headers)
+    // Clear existing data for the User
+    const existingDataResponse = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: 'Payments!A2:Q',
+    });
+    const existingData = existingDataResponse.data.values || [];
+    const User = req.body[0]?.User || '';
+    const nonUserData = existingData.filter(row => row[0] !== User);
     await sheets.spreadsheets.values.clear({
       spreadsheetId,
-      range: 'Payments!A2:P',
+      range: 'Payments!A2:Q',
     });
-    // Write new data
-    await sheets.spreadsheets.values.update({
+    // Append non-User data back
+    if (nonUserData.length > 0) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: 'Payments!A2',
+        valueInputOption: 'RAW',
+        requestBody: { values: nonUserData },
+      });
+    }
+    // Append new User data
+    await sheets.spreadsheets.values.append({
       spreadsheetId,
       range: 'Payments!A2',
       valueInputOption: 'RAW',
@@ -183,8 +160,34 @@ app.post('/api/save-payments', async (req, res) => {
     res.status(500).json({ error: 'Failed to save to sheets' });
   }
 });
+
+// Add a new client to Clients worksheet
+app.post('/api/add-client', async (req, res) => {
+  try {
+    const sheets = await getSheetsClient();
+    const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
+    const newClient = req.body;
+    const values = [[
+      newClient.User || '',
+      newClient.Client_Name || '',
+      newClient.Type || '',
+      newClient.monthly_payment || '',
+    ]];
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: 'Clients!A2',
+      valueInputOption: 'RAW',
+      requestBody: { values },
+    });
+    res.json({ status: 'success' });
+  } catch (error) {
+    console.error('Error adding client:', error);
+    res.status(500).json({ error: 'Failed to add client' });
+  }
+});
+
 app.get('/', (req, res) => {
-  res.send('Backend is running. Use /api/get-clients or /api/get-payments');
+  res.send('Backend is running. Use /api/get-clients, /api/get-payments, or /api/add-client');
 });
 
 const PORT = 3001;
