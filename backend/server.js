@@ -16,10 +16,11 @@ const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
 // Using on Render, Parse the GOOGLE_CREDENTIALS environment variable with error handling
 let credentials;
 try {
-  credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+  credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS );
 } catch (error) {
   console.error('Error parsing GOOGLE_CREDENTIALS:', error);
-  process.exit(1); 
+  credentials = null;
+  // process.exit(1); 
 }
 
 async function getSheetsClient() {
@@ -29,6 +30,9 @@ async function getSheetsClient() {
   //   scopes: SCOPES,
   // });
   // If running it on Render use this
+  if (!credentials) {
+    throw new Error('Google Sheets API credentials are not configured properly. Please set GOOGLE_CREDENTIALS environment variable.');
+  }
   const auth = new GoogleAuth({
   credentials,
   scopes: SCOPES,
@@ -53,8 +57,8 @@ app.get('/api/get-clients', async (req, res) => {
       monthly_payment: row[3] || '',
     }));
     // Filter clients by User from the request header
-    const User = req.headers.User || '';
-    const UserClients = clients.filter(client => client.User === User);
+    const user = req.headers.user || '';
+    const UserClients = clients.filter(client => client.User === user);
     res.json(UserClients);
   } catch (error) {
     console.error('Error fetching clients:', error);
@@ -92,8 +96,8 @@ app.get('/api/get-payments', async (req, res) => {
       Due_Payment: row[16] || '',
     }));
     // Filter payments by User from the request header
-    const User = req.headers.User || '';
-    const UserPayments = payments.filter(payment => payment.User === User);
+    const user = req.headers.user || '';
+    const UserPayments = payments.filter(payment => payment.User === user);
     res.json(UserPayments);
   } catch (error) {
     console.error('Error fetching payments:', error);
@@ -132,8 +136,8 @@ app.post('/api/save-payments', async (req, res) => {
       range: 'Payments!A2:Q',
     });
     const existingData = existingDataResponse.data.values || [];
-    const User = req.body[0]?.User || '';
-    const nonUserData = existingData.filter(row => row[0] !== User);
+    const user = req.headers.user || req.body[0]?.User || '';
+    const nonUserData = existingData.filter(row => row[0] !== user);
     await sheets.spreadsheets.values.clear({
       spreadsheetId,
       range: 'Payments!A2:Q',
@@ -190,7 +194,7 @@ app.get('/', (req, res) => {
   res.send('Backend is running. Use /api/get-clients, /api/get-payments, or /api/add-client');
 });
 
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });

@@ -33,7 +33,7 @@
       border-radius: 0;
       text-align: center;
       box-shadow: 0 4px 8px rgb(59 130 246 / 0.4);
-      User-select: none;
+      user-select: none;
       margin-bottom: 1.5rem;
       position: relative;
       display: flex;
@@ -41,6 +41,7 @@
       justify-content: center;
       width: 100vw;
       box-sizing: border-box;
+      display: none;
     }
     .menu-toggle {
       position: absolute;
@@ -54,6 +55,7 @@
       flex-direction: column;
       justify-content: space-between;
       z-index: 1051;
+      display: none;
     }
     .menu-toggle span {
       display: block;
@@ -88,7 +90,7 @@
       cursor: pointer;
       font-weight: 600;
       border-bottom: 1px solid rgba(255,255,255,0.2);
-      User-select: none;
+      user-select: none;
       transition: background-color 0.2s ease;
     }
     #sidebarMenu ul li:hover {
@@ -313,7 +315,7 @@
     </div>
   </div>
 
-  <div class="header-section" role="banner" aria-label="Page header">
+  <div class="header-section" id="headerSection" role="banner" aria-label="Page header">
     <div class="menu-toggle" id="menuToggle" aria-label="Toggle menu" role="button" tabindex="0" aria-expanded="false" aria-controls="sidebarMenu">
       <span></span>
       <span></span>
@@ -467,6 +469,20 @@
     'User1': { password: 'pass1', clients: [] },
     'User2': { password: 'pass2', clients: [] }
   };
+  // added
+  function persistUserSession() {
+    if (currentUser) {
+      localStorage.setItem('currentUser', currentUser);
+    }
+  }
+
+  function clearUserSession() {
+    localStorage.removeItem('currentUser');
+  }
+
+  function loadUserSession() {
+    return localStorage.getItem('currentUser');
+  }
 
   // Page navigation
   function showSignInPage() {
@@ -475,6 +491,7 @@
     addClientPage.style.display = 'none';
     headerSection.style.display = 'none';
     sidebarMenu.style.display = 'none';
+    menuToggle.style.display = 'none';
   }
 
   function showHomePage() {
@@ -483,6 +500,7 @@
     addClientPage.style.display = 'none';
     headerSection.style.display = 'flex';
     sidebarMenu.style.display = 'block';
+    menuToggle.style.display = 'flex'; // added
   }
 
   function showAddClientPage() {
@@ -491,6 +509,7 @@
     addClientPage.style.display = 'block';
     headerSection.style.display = 'flex';
     sidebarMenu.style.display = 'block';
+    menuToggle.style.display = 'flex'; // added
   }
 
   // Sign-in logic
@@ -500,6 +519,7 @@
 
     if (Users[Username] && Users[Username].password === password) {
       currentUser = Username;
+      persistUserSession();
       fetchClients();
       fetchPayments();
       showHomePage();
@@ -508,10 +528,17 @@
     }
   });
 
+  passwordInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      signInBtn.click();
+    }
+  });
   // Logout logic
   logoutLink.addEventListener('click', (e) => {
     e.preventDefault();
     currentUser = null;
+    clearUserSession();
     clientsData = [];
     tableBody.innerHTML = '';
     showSignInPage();
@@ -519,7 +546,14 @@
 
   // Initial page load
   document.addEventListener('DOMContentLoaded', () => {
-    showSignInPage();
+    currentUser = loadUserSession();
+    if (currentUser && Users[currentUser]) {
+      fetchClients();
+      fetchPayments();
+      showHomePage();
+    } else {
+      showSignInPage();
+    }
   });
 
   function updateSerialNumbers() {
@@ -531,7 +565,7 @@
       }
     });
   }
-  // changed
+  // need to change key names to match backend response
   function createEditableRow(clientName = '', type = '', amount = '') {
     const tr = document.createElement('tr');
 
@@ -668,6 +702,7 @@
     const data = Array.from(rows).map(row => {
       const inputs = row.querySelectorAll('.form-control');
       return {
+        User: currentUser,
         Client_Name: inputs[0].value,
         Type: inputs[1].value,
         Amount_To_Be_Paid: inputs[2].value,
@@ -690,7 +725,7 @@
     fetch('https://payment-tracker-aswa.onrender.com/api/save-payments', {
       method: 'POST',
       headers: {
-        'User': currentUser,
+        'user': currentUser,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(data)
@@ -905,7 +940,6 @@
     contextTargetRow.remove();
     updateSerialNumbers();
     saveToGoogleSheets();
-    updateTotalDuePayment();
     hideContextMenu();
   });
 
@@ -992,6 +1026,7 @@
     fetch('https://payment-tracker-aswa.onrender.com/api/save-payments', {
       method: 'POST',
       headers: {
+        'user': currentUser, 
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(data)
@@ -1010,7 +1045,11 @@
   }
 
   function fetchClients() {
-    fetch('https://payment-tracker-aswa.onrender.com/api/get-clients')
+    fetch('https://payment-tracker-aswa.onrender.com/api/get-clients', {
+      headers: {
+        'user': currentUser // Added user header to match backend expectation
+      }
+    })
       .then(response => {
         if (!response.ok) throw new Error('Failed to fetch clients');
         return response.json();
@@ -1035,7 +1074,7 @@
             option.textContent = client.Client_Name;
             clientSelect.appendChild(option);
           });
-          const uniqueTypes = [...new Set(UserClients.map(client => client.type))];
+          const uniqueTypes = [...new Set(UserClients.map(client => client.Type))];
           uniqueTypes.forEach(type => {
             const option = document.createElement('option');
             option.value = type;
@@ -1057,7 +1096,7 @@
       .catch(error => {
         console.error('Error fetching clients:', error);
         alert('Failed to load client data from Google Sheets.');
-        clientsData = [{ User: currentUser, Client_Name: 'Test Client', type: 'Test Type', monthly_payment: '100' }];
+        clientsData = [{ User: currentUser, Client_Name: 'Test Client', Type: 'Test Type', monthly_payment: '100' }];
         const rows = tableBody.querySelectorAll('tr');
         rows.forEach(row => {
           const clientSelect = row.querySelector('.client-name-input');
@@ -1071,7 +1110,11 @@
   }
 
   function fetchPayments() {
-    fetch('https://payment-tracker-aswa.onrender.com/api/get-payments')
+    fetch('https://payment-tracker-aswa.onrender.com/api/get-payments', {
+      headers: {
+        'user': currentUser // Added user header
+      }
+    })
       .then(response => {
         if (!response.ok) throw new Error('Failed to fetch payments');
         return response.json();
@@ -1129,6 +1172,11 @@
       .catch(error => {
         console.error('Error adding client:', error);
         alert('Failed to add client to Google Sheets. Please try again.');
+        clientNameInput.value = '';
+        typeInput.value = '';
+        monthlyPaymentInput.value = '';
+        fetchClients();
+        showHomePage();
       });
   }
 
