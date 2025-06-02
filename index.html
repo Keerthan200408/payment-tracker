@@ -280,6 +280,33 @@
     .add-client-container .form-label {
       font-weight: 500;
     }
+    /* Added styles for clients and payments containers */
+    .clients-container, .payments-container {
+      max-width: 100%;
+      margin: 20px auto;
+      padding: 2rem;
+    }
+    .clients-container h2, .payments-container h2 {
+      font-size: 1.75rem;
+      margin-bottom: 1.5rem;
+      text-align: center;
+    }
+    /* Added styles for Edit/Delete buttons in Clients page */
+    .btn-edit {
+      background-color: #4f46e5 !important;
+      color: white !important;
+      margin-right: 0.5rem;
+    }
+    .btn-edit:hover {
+      background-color: #3b82f6 !important;
+    }
+    .btn-delete {
+      background-color: #dc2626 !important;
+      color: white !important;
+    }
+    .btn-delete:hover {
+      background-color: #b91c1c !important;
+    }
   </style>
 </head>
 <body>
@@ -288,7 +315,7 @@
     <ul>
       <!-- added -->
       <li id="dashboardLink">Dashboard</li>
-      <li id="addClientLink">Add Client</li>
+      <li id="clientsLink">Clients</li>
       <li id="paymentsLink">Payments</li>
       <li id="reportsLink">Reports</li>
       <li>
@@ -299,19 +326,22 @@
   <div id="sidebarOverlay"></div>
 
   <!-- added -->
-   <!-- Sign-in Page -->
+  <!-- Updated sign-in page to use Google Sign-In -->
   <div id="signInPage" class="sign-in-container" style="display: none;">
     <h2 class="text-center mb-4">Sign In</h2>
-    <div class="mb-3">
-      <label for="UsernameInput" class="form-label">Username</label>
-      <input type="text" class="form-control" id="UsernameInput" placeholder="Enter Username">
+    <!-- Added Google Sign-In button -->
+    <div id="g_id_onload"
+         data-client_id="YOUR_CLIENT_ID.apps.googleusercontent.com"
+         data-callback="handleCredentialResponse"
+         data-auto_prompt="false">
     </div>
-    <div class="mb-3">
-      <label for="passwordInput" class="form-label">Password</label>
-      <input type="password" class="form-control" id="passwordInput" placeholder="Enter password">
-    </div>
-    <div class="d-flex justify-content-between">
-      <button id="signInBtn" class="btn btn-primary px-3 py-1">Sign In</button>
+    <div class="g_id_signin"
+         data-type="standard"
+         data-size="large"
+         data-theme="outline"
+         data-text="sign_in_with"
+         data-shape="rectangular"
+         data-logo_alignment="left">
     </div>
   </div>
 
@@ -326,7 +356,7 @@
 
   <div id="homePage" style="display: none;">
     <div class="controls-container">
-      <button id="addRowBtn" class="btn btn-add-new px-3 py-1">Add new +</button>
+      <button id="addClientBtn" class="btn btn-add-client px-3 py-1">+ Add Client</button>
       <div class="input-group search-group">
         <input id="searchInput" type="text" class="form-control" placeholder="Search Client Name" aria-label="Search Client Name" />
         <button id="searchBtn" class="btn btn-outline-primary" type="button">Search</button>
@@ -375,7 +405,7 @@
               </select>
             </td>
             <td>
-              <select class="form-control amount-input" aria-label="Select Amount To be Paid">
+              <select class="form-control amount-input" aria-label="Select Amount To be Paid" disabled>
                 <option value="">Select Amount</option>
               </select>
             </td>
@@ -413,6 +443,10 @@
       <input type="text" class="form-control" id="clientNameInput" placeholder="Enter client name">
     </div>
     <div class="mb-3">
+      <label for="clientEmailInput" class="form-label">Client Email</label>
+      <input type="email" class="form-control" id="clientEmailInput" placeholder="Enter client email">
+    </div>
+    <div class="mb-3">
       <label for="typeInput" class="form-label">Type</label>
       <input type="text" class="form-control" id="typeInput" placeholder="Enter type">
     </div>
@@ -426,10 +460,61 @@
     </div>
   </div>
 
+  <!-- Added Clients page to display client list with Edit/Delete actions -->
+  <div id="clientsPage" class="clients-container" style="display: none;">
+    <h2>Clients</h2>
+    <div class="table-responsive">
+      <table id="clientsTable" class="table table-bordered align-middle text-center mb-0">
+        <thead>
+          <tr>
+            <th>Client Name</th>
+            <th>Email</th>
+            <th>Monthly Amount</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="clientsTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Added Payments page to display the payments table -->
+  <div id="paymentsPage" class="payments-container" style="display: none;">
+    <h2>Payments</h2>
+    <div class="table-responsive">
+      <table id="paymentsTable" class="table table-bordered align-middle text-center mb-0">
+        <thead>
+          <tr>
+            <th>GmailID</th>
+            <th>Client Name</th>
+            <th>Type</th>
+            <th>Amount To be Paid</th>
+            <th>January</th>
+            <th>February</th>
+            <th>March</th>
+            <th>April</th>
+            <th>May</th>
+            <th>June</th>
+            <th>July</th>
+            <th>August</th>
+            <th>September</th>
+            <th>October</th>
+            <th>November</th>
+            <th>December</th>
+            <th>Due Payment</th>
+          </tr>
+        </thead>
+        <tbody id="paymentsTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+    <!-- Added Google Sign-In script -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  
+    
   <script>
-  const addRowBtn = document.getElementById('addRowBtn');
+  const addClientBtn = document.getElementById('addClientBtn');
   const tableBody = document.getElementById('tableBody');
   const searchInput = document.getElementById('searchInput');
   const searchBtn = document.getElementById('searchBtn');
@@ -444,16 +529,23 @@
   const signInPage = document.getElementById('signInPage');
   const homePage = document.getElementById('homePage');
   const addClientPage = document.getElementById('addClientPage');
+  
+  const clientsPage = document.getElementById('clientsPage');
+  const paymentsPage = document.getElementById('paymentsPage');
   const headerSection = document.getElementById('headerSection');
-  const UsernameInput = document.getElementById('UsernameInput');
+
+  const GmailIDInput = document.getElementById('GmailIDInput');
   const passwordInput = document.getElementById('passwordInput');
   const signInBtn = document.getElementById('signInBtn');
   const dashboardLink = document.getElementById('dashboardLink');
-  const addClientLink = document.getElementById('addClientLink');
+  const clientsLink = document.getElementById('clientsLink');
   const paymentsLink = document.getElementById('paymentsLink');
   const reportsLink = document.getElementById('reportsLink');
   const logoutLink = document.getElementById('logoutLink');
   const clientNameInput = document.getElementById('clientNameInput');
+
+  const clientEmailInput = document.getElementById('clientEmailInput');
+
   const typeInput = document.getElementById('typeInput');
   const monthlyPaymentInput = document.getElementById('monthlyPaymentInput');
   const saveClientBtn = document.getElementById('saveClientBtn');
@@ -461,34 +553,31 @@
 
   let contextTargetRow = null;
   let clientsData = [];
-  let currentUser = null;
+  let currentGmailID = null;
 
-  // added
-  // Simple client-side User storage (for demo purposes)
-  const Users = {
-    'User1': { password: 'pass1', clients: [] },
-    'User2': { password: 'pass2', clients: [] }
-  };
-  // added
+  // Removed hardcoded Users object as we're using Google Sign-In
+  // const Users = { ... }; // Removed
+
   function persistUserSession() {
-    if (currentUser) {
-      localStorage.setItem('currentUser', currentUser);
+    if (currentGmailID) {
+      localStorage.setItem('currentGmailID', currentGmailID);
     }
   }
 
   function clearUserSession() {
-    localStorage.removeItem('currentUser');
+    localStorage.removeItem('currentGmailID');
   }
 
   function loadUserSession() {
-    return localStorage.getItem('currentUser');
+    return localStorage.getItem('currentGmailID');
   }
 
-  // Page navigation
   function showSignInPage() {
     signInPage.style.display = 'block';
     homePage.style.display = 'none';
     addClientPage.style.display = 'none';
+    clientsPage.style.display = 'none';
+    paymentsPage.style.display = 'none';
     headerSection.style.display = 'none';
     sidebarMenu.style.display = 'none';
     menuToggle.style.display = 'none';
@@ -498,56 +587,93 @@
     signInPage.style.display = 'none';
     homePage.style.display = 'block';
     addClientPage.style.display = 'none';
+    clientsPage.style.display = 'none';
+    paymentsPage.style.display = 'none';
     headerSection.style.display = 'flex';
     sidebarMenu.style.display = 'block';
-    menuToggle.style.display = 'flex'; // added
+    menuToggle.style.display = 'flex';
   }
 
   function showAddClientPage() {
     signInPage.style.display = 'none';
     homePage.style.display = 'none';
     addClientPage.style.display = 'block';
+    clientsPage.style.display = 'none';
+    paymentsPage.style.display = 'none';
     headerSection.style.display = 'flex';
     sidebarMenu.style.display = 'block';
-    menuToggle.style.display = 'flex'; // added
+    menuToggle.style.display = 'flex';
   }
 
-  // Sign-in logic
-  signInBtn.addEventListener('click', () => {
-    const Username = UsernameInput.value.trim();
-    const password = passwordInput.value.trim();
+  // Added function to show Clients page
+  function showClientsPage() {
+    signInPage.style.display = 'none';
+    homePage.style.display = 'none';
+    addClientPage.style.display = 'none';
+    clientsPage.style.display = 'block';
+    paymentsPage.style.display = 'none';
+    headerSection.style.display = 'flex';
+    sidebarMenu.style.display = 'block';
+    menuToggle.style.display = 'flex';
+    fetchClientsForDisplay();
+  }
 
-    if (Users[Username] && Users[Username].password === password) {
-      currentUser = Username;
-      persistUserSession();
-      fetchClients();
-      fetchPayments();
-      showHomePage();
-    } else {
-      alert('Invalid Username or password.');
-    }
-  });
+  // Added function to show Payments page
+  function showPaymentsPage() {
+    signInPage.style.display = 'none';
+    homePage.style.display = 'none';
+    addClientPage.style.display = 'none';
+    clientsPage.style.display = 'none';
+    paymentsPage.style.display = 'block';
+    headerSection.style.display = 'flex';
+    sidebarMenu.style.display = 'block';
+    menuToggle.style.display = 'flex';
+    fetchPaymentsForDisplay();
+  }
 
-  passwordInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      signInBtn.click();
-    }
-  });
-  // Logout logic
+  // Added Google Sign-In callback function
+  window.handleCredentialResponse = function(response) {
+    const idToken = response.credential;
+    // Send the ID token to the backend for verification
+    fetch('https://payment-tracker-aswa.onrender.com/api/verify-token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ idToken })
+    })
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to verify token');
+        return res.json();
+      })
+      .then(data => {
+        currentGmailID = data.email;
+        persistUserSession();
+        fetchClients();
+        fetchPayments();
+        showHomePage();
+      })
+      .catch(error => {
+        console.error('Error verifying token:', error);
+        alert('Failed to sign in with Google. Please try again.');
+      });
+  };
+  
+  // Updated logout to clear currentGmailID
   logoutLink.addEventListener('click', (e) => {
     e.preventDefault();
-    currentUser = null;
+    google.accounts.id.disableAutoSelect();
+    currentGmailID = null;
     clearUserSession();
     clientsData = [];
     tableBody.innerHTML = '';
     showSignInPage();
   });
 
-  // Initial page load
+  // Updated session loading to use currentGmailID
   document.addEventListener('DOMContentLoaded', () => {
-    currentUser = loadUserSession();
-    if (currentUser && Users[currentUser]) {
+    currentGmailID = loadUserSession();
+    if (currentGmailID) {
       fetchClients();
       fetchPayments();
       showHomePage();
@@ -580,12 +706,13 @@
     let option = document.createElement('option');
     option.value = '';
     option.textContent = 'Select Client';
-    select.appendChild(option);
-    const UserClients = clientsData.filter(client => client.User === currentUser);
-    UserClients.forEach(client => {
+    select.appendChild(option);    // Modified to show unique client names in the dropdown
+    const userClients = clientsData.filter(client => client.GmailID === currentGmailID);
+    const uniqueClients = [...new Set(userClients.map(client => client.Client_Name))];
+    uniqueClients.forEach(client => {
       option = document.createElement('option');
-      option.value = client.Client_Name;
-      option.textContent = client.Client_Name;
+      option.value = client;
+      option.textContent = client;
       select.appendChild(option);
     });
     select.value = clientName;
@@ -600,14 +727,16 @@
     option.value = '';
     option.textContent = 'Select Type';
     select.appendChild(option);
-    const uniqueTypes = [...new Set(UserClients.map(client => client.Type))];
-    uniqueTypes.forEach(typeOption => {
-      option = document.createElement('option');
-      option.value = typeOption;
-      option.textContent = typeOption;
-      select.appendChild(option);
-    });
-    select.value = type;
+    if (clientName) {
+      const clientTypes = userClients.filter(client => client.Client_Name === clientName).map(client => client.Type);
+      clientTypes.forEach(typeOption => {
+        option = document.createElement('option');
+        option.value = typeOption;
+        option.textContent = typeOption;
+        select.appendChild(option);
+      });
+      select.value = type;
+    }
     td.appendChild(select);
     tr.appendChild(td);
 
@@ -615,18 +744,21 @@
     select = document.createElement('select');
     select.className = 'form-control amount-input';
     select.setAttribute('aria-label', 'Select Amount To be Paid');
+    select.disabled = true;
     option = document.createElement('option');
     option.value = '';
     option.textContent = 'Select Amount';
     select.appendChild(option);
-    const uniqueAmounts = [...new Set(UserClients.map(client => client.monthly_payment))];
-    uniqueAmounts.forEach(amountOption => {
-      option = document.createElement('option');
-      option.value = amountOption;
-      option.textContent = amountOption;
-      select.appendChild(option);
-    });
-    select.value = amount;
+    if (clientName && type) {
+      const clientData = userClients.find(client => client.Client_Name === clientName && client.Type === type);
+      if (clientData) {
+        option = document.createElement('option');
+        option.value = clientData.monthly_payment;
+        option.textContent = clientData.monthly_payment;
+        select.appendChild(option);
+        select.value = clientData.monthly_payment;
+      }
+    }
     td.appendChild(select);
     tr.appendChild(td);
 
@@ -702,7 +834,7 @@
     const data = Array.from(rows).map(row => {
       const inputs = row.querySelectorAll('.form-control');
       return {
-        User: currentUser,
+        GmailID: currentGmailID,
         Client_Name: inputs[0].value,
         Type: inputs[1].value,
         Amount_To_Be_Paid: inputs[2].value,
@@ -725,7 +857,7 @@
     fetch('https://payment-tracker-aswa.onrender.com/api/save-payments', {
       method: 'POST',
       headers: {
-        'user': currentUser,
+        'gmailid': currentGmailID,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(data)
@@ -754,20 +886,108 @@
   });
 
   tableBody.addEventListener('change', e => {
-    if (e.target.classList.contains('client-name-input') || e.target.classList.contains('type-input') || e.target.classList.contains('amount-input')) {
+    if (e.target.classList.contains('client-name-input')) {
+      const row = e.target.closest('tr');
+      const clientName = e.target.value;
+      const typeSelect = row.querySelector('.type-input');
+      const amountSelect = row.querySelector('.amount-input');
+      const userClients = clientsData.filter(client => client.GmailID === currentGmailID && client.Client_Name === clientName);
+
+      typeSelect.innerHTML = '<option value="">Select Type</option>';
+      amountSelect.innerHTML = '<option value="">Select Amount</option>';
+      amountSelect.disabled = true;
+      
+      const clientTypes = [...new Set(userClients.map(client => client.Type))];
+      clientTypes.forEach(type => {
+        const option = document.createElement('option');
+        option.value = type;
+        option.textContent = type;
+        typeSelect.appendChild(option);
+      });
+
+      if (clientTypes.length === 1) {
+        typeSelect.value = clientTypes[0];
+        const clientData = userClients.find(client => client.Type === clientTypes[0]);
+        amountSelect.disabled = false;
+        const amountOption = document.createElement('option');
+        amountOption.value = clientData.monthly_payment;
+        amountOption.textContent = clientData.monthly_payment;
+        amountSelect.appendChild(amountOption);
+        amountSelect.value = clientData.monthly_payment;
+        fetchPaymentForClient(clientName, clientTypes[0], row);
+      } else {
+        typeSelect.disabled = false;
+      }
+      saveToGoogleSheets();
+    }
+
+    if (e.target.classList.contains('type-input')) {
+      const row = e.target.closest('tr');
+      const clientName = row.querySelector('.client-name-input').value;
+      const type = e.target.value;
+      const amountSelect = row.querySelector('.amount-input');
+      const userClients = clientsData.filter(client => client.GmailID === currentGmailID && client.Client_Name === clientName && client.Type === type);
+
+      amountSelect.innerHTML = '<option value="">Select Amount</option>';
+      if (userClients.length > 0) {
+        const clientData = userClients[0];
+        amountSelect.disabled = false;
+        const amountOption = document.createElement('option');
+        amountOption.value = clientData.monthly_payment;
+        amountOption.textContent = clientData.monthly_payment;
+        amountSelect.appendChild(amountOption);
+        amountSelect.value = clientData.monthly_payment;
+        fetchPaymentForClient(clientName, type, row);
+      }
       saveToGoogleSheets();
     }
   });
 
-  addRowBtn.addEventListener('click', () => {
-    const newRow = createEditableRow();
-    tableBody.appendChild(newRow);
-    updateSerialNumbers();
-    saveToGoogleSheets();
+  // Updated to show Add Client page instead of adding a row
+  addClientBtn.addEventListener('click', () => {
+    showAddClientPage();
   });
 
   updateSerialNumbers();
 
+  // Added function to fetch payment data for a specific client-type combination
+  function fetchPaymentForClient(clientName, type, row) {
+    fetch('https://payment-tracker-aswa.onrender.com/api/get-payments', {
+      headers: {
+        'gmailid': currentGmailID // Changed header from 'user' to 'gmailid'
+      }
+    })
+      .then(response => {
+        if (!response.ok) throw new Error('Failed to fetch payments');
+        return response.json();
+      })
+      .then(data => {
+        const payment = data.find(p => p.Client_Name === clientName && p.Type === type);
+        if (payment) {
+          const inputs = row.querySelectorAll('.form-control');
+          inputs[2].value = payment.Amount_To_Be_Paid || '';
+          inputs[3].value = payment.january || '';
+          inputs[4].value = payment.february || '';
+          inputs[5].value = payment.march || '';
+          inputs[6].value = payment.april || '';
+          inputs[7].value = payment.may || '';
+          inputs[8].value = payment.june || '';
+          inputs[9].value = payment.july || '';
+          inputs[10].value = payment.august || '';
+          inputs[11].value = payment.september || '';
+          inputs[12].value = payment.october || '';
+          inputs[13].value = payment.november || '';
+          inputs[14].value = payment.december || '';
+          inputs[15].value = payment.Due_Payment || '0.00';
+          updateDuePayment(row);
+          const monthInputs = Array.from(inputs).slice(3, 15);
+          monthInputs.forEach(input => updatePaymentStatus(input));
+        }
+      })
+      .catch(error => {
+        console.error('Error fetching payment:', error);
+      });
+  }
   function searchClients() {
     const filter = searchInput.value.trim().toLowerCase();
     const rows = tableBody.querySelectorAll('tr');
@@ -889,9 +1109,11 @@
       closeSidebar();
       if (item.id === 'dashboardLink') {
         showHomePage();
-      } else if (item.id === 'addClientLink') {
-        showAddClientPage();
-      } else if (item.id === 'paymentsLink' || item.id === 'reportsLink') {
+      } else if (item.id === 'clientsLink') { // Updated to show Clients page
+        showClientsPage();
+      } else if (item.id === 'paymentsLink') { // Updated to show Payments page
+        showPaymentsPage();
+      } else if (item.id === 'reportsLink') {
         alert(`Navigating to: ${item.textContent}`);
       }
     });
@@ -998,12 +1220,13 @@
     monthInputs.forEach(input => updatePaymentStatus(input));
   }
 
+  // Updated saveDataToDB to use GmailID
   function saveDataToDB() {
     const rows = tableBody.querySelectorAll('tr');
     const data = Array.from(rows).map(row => {
       const inputs = row.querySelectorAll('.form-control');
       return {
-        User: currentUser,
+        GmailID: currentGmailID,
         Client_Name: inputs[0].value,
         Type: inputs[1].value,
         Amount_To_Be_Paid: inputs[2].value,
@@ -1026,7 +1249,7 @@
     fetch('https://payment-tracker-aswa.onrender.com/api/save-payments', {
       method: 'POST',
       headers: {
-        'user': currentUser, 
+        'gmailid': currentGmailID, // Changed header from 'user' to 'gmailid'
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(data)
@@ -1047,7 +1270,7 @@
   function fetchClients() {
     fetch('https://payment-tracker-aswa.onrender.com/api/get-clients', {
       headers: {
-        'user': currentUser // Added user header to match backend expectation
+        'gmailid': currentGmailID // Added user header to match backend expectation
       }
     })
       .then(response => {
@@ -1067,30 +1290,37 @@
           clientSelect.innerHTML = '<option value="">Select Client</option>';
           typeSelect.innerHTML = '<option value="">Select Type</option>';
           amountSelect.innerHTML = '<option value="">Select Amount</option>';
-          const UserClients = clientsData.filter(client => client.User === currentUser);
+          amountSelect.disabled = true;
+          const UserClients = clientsData.filter(client => client.GmailID === currentGmailID);
+          const uniqueClients = [...new Set(userClients.map(client => client.Client_Name))];
           UserClients.forEach(client => {
             const option = document.createElement('option');
-            option.value = client.Client_Name;
-            option.textContent = client.Client_Name;
+            option.value = client;
+            option.textContent = client;
             clientSelect.appendChild(option);
           });
-          const uniqueTypes = [...new Set(UserClients.map(client => client.Type))];
-          uniqueTypes.forEach(type => {
-            const option = document.createElement('option');
-            option.value = type;
-            option.textContent = type;
-            typeSelect.appendChild(option);
-          });
-          const uniqueAmounts = [...new Set(UserClients.map(client => client.monthly_payment))];
-          uniqueAmounts.forEach(amount => {
-            const option = document.createElement('option');
-            option.value = amount;
-            option.textContent = amount;
-            amountSelect.appendChild(option);
-          });
           clientSelect.value = currentClient;
-          typeSelect.value = currentType;
-          amountSelect.value = currentAmount;
+          if (currentClient) {
+            const clientTypes = userClients.filter(client => client.Client_Name === currentClient).map(client => client.Type);
+            clientTypes.forEach(type => {
+              const option = document.createElement('option');
+              option.value = type;
+              option.textContent = type;
+              typeSelect.appendChild(option);
+            });
+            typeSelect.value = currentType;
+            if (currentType) {
+              const clientData = userClients.find(client => client.Client_Name === currentClient && client.Type === currentType);
+              if (clientData) {
+                amountSelect.disabled = false;
+                const amountOption = document.createElement('option');
+                amountOption.value = clientData.monthly_payment;
+                amountOption.textContent = clientData.monthly_payment;
+                amountSelect.appendChild(amountOption);
+                amountSelect.value = clientData.monthly_payment;
+              }
+            }
+          }
         });
       })
       .catch(error => {
@@ -1112,7 +1342,7 @@
   function fetchPayments() {
     fetch('https://payment-tracker-aswa.onrender.com/api/get-payments', {
       headers: {
-        'user': currentUser // Added user header
+        'user': currentGmailID // Added user header
       }
     })
       .then(response => {
@@ -1120,7 +1350,7 @@
         return response.json();
       })
       .then(data => {
-        const UserPayments = data.filter(payment => payment.User === currentUser);
+        const UserPayments = data.filter(payment => payment.GmailID === currentGmailID);
         if (UserPayments.length > 0) {
           tableBody.innerHTML = '';
           UserPayments.forEach(row => addRowToTable(row));
@@ -1132,60 +1362,221 @@
         alert('Failed to load payments from Google Sheets.');
       });
   }
-
-  function addNewClient() {
-    const clientName = clientNameInput.value.trim();
-    const type = typeInput.value.trim();
-    const monthlyPayment = monthlyPaymentInput.value.trim();
-
-    if (!clientName || !type || !monthlyPayment) {
-      alert('All fields are required.');
-      return;
-    }
-
-    const newClient = {
-      User: currentUser,
-      Client_Name: clientName,
-      Type: type,
-      monthly_payment: parseFloat(monthlyPayment) || 0
-    };
-
-    fetch('https://payment-tracker-aswa.onrender.com/api/add-client', {
-      method: 'POST',
+  // Added: Function to fetch and display clients on the Clients page
+  function fetchClientsForDisplay() {
+    fetch('https://payment-tracker-aswa.onrender.com/api/get-clients', {
       headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(newClient)
+        'gmailid': currentGmailID
+      }
     })
       .then(response => {
-        if (!response.ok) throw new Error('Failed to add client');
+        if (!response.ok) throw new Error('Failed to fetch clients');
         return response.json();
       })
       .then(data => {
-        alert('Client added successfully!');
-        clientNameInput.value = '';
-        typeInput.value = '';
-        monthlyPaymentInput.value = '';
-        fetchClients();
-        showHomePage();
+        const clientsTableBody = document.getElementById('clientsTableBody');
+        clientsTableBody.innerHTML = '';
+        const userClients = data.filter(client => client.GmailID === currentGmailID);
+        userClients.forEach(client => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${client.Client_Name}</td>
+            <td>${client.Email || 'N/A'}</td>
+            <td>${client.monthly_payment}</td>
+            <td>
+              <button class="btn btn-edit btn-sm edit-client-btn" data-client="${client.Client_Name}" data-type="${client.Type}">Edit</button>
+              <button class="btn btn-delete btn-sm delete-client-btn" data-client="${client.Client_Name}" data-type="${client.Type}">Delete</button>
+            </td>
+          `;
+          clientsTableBody.appendChild(tr);
+        });
+
+        // Add event listeners for Edit buttons
+        document.querySelectorAll('.edit-client-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const clientName = btn.dataset.client;
+            const type = btn.dataset.type;
+            const clientData = userClients.find(client => client.Client_Name === clientName && client.Type === type);
+            clientNameInput.value = clientData.Client_Name;
+            clientEmailInput.value = clientData.Email || '';
+            typeInput.value = clientData.Type;
+            monthlyPaymentInput.value = clientData.monthly_payment;
+            showAddClientPage();
+            saveClientBtn.textContent = 'Update Client';
+            saveClientBtn.dataset.client = clientName;
+            saveClientBtn.dataset.type = type;
+          });
+        });
+
+        // Add event listeners for Delete buttons
+        document.querySelectorAll('.delete-client-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const clientName = btn.dataset.client;
+            const type = btn.dataset.type;
+            if (confirm(`Are you sure you want to delete ${clientName} (${type})?`)) {
+              deleteClient(clientName, type);
+            }
+          });
+        });
       })
       .catch(error => {
-        console.error('Error adding client:', error);
-        alert('Failed to add client to Google Sheets. Please try again.');
-        clientNameInput.value = '';
-        typeInput.value = '';
-        monthlyPaymentInput.value = '';
-        fetchClients();
-        showHomePage();
+        console.error('Error fetching clients:', error);
+        alert('Failed to load clients.');
       });
   }
 
+  // Added: Function to fetch and display payments on the Payments page
+  function fetchPaymentsForDisplay() {
+    fetch('https://payment-tracker-aswa.onrender.com/api/get-payments', {
+      headers: {
+        'gmailid': currentGmailID
+      }
+    })
+      .then(response => {
+        if (!response.ok) throw new Error('Failed to fetch payments');
+        return response.json();
+      })
+      .then(data => {
+        const paymentsTableBody = document.getElementById('paymentsTableBody');
+        paymentsTableBody.innerHTML = '';
+        const userPayments = data.filter(payment => payment.GmailID === currentGmailID);
+        userPayments.forEach(payment => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${payment.GmailID}</td>
+            <td>${payment.Client_Name}</td>
+            <td>${payment.Type}</td>
+            <td>${payment.Amount_To_Be_Paid}</td>
+            <td>${payment.january || ''}</td>
+            <td>${payment.february || ''}</td>
+            <td>${payment.march || ''}</td>
+            <td>${payment.april || ''}</td>
+            <td>${payment.may || ''}</td>
+            <td>${payment.june || ''}</td>
+            <td>${payment.july || ''}</td>
+            <td>${payment.august || ''}</td>
+            <td>${payment.september || ''}</td>
+            <td>${payment.october || ''}</td>
+            <td>${payment.november || ''}</td>
+            <td>${payment.december || ''}</td>
+            <td>${payment.Due_Payment}</td>
+          `;
+          paymentsTableBody.appendChild(tr);
+        });
+      })
+      .catch(error => {
+        console.error('Error fetching payments:', error);
+        alert('Failed to load payments.');
+      });
+  }
+
+  function addNewClient() {
+    const clientName = clientNameInput.value.trim();
+    const clientEmail = clientEmailInput.value.trim();
+    const type = typeInput.value.trim();
+    const monthlyPayment = monthlyPaymentInput.value.trim();
+
+    // Basic required field validation
+    if (!clientName || !clientEmail || !type || !monthlyPayment) {
+        alert('All fields are required.');
+        return;
+    }
+
+    // Email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(clientEmail)) {
+        alert('Please enter a valid email address.');
+        return;
+    }
+
+    // Monthly payment numeric validation
+    const paymentValue = parseFloat(monthlyPayment);
+    if (isNaN(paymentValue) || paymentValue <= 0) {
+        alert('Monthly payment must be a positive number.');
+        return;
+    }
+
+    const newClient = {
+        GmailID: currentGmailID,
+        Client_Name: clientName,
+        Email: clientEmail,
+        Type: type,
+        monthly_payment: paymentValue
+    };
+
+    const isUpdate = saveClientBtn.textContent === 'Update Client';
+    const endpoint = isUpdate ? '/api/update-client' : '/api/add-client';
+    const method = isUpdate ? 'PUT' : 'POST';
+
+    if (isUpdate) {
+        newClient.Old_Client_Name = saveClientBtn.dataset.client;
+        newClient.Old_Type = saveClientBtn.dataset.type;
+    }
+
+    fetch(`https://payment-tracker-aswa.onrender.com${endpoint}`, {
+        method: method,
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(newClient)
+    })
+        .then(response => {
+            if (!response.ok) throw new Error(`Failed to ${isUpdate ? 'update' : 'add'} client`);
+            return response.json();
+        })
+        .then(data => {
+            alert(`Client ${isUpdate ? 'updated' : 'added'} successfully!`);
+            resetAddClientForm();
+            fetchClients();
+            showHomePage();
+        })
+        .catch(error => {
+            console.error(`Error ${isUpdate ? 'updating' : 'adding'} client:`, error);
+            alert(`Failed to ${isUpdate ? 'update' : 'add'} client to Google Sheets: ${error.message}`);
+            resetAddClientForm();
+            fetchClients();
+            showHomePage();
+        });
+  }
+
+  // Added: Function to delete a client
+  function deleteClient(clientName, type) {
+    fetch('https://payment-tracker-aswa.onrender.com/api/delete-client', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ GmailID: currentGmailID, Client_Name: clientName, Type: type })
+    })
+      .then(response => {
+        if (!response.ok) throw new Error('Failed to delete client');
+        return response.json();
+      })
+      .then(data => {
+        alert('Client deleted successfully!');
+        fetchClientsForDisplay();
+        fetchClients();
+      })
+      .catch(error => {
+        console.error('Error deleting client:', error);
+        alert('Failed to delete client from Google Sheets. Please try again.');
+      });
+  }
+
+  // Added: Function to reset the Add Client form
+  function resetAddClientForm() {
+    clientNameInput.value = '';
+    clientEmailInput.value = '';
+    typeInput.value = '';
+    monthlyPaymentInput.value = '';
+    saveClientBtn.textContent = 'Add Client';
+    delete saveClientBtn.dataset.client;
+    delete saveClientBtn.dataset.type;
+  }
   saveClientBtn.addEventListener('click', addNewClient);
 
   cancelAddClientBtn.addEventListener('click', () => {
-    clientNameInput.value = '';
-    typeInput.value = '';
-    monthlyPaymentInput.value = '';
+    resetAddClientForm();
     showHomePage();
   });
 </script>
