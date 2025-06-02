@@ -40,7 +40,7 @@ async function getSheetsClient() {
 }
 
 // Added OAuth2Client for verifying Google ID tokens
-const oAuth2Client = new OAuth2Client('YOUR_ACTUAL_CLIENT_ID.apps.googleusercontent.com'); // Replace with your actual client ID
+const oAuth2Client = new OAuth2Client('848204323516-p15s9a090fqjtrfclco6rbocp9sov0t5.apps.googleusercontent.com'); // Replace with your actual client ID
 
 // Added middleware to verify token for protected routes
 const verifyToken = async (req, res, next) => {
@@ -51,7 +51,7 @@ const verifyToken = async (req, res, next) => {
     try {
         const ticket = await oAuth2Client.verifyIdToken({
             idToken: token,
-            audience: 'YOUR_ACTUAL_CLIENT_ID.apps.googleusercontent.com',
+            audience: '848204323516-p15s9a090fqjtrfclco6rbocp9sov0t5.apps.googleusercontent.com',
         });
         const payload = ticket.getPayload();
         req.userEmail = payload['email'];
@@ -74,7 +74,7 @@ app.post('/api/verify-token', async (req, res) => {
         }
         const ticket = await oAuth2Client.verifyIdToken({
             idToken,
-            audience: 'YOUR_ACTUAL_CLIENT_ID.apps.googleusercontent.com',
+            audience: '848204323516-p15s9a090fqjtrfclco6rbocp9sov0t5.apps.googleusercontent.com',
         });
         const payload = ticket.getPayload();
         const email = payload['email'];
