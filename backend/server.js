@@ -42,9 +42,12 @@ async function getSheetsClient() {
 // Added OAuth2Client for verifying Google ID tokens
 const oAuth2Client = new OAuth2Client('848204323516-p15s9a090fqjtrfclco6rbocp9sov0t5.apps.googleusercontent.com'); // Replace with your actual client ID
 
-// Added middleware to verify token for protected routes
 const verifyToken = async (req, res, next) => {
-    const token = req.headers.authorization?.split(' ')[1]; // Expecting "Bearer <token>"
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'No token provided' });
+    }
+    const token = authHeader.split(' ')[1];
     if (!token) {
         return res.status(401).json({ error: 'No token provided' });
     }
@@ -61,16 +64,20 @@ const verifyToken = async (req, res, next) => {
         next();
     } catch (error) {
         console.error('Error verifying token:', error);
-        res.status(401).json({ error: 'Invalid token' });
+        // Modified: Provide a more specific error message for token expiration
+        if (error.message.includes('Token used too late') || error.message.includes('jwt expired')) {
+            return res.status(401).json({ error: 'Token has expired. Please sign in again.' });
+        }
+        return res.status(401).json({ error: 'Invalid token. Please sign in again.' });
     }
 };
 
-// Added endpoint to verify Google ID token
+// Modified: Improved error handling in the verify-token endpoint
 app.post('/api/verify-token', async (req, res) => {
     try {
         const { idToken } = req.body;
         if (!idToken) {
-            throw new Error('ID token is required');
+            return res.status(400).json({ error: 'ID token is required' });
         }
         const ticket = await oAuth2Client.verifyIdToken({
             idToken,
@@ -79,12 +86,16 @@ app.post('/api/verify-token', async (req, res) => {
         const payload = ticket.getPayload();
         const email = payload['email'];
         if (!email) {
-            throw new Error('No email found in token');
+            return res.status(400).json({ error: 'No email found in token' });
         }
         res.json({ email });
     } catch (error) {
         console.error('Error verifying token:', error);
-        res.status(401).json({ error: 'Invalid token' });
+        // Modified: Provide a more specific error message for token expiration
+        if (error.message.includes('Token used too late') || error.message.includes('jwt expired')) {
+            return res.status(401).json({ error: 'Token has expired. Please sign in again.' });
+        }
+        return res.status(401).json({ error: 'Invalid token. Please sign in again.' });
     }
 });
 
