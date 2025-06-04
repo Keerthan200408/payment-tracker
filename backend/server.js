@@ -1,443 +1,488 @@
 const express = require('express');
+require('dotenv').config();
 const { google } = require('googleapis');
-const cors = require('cors');
-const path = require('path');
-const { GoogleAuth, OAuth2Client } = require('google-auth-library');
-const rateLimit = require('express-rate-limit');
+// CHANGE: Added bcrypt for secure password hashing
+const bcrypt = require('bcryptjs');
+// CHANGE: Added jsonwebtoken for creating and verifying session tokens
 const jwt = require('jsonwebtoken');
+const cors = require('cors');
+const rateLimit = require('express-rate-limit');
+// CHANGE: Added GoogleAuth for simplified Google API authentication
+const { GoogleAuth } = require('google-auth-library');
 
 const app = express();
-app.use(cors());
+// Enable CORS to allow cross-origin requests from the frontend
+const allowedOrigins = ['https://payment-tracker-aswa.onrender.com', 'http://localhost:8080'];
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
+// Parse incoming JSON requests
 app.use(express.json());
 
-// Added rate limiting to prevent abuse
+// Apply rate limiting to prevent abuse (100 requests per 15 minutes per IP)
 const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per windowMs
-    message: 'Too many requests from this IP, please try again later.',
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: 'Too many requests from this IP, please try again later.',
 });
 app.use(limiter);
 
+// Define the required Google Sheets API scope
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
 
-// Parse the GOOGLE_CREDENTIALS environment variable with error handling
+// Load Google API credentials from environment variable
 let credentials;
 try {
-    credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+  credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
 } catch (error) {
-    console.error('Error parsing GOOGLE_CREDENTIALS:', error);
-    credentials = null;
+  console.error('Error parsing GOOGLE_CREDENTIALS:', error);
+  credentials = null;
 }
 
+// CHANGE: Simplified Google Sheets client setup using GoogleAuth (replaced oAuth2Client)
 async function getSheetsClient() {
-    if (!credentials) {
-        throw new Error('Google Sheets API credentials are not configured properly. Please set GOOGLE_CREDENTIALS environment variable.');
-    }
-    const auth = new GoogleAuth({
-        credentials,
-        scopes: SCOPES,
-    });
-    return google.sheets({ version: 'v4', auth });
+  if (!credentials) {
+    throw new Error('Google Sheets API credentials are not configured properly. Please set GOOGLE_CREDENTIALS environment variable.');
+  }
+  const auth = new GoogleAuth({
+    credentials,
+    scopes: SCOPES,
+  });
+  return google.sheets({ version: 'v4', auth });
 }
 
-// Added OAuth2Client for verifying Google ID tokens
-const oAuth2Client = new OAuth2Client('848204323516-p15s9a090fqjtrfclco6rbocp9sov0t5.apps.googleusercontent.com');
+// CHANGE: Added a secret key for JWT (used for session tokens)
+const SECRET_KEY = process.env.JWT_SECRET || 'your-fallback-secret-key';
 
-const SECRET_KEY = process.env.SECRET_KEY || 'your-fallback-secret-key';
-
-// Middleware to verify custom session token
+// CHANGE: Added middleware to verify session tokens in requests
 const verifySessionToken = (req, res, next) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ error: 'No session token provided' });
-    }
-    const token = authHeader.split(' ')[1];
-    try {
-        const decoded = jwt.verify(token, SECRET_KEY);
-        req.userEmail = decoded.email;
-        next();
-    } catch (error) {
-        console.error('Error verifying session token:', error);
-        return res.status(401).json({ error: 'Invalid session token. Please sign in again.' });
-    }
+  const authHeader = req.headers.authorization;
+  // Check if the Authorization header exists and starts with 'Bearer '
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No session token provided' });
+  }
+  const token = authHeader.split(' ')[1];
+  try {
+    // Verify the JWT token and extract the username
+    const decoded = jwt.verify(token, SECRET_KEY);
+    req.username = decoded.username;
+    next();
+  } catch (error) {
+    console.error('Error verifying session token:', error);
+    return res.status(401).json({ error: 'Invalid session token. Please sign in again.' });
+  }
 };
 
-// Update /api/verify-token to issue a session token
-app.post('/api/verify-token', async (req, res) => {
-    const { idToken } = req.body;
-    try {
-        const ticket = await oAuth2Client.verifyIdToken({
-            idToken,
-            audience: '848204323516-p15s9a090fqjtrfclco6rbocp9sov0t5.apps.googleusercontent.com',
-        });
-        const payload = ticket.getPayload();
-        const email = payload['email'];
-        if (!email) {
-            throw new Error('No email in token payload');
-        }
-        // Issue a custom session token (valid for 7 days)
-        const sessionToken = jwt.sign({ email }, SECRET_KEY, { expiresIn: '7d' });
-        res.json({ email, sessionToken });
-    } catch (error) {
-        console.error('Error verifying token:', error);
-        res.status(401).json({ error: 'Invalid token' });
+// CHANGE: Added signup endpoint to create a new user account
+app.post('/api/signup', async (req, res) => {
+  try {
+    const sheets = await getSheetsClient();
+    const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
+    const { username, password, gmailId } = req.body;
+
+    // Validate that all required fields are provided
+    if (!username || !password || !gmailId) {
+      return res.status(400).json({ error: 'All fields are required' });
     }
+
+    // Validate Gmail ID format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(gmailId) || !gmailId.endsWith('@gmail.com')) {
+      return res.status(400).json({ error: 'Please provide a valid Gmail ID' });
+    }
+
+    // Fetch existing users from the 'Users' sheet
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: 'Users!A2:C',
+    });
+    const users = response.data.values || [];
+
+    // Check if the username already exists
+    const userExists = users.find(row => row[0] === username);
+    if (userExists) {
+      return res.status(400).json({ error: 'Username already exists' });
+    }
+
+    // Hash the password before storing it
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const values = [[username, hashedPassword, gmailId]];
+
+    // Append the new user to the 'Users' sheet
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: 'Users!A2',
+      valueInputOption: 'RAW',
+      requestBody: { values },
+    });
+
+    res.json({ status: 'success' });
+  } catch (error) {
+    console.error('Error signing up:', error);
+    res.status(500).json({ error: 'Failed to sign up' });
+  }
 });
 
-// Get clients from Clients worksheet (filtered by GmailID)
+// CHANGE: Added login endpoint to authenticate users
+app.post('/api/login', async (req, res) => {
+  try {
+    const sheets = await getSheetsClient();
+    const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
+    const { username, password } = req.body;
+
+    // Validate that both username and password are provided
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password are required' });
+    }
+
+    // Fetch users from the 'Users' sheet
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: 'Users!A2:C',
+    });
+    const users = response.data.values || [];
+
+    // Find the user by username
+    const user = users.find(row => row[0] === username);
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid username or password' });
+    }
+
+    // Compare the provided password with the stored hashed password
+    const passwordMatch = await bcrypt.compare(password, user[1]);
+    if (!passwordMatch) {
+      return res.status(401).json({ error: 'Invalid username or password' });
+    }
+
+    // Generate a JWT session token
+    const sessionToken = jwt.sign({ username }, SECRET_KEY, { expiresIn: '1h' });
+
+    res.json({ username, sessionToken });
+  } catch (error) {
+    console.error('Error logging in:', error);
+    res.status(500).json({ error: 'Failed to login' });
+  }
+});
+
+// CHANGE: Updated get-clients endpoint to filter by authenticated user and require session token
 app.get('/api/get-clients', verifySessionToken, async (req, res) => {
-    try {
-        const { userEmail } = req;
-        const gmailid = req.headers.gmailid;
-        if (userEmail !== gmailid) {
-            return res.status(403).json({ error: 'Unauthorized access' });
-        }
-        const sheets = await getSheetsClient();
-        const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
-        const response = await sheets.spreadsheets.values.get({
-            spreadsheetId,
-            range: 'Clients!A2:E',
-        });
-        const rows = response.data.values || [];
-        const clients = rows.map(row => ({
-            GmailID: row[0] || '',
-            Client_Name: row[1] || '',
-            Email: row[2] || '',
-            Type: row[3] || '',
-            monthly_payment: row[4] || '',
-        }));
-        const userClients = clients.filter(client => client.GmailID === gmailid);
-        res.json(userClients);
-    } catch (error) {
-        console.error('Error fetching clients:', error);
-        res.status(500).json({ error: 'Failed to fetch clients' });
-    }
+  try {
+    const sheets = await getSheetsClient();
+    const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
+    const range = 'Clients!A2:E';
+
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range,
+    });
+
+    const rows = response.data.values || [];
+    // Filter clients by the authenticated user
+    const data = rows
+      .filter(row => row[0] === req.username)
+      .map(row => ({
+        User: row[0],
+        Client_Name: row[1],
+        Email: row[2],
+        Type: row[3],
+        monthly_payment: row[4],
+      }));
+
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching clients:', error);
+    res.status(500).json({ error: 'Failed to fetch clients' });
+  }
 });
 
-// Get payments from Payments worksheet (filtered by GmailID)
+// CHANGE: Updated get-payments endpoint to filter by authenticated user and require session token
 app.get('/api/get-payments', verifySessionToken, async (req, res) => {
-    try {
-        const sheets = await getSheetsClient();
-        const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
-        const response = await sheets.spreadsheets.values.get({
-            spreadsheetId,
-            range: 'Payments!A2:Q',
-        });
-        const rows = response.data.values || [];
-        const payments = rows.map(row => ({
-            GmailID: row[0] || '',
-            Client_Name: row[1] || '',
-            Type: row[2] || '',
-            Amount_To_Be_Paid: row[3] || '',
-            january: row[4] || '',
-            february: row[5] || '',
-            march: row[6] || '',
-            april: row[7] || '',
-            may: row[8] || '',
-            june: row[9] || '',
-            july: row[10] || '',
-            august: row[11] || '',
-            september: row[12] || '',
-            october: row[13] || '',
-            november: row[14] || '',
-            december: row[15] || '',
-            Due_Payment: row[16] || '',
-        }));
-        const gmailid = req.headers.gmailid || '';
-        if (gmailid !== req.userEmail) {
-            return res.status(403).json({ error: 'Unauthorized access' });
-        }
-        const userPayments = payments.filter(payment => payment.GmailID === gmailid);
-        res.json(userPayments);
-    } catch (error) {
-        console.error('Error fetching payments:', error);
-        res.status(500).json({ error: 'Failed to fetch payments' });
-    }
+  try {
+    const sheets = await getSheetsClient();
+    const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
+    const range = 'Payments!A2:Q';
+
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range,
+    });
+
+    const rows = response.data.values || [];
+    // Filter payments by the authenticated user
+    const data = rows
+      .filter(row => row[0] === req.username)
+      .map(row => ({
+        User: row[0],
+        Client_Name: row[1],
+        Type: row[2],
+        Amount_To_Be_Paid: row[3],
+        january: row[4],
+        february: row[5],
+        march: row[6],
+        april: row[7],
+        may: row[8],
+        june: row[9],
+        july: row[10],
+        august: row[11],
+        september: row[12],
+        october: row[13],
+        november: row[14],
+        december: row[15],
+        Due_Payment: row[16],
+      }));
+
+    res.json(data);
+  } catch (error) {
+    console.error('Error fetching payments:', error);
+    res.status(500).json({ error: 'Failed to fetch payments' });
+  }
 });
 
-// Save payments to Payments worksheet
+// CHANGE: Updated save-payments endpoint to include user and require session token
 app.post('/api/save-payments', verifySessionToken, async (req, res) => {
-    try {
-        const sheets = await getSheetsClient();
-        const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
-        const data = req.body;
-        if (!Array.isArray(data) || data.length === 0) {
-            return res.status(400).json({ error: 'Invalid payment data' });
-        }
+  try {
+    const sheets = await getSheetsClient();
+    const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
+    const data = req.body;
 
-        const gmailid = req.headers.gmailid || data[0]?.GmailID || '';
-        if (gmailid !== req.userEmail) {
-            return res.status(403).json({ error: 'Unauthorized access' });
-        }
+    // Fetch existing payments
+    const existingDataResponse = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: 'Payments!A2:Q',
+    });
+    const existingRows = existingDataResponse.data.values || [];
 
-        // Validate payment data
-        for (const row of data) {
-            if (!row.Client_Name || !row.Type || !row.Amount_To_Be_Paid) {
-                return res.status(400).json({ error: 'Client Name, Type, and Amount To Be Paid are required' });
-            }
-            const amount = parseFloat(row.Amount_To_Be_Paid);
-            if (isNaN(amount) || amount <= 0) {
-                return res.status(400).json({ error: 'Amount To Be Paid must be a positive number' });
-            }
-        }
+    // Filter out payments for other users (keep only rows not belonging to the current user)
+    const rowsToKeep = existingRows.filter(row => row[0] !== req.username);
 
-        const values = data.map(row => [
-            row.GmailID || '',
-            row.Client_Name || '',
-            row.Type || '',
-            row.Amount_To_Be_Paid || '',
-            row.january || '',
-            row.february || '',
-            row.march || '',
-            row.april || '',
-            row.may || '',
-            row.june || '',
-            row.july || '',
-            row.august || '',
-            row.september || '',
-            row.october || '',
-            row.november || '',
-            row.december || '',
-            row.Due_Payment || '',
-        ]);
+    // Prepare new rows for the current user
+    const values = data.map(row => [
+      row.User || req.username,
+      row.Client_Name || '',
+      row.Type || '',
+      row.Amount_To_Be_Paid || '',
+      row.january || '',
+      row.february || '',
+      row.march || '',
+      row.april || '',
+      row.may || '',
+      row.june || '',
+      row.july || '',
+      row.august || '',
+      row.september || '',
+      row.october || '',
+      row.november || '',
+      row.december || '',
+      row.Due_Payment || '',
+    ]);
 
-        // Fetch existing data
-        const existingDataResponse = await sheets.spreadsheets.values.get({
-            spreadsheetId,
-            range: 'Payments!A2:Q',
-        });
-        const existingData = existingDataResponse.data.values || [];
-        const nonUserData = existingData.filter(row => row[0] !== gmailid);
+    // Combine rows to keep (other users' data) with the current user's updated data
+    const updatedValues = [...rowsToKeep, ...values];
 
-        // Prepare all data to write (non-user data + new user data)
-        const allData = [...nonUserData, ...values];
+    // Clear the Payments sheet (excluding headers)
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId,
+      range: 'Payments!A2:Q',
+    });
 
-        // Clear and update in one step to minimize data loss risk
-        await sheets.spreadsheets.values.clear({
-            spreadsheetId,
-            range: 'Payments!A2:Q',
-        });
-
-        if (allData.length > 0) {
-            await sheets.spreadsheets.values.update({
-                spreadsheetId,
-                range: 'Payments!A2',
-                valueInputOption: 'RAW',
-                requestBody: { values: allData },
-            });
-        }
-
-        res.json({ status: 'success' });
-    } catch (error) {
-        console.error('Error saving to sheets:', error);
-        res.status(500).json({ error: `Failed to save to sheets: ${error.message}` });
+    // Write the updated data back to the sheet
+    if (updatedValues.length > 0) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: 'Payments!A2',
+        valueInputOption: 'RAW',
+        requestBody: { values: updatedValues },
+      });
     }
+
+    res.json({ status: 'success' });
+  } catch (error) {
+    console.error('Error saving payments:', error);
+    res.status(500).json({ error: 'Failed to save payments' });
+  }
 });
 
-// Add a new client to Clients worksheet
+// CHANGE: Updated add-client endpoint to include user and require session token
 app.post('/api/add-client', verifySessionToken, async (req, res) => {
-    try {
-        const sheets = await getSheetsClient();
-        const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
-        const newClient = req.body;
+  try {
+    const sheets = await getSheetsClient();
+    const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
+    const { Client_Name, Email, Type, monthly_payment } = req.body;
 
-        // Validate client data
-        if (!newClient.GmailID || !newClient.Client_Name || !newClient.Email || !newClient.Type || !newClient.monthly_payment) {
-            return res.status(400).json({ error: 'All client fields are required' });
-        }
-        if (newClient.GmailID !== req.userEmail) {
-            return res.status(403).json({ error: 'Unauthorized access' });
-        }
-        const monthlyPayment = parseFloat(newClient.monthly_payment);
-        if (isNaN(monthlyPayment) || monthlyPayment <= 0) {
-            return res.status(400).json({ error: 'Monthly payment must be a positive number' });
-        }
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(newClient.Email)) {
-            return res.status(400).json({ error: 'Invalid email format' });
-        }
-
-        const values = [[
-            newClient.GmailID,
-            newClient.Client_Name,
-            newClient.Email,
-            newClient.Type,
-            newClient.monthly_payment,
-        ]];
-
-        await sheets.spreadsheets.values.append({
-            spreadsheetId,
-            range: 'Clients!A2',
-            valueInputOption: 'RAW',
-            requestBody: { values },
-        });
-        res.json({ status: 'success' });
-    } catch (error) {
-        console.error('Error adding client:', error);
-        res.status(500).json({ error: `Failed to add client: ${error.message}` });
+    // Validate required fields
+    if (!Client_Name || !Email || !Type || !monthly_payment) {
+      return res.status(400).json({ error: 'All fields are required' });
     }
+
+    const values = [[req.username, Client_Name, Email, Type, monthly_payment]];
+
+    // Append the new client to the Clients sheet
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: 'Clients!A2',
+      valueInputOption: 'RAW',
+      requestBody: { values },
+    });
+
+    res.json({ status: 'success' });
+  } catch (error) {
+    console.error('Error adding client:', error);
+    res.status(500).json({ error: 'Failed to add client' });
+  }
 });
 
+// CHANGE: Added update-client endpoint to modify existing clients (requires session token)
 app.put('/api/update-client', verifySessionToken, async (req, res) => {
-    try {
-        const sheets = await getSheetsClient();
-        const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
-        const clientData = req.body;
+  try {
+    const sheets = await getSheetsClient();
+    const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
+    const { Client_Name, Email, Type, monthly_payment, Old_Client_Name, Old_Type } = req.body;
 
-        // Validate client data
-        if (!clientData.GmailID || !clientData.Client_Name || !clientData.Email || !clientData.Type || !clientData.monthly_payment) {
-            return res.status(400).json({ error: 'All client fields are required' });
-        }
-        if (clientData.GmailID !== req.userEmail) {
-            return res.status(403).json({ error: 'Unauthorized access' });
-        }
-        const monthlyPayment = parseFloat(clientData.monthly_payment);
-        if (isNaN(monthlyPayment) || monthlyPayment <= 0) {
-            return res.status(400).json({ error: 'Monthly payment must be a positive number' });
-        }
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(clientData.Email)) {
-            return res.status(400).json({ error: 'Invalid email format' });
-        }
-
-        const response = await sheets.spreadsheets.values.get({
-            spreadsheetId,
-            range: 'Clients!A2:E',
-        });
-        const rows = response.data.values || [];
-        let rowIndex = -1;
-        for (let i = 0; i < rows.length; i++) {
-            if (rows[i][0] === clientData.GmailID && rows[i][1] === clientData.Old_Client_Name && rows[i][3] === clientData.Old_Type) {
-                rowIndex = i + 2;
-                break;
-            }
-        }
-
-        if (rowIndex === -1) {
-            throw new Error('Client not found');
-        }
-
-        const updatedRow = [
-            clientData.GmailID,
-            clientData.Client_Name,
-            clientData.Email,
-            clientData.Type,
-            clientData.monthly_payment,
-        ];
-
-        await sheets.spreadsheets.values.update({
-            spreadsheetId,
-            range: `Clients!A${rowIndex}:E${rowIndex}`,
-            valueInputOption: 'RAW',
-            requestBody: { values: [updatedRow] },
-        });
-
-        const paymentsResponse = await sheets.spreadsheets.values.get({
-            spreadsheetId,
-            range: 'Payments!A2:Q',
-        });
-        const paymentRows = paymentsResponse.data.values || [];
-        const updatedPayments = paymentRows.map(row => {
-            if (row[0] === clientData.GmailID && row[1] === clientData.Old_Client_Name && row[2] === clientData.Old_Type) {
-                return [
-                    row[0],
-                    clientData.Client_Name,
-                    clientData.Type,
-                    clientData.monthly_payment,
-                    ...row.slice(4),
-                ];
-            }
-            return row;
-        });
-
-        await sheets.spreadsheets.values.clear({
-            spreadsheetId,
-            range: 'Payments!A2:Q',
-        });
-
-        if (updatedPayments.length > 0) {
-            await sheets.spreadsheets.values.update({
-                spreadsheetId,
-                range: 'Payments!A2',
-                valueInputOption: 'RAW',
-                requestBody: { values: updatedPayments },
-            });
-        }
-
-        res.json({ status: 'success' });
-    } catch (error) {
-        console.error('Error updating client:', error);
-        res.status(500).json({ error: `Failed to update client: ${error.message}` });
+    if (!Client_Name || !Email || !Type || !monthly_payment || !Old_Client_Name || !Old_Type) {
+      return res.status(400).json({ error: 'All fields are required' });
     }
+
+    // Fetch existing clients
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: 'Clients!A2:E',
+    });
+    const rows = response.data.values || [];
+
+    // Find the index of the client to update
+    const clientIndex = rows.findIndex(row => row[0] === req.username && row[1] === Old_Client_Name && row[3] === Old_Type);
+    if (clientIndex === -1) {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+
+    // Update the client's data
+    rows[clientIndex] = [req.username, Client_Name, Email, Type, monthly_payment];
+
+    // Write the updated data back to the sheet
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: 'Clients!A2',
+      valueInputOption: 'RAW',
+      requestBody: { values: rows },
+    });
+
+    // Also update the Payments sheet if the client name or type has changed
+    const paymentsResponse = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: 'Payments!A2:Q',
+    });
+    const paymentRows = paymentsResponse.data.values || [];
+
+    const updatedPaymentRows = paymentRows.map(row => {
+      if (row[0] === req.username && row[1] === Old_Client_Name && row[2] === Old_Type) {
+        return [req.username, Client_Name, Type, ...row.slice(3)];
+      }
+      return row;
+    });
+
+    // Clear the Payments sheet (excluding headers)
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId,
+      range: 'Payments!A2:Q',
+    });
+
+    // Write the updated payments back to the sheet
+    if (updatedPaymentRows.length > 0) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: 'Payments!A2',
+        valueInputOption: 'RAW',
+        requestBody: { values: updatedPaymentRows },
+      });
+    }
+
+    res.json({ status: 'success' });
+  } catch (error) {
+    console.error('Error updating client:', error);
+    res.status(500).json({ error: 'Failed to update client' });
+  }
 });
 
+// CHANGE: Added delete-client endpoint to remove a client (requires session token)
 app.delete('/api/delete-client', verifySessionToken, async (req, res) => {
-    try {
-        const sheets = await getSheetsClient();
-        const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
-        const { GmailID, Client_Name, Type } = req.body;
+  try {
+    const sheets = await getSheetsClient();
+    const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
+    const { Client_Name, Type } = req.body;
 
-        if (!GmailID || !Client_Name || !Type) {
-            return res.status(400).json({ error: 'GmailID, Client Name, and Type are required' });
-        }
-        if (GmailID !== req.userEmail) {
-            return res.status(403).json({ error: 'Unauthorized access' });
-        }
-
-        const response = await sheets.spreadsheets.values.get({
-            spreadsheetId,
-            range: 'Clients!A2:E',
-        });
-        const rows = response.data.values || [];
-        const filteredRows = rows.filter(row => !(row[0] === GmailID && row[1] === Client_Name && row[3] === Type));
-
-        await sheets.spreadsheets.values.clear({
-            spreadsheetId,
-            range: 'Clients!A2:E',
-        });
-
-        if (filteredRows.length > 0) {
-            await sheets.spreadsheets.values.update({
-                spreadsheetId,
-                range: 'Clients!A2',
-                valueInputOption: 'RAW',
-                requestBody: { values: filteredRows },
-            });
-        }
-
-        const paymentsResponse = await sheets.spreadsheets.values.get({
-            spreadsheetId,
-            range: 'Payments!A2:Q',
-        });
-        const paymentRows = paymentsResponse.data.values || [];
-        const filteredPayments = paymentRows.filter(row => !(row[0] === GmailID && row[1] === Client_Name && row[2] === Type));
-
-        await sheets.spreadsheets.values.clear({
-            spreadsheetId,
-            range: 'Payments!A2:Q',
-        });
-
-        if (filteredPayments.length > 0) {
-            await sheets.spreadsheets.values.update({
-                spreadsheetId,
-                range: 'Payments!A2',
-                valueInputOption: 'RAW',
-                requestBody: { values: filteredPayments },
-            });
-        }
-
-        res.json({ status: 'success' });
-    } catch (error) {
-        console.error('Error deleting client:', error);
-        res.status(500).json({ error: `Failed to delete client: ${error.message}` });
+    if (!Client_Name || !Type) {
+      return res.status(400).json({ error: 'Client Name and Type are required' });
     }
+
+    // Fetch existing clients
+    const clientsResponse = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: 'Clients!A2:E',
+    });
+    const clientRows = clientsResponse.data.values || [];
+
+    // Filter out the client to delete
+    const updatedClientRows = clientRows.filter(row => !(row[0] === req.username && row[1] === Client_Name && row[3] === Type));
+
+    // Clear the Clients sheet (excluding headers)
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId,
+      range: 'Clients!A2:E',
+    });
+
+    // Write the updated clients back to the sheet
+    if (updatedClientRows.length > 0) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: 'Clients!A2',
+        valueInputOption: 'RAW',
+        requestBody: { values: updatedClientRows },
+      });
+    }
+
+    // Also remove associated payments
+    const paymentsResponse = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: 'Payments!A2:Q',
+    });
+    const paymentRows = paymentsResponse.data.values || [];
+
+    const updatedPaymentRows = paymentRows.filter(row => !(row[0] === req.username && row[1] === Client_Name && row[2] === Type));
+
+    // Clear the Payments sheet (excluding headers)
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId,
+      range: 'Payments!A2:Q',
+    });
+
+    // Write the updated payments back to the sheet
+    if (updatedPaymentRows.length > 0) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: 'Payments!A2',
+        valueInputOption: 'RAW',
+        requestBody: { values: updatedPaymentRows },
+      });
+    }
+
+    res.json({ status: 'success' });
+  } catch (error) {
+    console.error('Error deleting client:', error);
+    res.status(500).json({ error: 'Failed to delete client' });
+  }
 });
 
-app.get('/', (req, res) => {
-    res.send('Backend is running. Use /api/get-clients, /api/get-payments, /api/add-client, /api/update-client, or /api/delete-client');
-});
+// CHANGE: Removed Google OAuth endpoints (/api/verify-token) and related code (oAuth2Client, token verification)
 
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+// Start the server
+const port = process.env.PORT || 3000;
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
 });

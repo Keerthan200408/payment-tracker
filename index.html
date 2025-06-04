@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -188,7 +189,6 @@
       max-width: 320px;
       margin-left: auto;
     }
-    /* Context menu styles */
     #contextMenu {
       position: absolute;
       background: white;
@@ -218,17 +218,15 @@
       background-color: #e9ecef;
       outline: none;
     }
-    /* New styles for payment status colors */
     .payment-full {
-      background-color: #d1fae5 !important; /* Green for full payment */
+      background-color: #d1fae5 !important;
     }
     .payment-partial {
-      background-color: #ffedd5 !important; /* Orange for partial payment */
+      background-color: #ffedd5 !important;
     }
     .payment-none {
-      background-color: #fee2e2 !important; /* Red for no payment */
+      background-color: #fee2e2 !important;
     }
-    /* added */
     .btn-add-client {
       background-color: #4f46e5 !important;
       color: white !important;
@@ -254,7 +252,6 @@
       color: white !important;
       box-shadow: 0 0 8px #5a6268aa;
     }
-    /* Sign-in page styles */
     .sign-in-container {
       max-width: 400px;
       margin: 50px auto;
@@ -263,7 +260,6 @@
       border-radius: 0.5rem;
       box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     }
-    /* Add Client page styles */
     .add-client-container {
       max-width: 500px;
       margin: 20px auto;
@@ -280,7 +276,6 @@
     .add-client-container .form-label {
       font-weight: 500;
     }
-    /* Added styles for clients and payments containers */
     .clients-container, .payments-container {
       max-width: 100%;
       margin: 20px auto;
@@ -291,7 +286,6 @@
       margin-bottom: 1.5rem;
       text-align: center;
     }
-    /* Added styles for Edit/Delete buttons in Clients page */
     .btn-edit {
       background-color: #4f46e5 !important;
       color: white !important;
@@ -310,44 +304,54 @@
   </style>
 </head>
 <body>
-  <!-- Sidebar -->
   <nav id="sidebarMenu" aria-label="Sidebar menu">
     <ul>
-      <!-- added -->
       <li id="dashboardLink">Dashboard</li>
       <li id="clientsLink">Clients</li>
       <li id="paymentsLink">Payments</li>
       <li id="reportsLink">Reports</li>
       <li>
-        <a href="#" id ="logoutLink" class="text-white text-decoration-none fw-bold d-block">Logout</a>
+        <a href="#" id="logoutLink" class="text-white text-decoration-none fw-bold d-block">Logout</a>
       </li>
     </ul>
   </nav>
   <div id="sidebarOverlay"></div>
 
-  <!-- added -->
-  <!-- Updated sign-in page to use Google Sign-In -->
-  <div id="signInPage" class="sign-in-container" style="display: none;">
+  <!-- CHANGE: Added new sign-in page with username/password and signup form -->
+  <div id="signInPage" class="sign-in-container">
     <h2 class="text-center mb-4">Sign In</h2>
-    <!-- Added Google Sign-In button -->
-    <div id="g_id_onload"
-         data-client_id="848204323516-p15s9a090fqjtrfclco6rbocp9sov0t5.apps.googleusercontent.com"
-         data-callback="handleCredentialResponse"
-         data-auto_prompt="false"
-         data-auto_select="false"
-         
-         data-itp_support="true"> <!-- Added to support modern browser requirements -->
+    <div id="loginForm">
+      <div class="mb-3">
+        <label for="usernameInput" class="form-label">Username</label>
+        <input type="text" class="form-control" id="usernameInput" placeholder="Enter username">
+      </div>
+      <div class="mb-3">
+        <label for="passwordInput" class="form-label">Password</label>
+        <input type="password" class="form-control" id="passwordInput" placeholder="Enter password">
+      </div>
+      <button id="loginBtn" class="btn btn-primary d-block mx-auto mb-3">Login</button>
+      <p class="text-center">
+        Don't have an account? <a href="#" id="showSignupLink">Sign Up</a>
+      </p>
     </div>
-    <div class="g_id_signin"
-         data-type="standard"
-         data-size="large"
-         data-theme="outline"
-         data-text="sign_in_with"
-         data-shape="rectangular"
-         data-logo_alignment="left">
+    <div id="signupForm" style="display: none;">
+      <div class="mb-3">
+        <label for="signupUsernameInput" class="form-label">Username</label>
+        <input type="text" class="form-control" id="signupUsernameInput" placeholder="Enter username">
+      </div>
+      <div class="mb-3">
+        <label for="signupPasswordInput" class="form-label">Password</label>
+        <input type="password" class="form-control" id="signupPasswordInput" placeholder="Enter password">
+      </div>
+      <div class="mb-3">
+        <label for="signupGmailInput" class="form-label">Gmail ID</label>
+        <input type="email" class="form-control" id="signupGmailInput" placeholder="Enter Gmail ID">
+      </div>
+      <button id="signupBtn" class="btn btn-primary d-block mx-auto mb-3">Sign Up</button>
+      <p class="text-center">
+        Already have an account? <a href="#" id="showLoginLink">Login</a>
+      </p>
     </div>
-    <!-- Added a custom button to trigger the account selection prompt -->
-    <button id="googleSignInButton" class="btn btn-primary d-block mx-auto mt-3">Sign in with Google</button>
   </div>
 
   <div class="header-section" id="headerSection" role="banner" aria-label="Page header">
@@ -432,15 +436,12 @@
       </table>
     </div>
 
-    <!-- Context menu for row actions -->
     <div id="contextMenu" role="menu" aria-hidden="true" tabindex="-1">
       <button type="button" id="insertRowBtn" role="menuitem">Add Row Above</button>
       <button type="button" id="deleteRowBtn" role="menuitem">Delete This Row</button>
     </div>
   </div>
 
-  <!-- added -->
-   <!-- Add Client Page -->
   <div id="addClientPage" class="add-client-container" style="display: none;">
     <h2>Add New Client</h2>
     <div class="mb-3">
@@ -465,7 +466,6 @@
     </div>
   </div>
 
-  <!-- Added Clients page to display client list with Edit/Delete actions -->
   <div id="clientsPage" class="clients-container" style="display: none;">
     <h2>Clients</h2>
     <div class="table-responsive">
@@ -483,14 +483,13 @@
     </div>
   </div>
 
-  <!-- Added Payments page to display the payments table -->
   <div id="paymentsPage" class="payments-container" style="display: none;">
     <h2>Payments</h2>
     <div class="table-responsive">
       <table id="paymentsTable" class="table table-bordered align-middle text-center mb-0">
         <thead>
           <tr>
-            <th>GmailID</th>
+            <th>User</th>
             <th>Client Name</th>
             <th>Type</th>
             <th>Amount To be Paid</th>
@@ -514,1394 +513,1287 @@
     </div>
   </div>
 
-    <!-- Added Google Sign-In script -->
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
-  <script>
-  let idToken = null;
-  let sessionToken = null; // Added: Store the custom session token issued by the backend
-  const addClientBtn = document.getElementById('addClientBtn');
-  const tableBody = document.getElementById('tableBody');
-  const searchInput = document.getElementById('searchInput');
-  const searchBtn = document.getElementById('searchBtn');
-  const clearSearchBtn = document.getElementById('clearSearchBtn');
-  const menuToggle = document.getElementById('menuToggle');
-  const sidebarMenu = document.getElementById('sidebarMenu');
-  const sidebarOverlay = document.getElementById('sidebarOverlay');
-  const contextMenu = document.getElementById('contextMenu');
-  const insertRowBtn = document.getElementById('insertRowBtn');
-  const deleteRowBtn = document.getElementById('deleteRowBtn');
-  // added
-  const signInPage = document.getElementById('signInPage');
-  const homePage = document.getElementById('homePage');
-  const addClientPage = document.getElementById('addClientPage');
   
-  const clientsPage = document.getElementById('clientsPage');
-  const paymentsPage = document.getElementById('paymentsPage');
-  const headerSection = document.getElementById('headerSection');
+  <!-- CHANGE: Removed Google Sign-In script -->
+  <!-- Previously: <script src="https://accounts.google.com/gsi/client" async defer></script> -->
 
-  const GmailIDInput = document.getElementById('GmailIDInput');
-  const passwordInput = document.getElementById('passwordInput');
-  const signInBtn = document.getElementById('signInBtn');
-  const dashboardLink = document.getElementById('dashboardLink');
-  const clientsLink = document.getElementById('clientsLink');
-  const paymentsLink = document.getElementById('paymentsLink');
-  const reportsLink = document.getElementById('reportsLink');
-  const logoutLink = document.getElementById('logoutLink');
-  const clientNameInput = document.getElementById('clientNameInput');
+  <script>
+    // CHANGE: Replaced userEmail with sessionToken and currentUser for new auth system
+    let sessionToken = null;
+    let currentUser = null;
 
-  const clientEmailInput = document.getElementById('clientEmailInput');
+    const addClientBtn = document.getElementById('addClientBtn');
+    const tableBody = document.getElementById('tableBody');
+    const searchInput = document.getElementById('searchInput');
+    const searchBtn = document.getElementById('searchBtn');
+    const clearSearchBtn = document.getElementById('clearSearchBtn');
+    const menuToggle = document.getElementById('menuToggle');
+    const sidebarMenu = document.getElementById('sidebarMenu');
+    const sidebarOverlay = document.getElementById('sidebarOverlay');
+    const contextMenu = document.getElementById('contextMenu');
+    const insertRowBtn = document.getElementById('insertRowBtn');
+    const deleteRowBtn = document.getElementById('deleteRowBtn');
+    const signInPage = document.getElementById('signInPage');
+    const homePage = document.getElementById('homePage');
+    const addClientPage = document.getElementById('addClientPage');
+    const clientsPage = document.getElementById('clientsPage');
+    const paymentsPage = document.getElementById('paymentsPage');
+    const headerSection = document.getElementById('headerSection');
+    const dashboardLink = document.getElementById('dashboardLink');
+    const clientsLink = document.getElementById('clientsLink');
+    const paymentsLink = document.getElementById('paymentsLink');
+    const reportsLink = document.getElementById('reportsLink');
+    const logoutLink = document.getElementById('logoutLink');
+    const clientNameInput = document.getElementById('clientNameInput');
+    const clientEmailInput = document.getElementById('clientEmailInput');
+    const typeInput = document.getElementById('typeInput');
+    const monthlyPaymentInput = document.getElementById('monthlyPaymentInput');
+    const saveClientBtn = document.getElementById('saveClientBtn');
+    const cancelAddClientBtn = document.getElementById('cancelAddClientBtn');
+    // CHANGE: Added references to new sign-in elements
+    const loginForm = document.getElementById('loginForm');
+    const signupForm = document.getElementById('signupForm');
+    const usernameInput = document.getElementById('usernameInput');
+    const passwordInput = document.getElementById('passwordInput');
+    const loginBtn = document.getElementById('loginBtn');
+    const signupUsernameInput = document.getElementById('signupUsernameInput');
+    const signupPasswordInput = document.getElementById('signupPasswordInput');
+    const signupGmailInput = document.getElementById('signupGmailInput');
+    const signupBtn = document.getElementById('signupBtn');
+    const showSignupLink = document.getElementById('showSignupLink');
+    const showLoginLink = document.getElementById('showLoginLink');
 
-  const typeInput = document.getElementById('typeInput');
-  const monthlyPaymentInput = document.getElementById('monthlyPaymentInput');
-  const saveClientBtn = document.getElementById('saveClientBtn');
-  const cancelAddClientBtn = document.getElementById('cancelAddClientBtn');
+    let contextTargetRow = null;
+    let clientsData = [];
 
-  let contextTargetRow = null;
-  let clientsData = [];
-  let currentGmailID = null;
+    // CHANGE: Added session persistence functions using localStorage
+    function persistUserSession() {
+      localStorage.setItem('currentUser', currentUser);
+      localStorage.setItem('sessionToken', sessionToken);
+    }
 
-  // Removed hardcoded Users object as we're using Google Sign-In
-  // const Users = { ... }; // Removed
+    function clearUserSession() {
+      localStorage.removeItem('currentUser');
+      localStorage.removeItem('sessionToken');
+      currentUser = null;
+      sessionToken = null;
+    }
 
-  function persistUserSession() {
-    localStorage.setItem('currentGmailID', currentGmailID);
-    localStorage.setItem('idToken', idToken);
-    localStorage.setItem('sessionToken', sessionToken); // Added: Save the session token to localStorage
-}
-
-function clearUserSession() {
-    localStorage.removeItem('currentGmailID');
-    localStorage.removeItem('idToken');
-    localStorage.removeItem('sessionToken'); // Added: Clear the session token as well
-    currentGmailID = null;
-    idToken = null;
-    sessionToken = null; // Added: Reset the session token variable
-}
-  // changed 
-  // function loadUserSession() {
-  //   currentGmailID = localStorage.getItem('currentGmailID');
-  //   idToken = localStorage.getItem('idToken');
-  //   sessionToken = localStorage.getItem('sessionToken'); // Added: Load the session token
-  //   console.log('Loaded session from localStorage:', { idToken, sessionToken, currentGmailID }); // Added: Debug log
-  //   if (currentGmailID && idToken) {
-  //     //  the token before proceeding
-  //     fetch('https://payment-tracker-aswa.onrender.com/api/verify-token', {
-  //       method: 'POST',
-  //       headers: {
-  //         'Content-Type': 'application/json'
-  //       },
-  //       body: JSON.stringify({ idToken })
-  //     })
-  //       .then(res => {
-  //         if (!res.ok) throw new Error('Token verification failed');
-  //         return res.json();
-  //       })
-  //       .then(data => {
-  //         if (data.email !== currentGmailID) {
-  //           throw new Error('Token email mismatch');
-  //         }
-  //         fetchClients();
-  //         fetchPayments();
-  //         showHomePage();
-  //       })
-  //       .catch(error => {
-  //         console.error('Error verifying token on load:', error);
-  //         clearUserSession();
-  //         showSignInPage();
-  //       });
-  //   } else {
-  //     showSignInPage();
-  //   }
-  // }
-  function loadUserSession() {
-    currentGmailID = localStorage.getItem('currentGmailID');
-    idToken = localStorage.getItem('idToken');
-    sessionToken = localStorage.getItem('sessionToken'); // Added: Load the session token
-    console.log('Loaded session from localStorage:', { idToken, sessionToken, currentGmailID }); // Added: Debug log
-    if (currentGmailID && sessionToken) {
-        // Modified: Use sessionToken for API calls; backend will verify it
+    function loadUserSession() {
+      currentUser = localStorage.getItem('currentUser');
+      sessionToken = localStorage.getItem('sessionToken');
+      if (currentUser && sessionToken) {
         fetchClients();
         fetchPayments();
         showHomePage();
-    } else {
+      } else {
         showSignInPage();
+      }
     }
-}
 
-  function showSignInPage() {
-    signInPage.style.display = 'block';
-    homePage.style.display = 'none';
-    addClientPage.style.display = 'none';
-    clientsPage.style.display = 'none';
-    paymentsPage.style.display = 'none';
-    headerSection.style.display = 'none';
-    sidebarMenu.style.display = 'none';
-    menuToggle.style.display = 'none';
-  }
+    // CHANGE: Added functions to show/hide pages based on auth state
+    function showSignInPage() {
+      signInPage.style.display = 'block';
+      homePage.style.display = 'none';
+      addClientPage.style.display = 'none';
+      clientsPage.style.display = 'none';
+      paymentsPage.style.display = 'none';
+      headerSection.style.display = 'none';
+      sidebarMenu.style.display = 'none';
+      menuToggle.style.display = 'none';
+    }
 
-  function showHomePage() {
-    signInPage.style.display = 'none';
-    homePage.style.display = 'block';
-    addClientPage.style.display = 'none';
-    clientsPage.style.display = 'none';
-    paymentsPage.style.display = 'none';
-    headerSection.style.display = 'flex';
-    sidebarMenu.style.display = 'block';
-    menuToggle.style.display = 'flex';
-  }
+    function showHomePage() {
+      signInPage.style.display = 'none';
+      homePage.style.display = 'block';
+      addClientPage.style.display = 'none';
+      clientsPage.style.display = 'none';
+      paymentsPage.style.display = 'none';
+      headerSection.style.display = 'flex';
+      sidebarMenu.style.display = 'block';
+      menuToggle.style.display = 'flex';
+    }
 
-  function showAddClientPage() {
-    signInPage.style.display = 'none';
-    homePage.style.display = 'none';
-    addClientPage.style.display = 'block';
-    clientsPage.style.display = 'none';
-    paymentsPage.style.display = 'none';
-    headerSection.style.display = 'flex';
-    sidebarMenu.style.display = 'block';
-    menuToggle.style.display = 'flex';
-  }
+    function showAddClientPage() {
+      signInPage.style.display = 'none';
+      homePage.style.display = 'none';
+      addClientPage.style.display = 'block';
+      clientsPage.style.display = 'none';
+      paymentsPage.style.display = 'none';
+      headerSection.style.display = 'flex';
+      sidebarMenu.style.display = 'block';
+      menuToggle.style.display = 'flex';
+    }
 
-  // Added function to show Clients page
-  function showClientsPage() {
-    signInPage.style.display = 'none';
-    homePage.style.display = 'none';
-    addClientPage.style.display = 'none';
-    clientsPage.style.display = 'block';
-    paymentsPage.style.display = 'none';
-    headerSection.style.display = 'flex';
-    sidebarMenu.style.display = 'block';
-    menuToggle.style.display = 'flex';
-    fetchClientsForDisplay();
-  }
+    function showClientsPage() {
+      signInPage.style.display = 'none';
+      homePage.style.display = 'none';
+      addClientPage.style.display = 'none';
+      clientsPage.style.display = 'block';
+      paymentsPage.style.display = 'none';
+      headerSection.style.display = 'flex';
+      sidebarMenu.style.display = 'block';
+      menuToggle.style.display = 'flex';
+      fetchClientsForDisplay();
+    }
 
-  // Added function to show Payments page
-  function showPaymentsPage() {
-    signInPage.style.display = 'none';
-    homePage.style.display = 'none';
-    addClientPage.style.display = 'none';
-    clientsPage.style.display = 'none';
-    paymentsPage.style.display = 'block';
-    headerSection.style.display = 'flex';
-    sidebarMenu.style.display = 'block';
-    menuToggle.style.display = 'flex';
-    fetchPaymentsForDisplay();
-  }
+    function showPaymentsPage() {
+      signInPage.style.display = 'none';
+      homePage.style.display = 'none';
+      addClientPage.style.display = 'none';
+      clientsPage.style.display = 'none';
+      paymentsPage.style.display = 'block';
+      headerSection.style.display = 'flex';
+      sidebarMenu.style.display = 'block';
+      menuToggle.style.display = 'flex';
+      fetchPaymentsForDisplay();
+    }
 
-  function scheduleSilentReauth() {
-    setTimeout(() => {
-        console.log('Attempting silent re-authentication...');
-        google.accounts.id.prompt((notification) => {
-            if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-                console.warn('Silent re-auth prompt not displayed:', notification.getNotDisplayedReason());
-                // Fallback to explicit sign-in if silent re-auth fails
-                alert('Session expired. Please sign in again to continue.');
-                clearUserSession();
-                showSignInPage();
-            } else {
-                console.log('Silent re-auth prompt displayed successfully');
-            }
-        });
-    }, 50 * 60 * 1000); // 50 minutes
-}
+    // CHANGE: Added event listeners for toggling between login and signup forms
+    showSignupLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      loginForm.style.display = 'none';
+      signupForm.style.display = 'block';
+    });
 
-// Added: Call scheduleSilentReauth after successful login
-window.handleCredentialResponse = function(response) {
-    if (!response.credential) {
-        console.error('Google Sign-In failed: No credential received', response);
-        alert('Failed to sign in with Google. Please check your configuration or try again.');
-        showSignInPage();
+    showLoginLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      loginForm.style.display = 'block';
+      signupForm.style.display = 'none';
+    });
+
+    // CHANGE: Added signup functionality
+    signupBtn.addEventListener('click', () => {
+      const username = signupUsernameInput.value.trim();
+      const password = signupPasswordInput.value.trim();
+      const gmailId = signupGmailInput.value.trim();
+
+      if (!username || !password || !gmailId) {
+        alert('All fields are required.');
         return;
-    }
-    idToken = response.credential;
-    console.log('Set idToken:', idToken);
-    fetch('https://payment-tracker-aswa.onrender.com/api/verify-token', {
+      }
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(gmailId) || !gmailId.endsWith('@gmail.com')) {
+        alert('Please enter a valid Gmail ID.');
+        return;
+      }
+
+      fetch('https://payment-tracker-aswa.onrender.com/api/signup', {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json'
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ idToken })
-    })
-    .then(res => {
-        if (!res.ok) throw new Error('Failed to verify token' + res.statusText);
-        return res.json();
-    })
-    .then(data => {
-        currentGmailID = data.email;
-        sessionToken = data.sessionToken; // Added: Store the session token returned by the backend
-        console.log('Set currentGmailID:', currentGmailID);
-        console.log('Set sessionToken:', sessionToken);
-        persistUserSession();
-        fetchClients();
-        fetchPayments();
-        scheduleSilentReauth(); // Added: Schedule silent re-authentication
-        showHomePage();
-    })
-    .catch(error => {
-        console.error('Error verifying token:', error);
-        if (error.message.includes('401')) {
-            alert('Session expired or invalid. Please sign in again.');
-            clearUserSession();
-            showSignInPage();
-        } else {
-            alert('Failed to sign in with Google. Please try again.');
-            showSignInPage();
+        body: JSON.stringify({ username, password, gmailId })
+      })
+        .then(res => {
+          if (!res.ok) {
+            return res.json().then(data => { throw new Error(data.error); });
+          }
+          return res.json();
+        })
+        .then(data => {
+          alert('Account created successfully! Please login.');
+          signupUsernameInput.value = '';
+          signupPasswordInput.value = '';
+          signupGmailInput.value = '';
+          loginForm.style.display = 'block';
+          signupForm.style.display = 'none';
+        })
+        .catch(error => {
+          console.error('Error signing up:', error);
+          alert(error.message);
+        });
+    });
+
+    // CHANGE: Added login functionality
+    loginBtn.addEventListener('click', () => {
+      const username = usernameInput.value.trim();
+      const password = passwordInput.value.trim();
+
+      if (!username || !password) {
+        alert('Username and password are required.');
+        return;
+      }
+
+      fetch('https://payment-tracker-aswa.onrender.com/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ username, password })
+      })
+        .then(res => {
+          if (!res.ok) {
+            return res.json().then(data => { throw new Error(data.error); });
+          }
+          return res.json();
+        })
+        .then(data => {
+          currentUser = data.username;
+          sessionToken = data.sessionToken;
+          persistUserSession();
+          fetchClients();
+          fetchPayments();
+          showHomePage();
+        })
+        .catch(error => {
+          console.error('Error logging in:', error);
+          alert(error.message);
+        });
+    });
+
+    // CHANGE: Updated logout to clear new session
+    logoutLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      currentUser = null;
+      sessionToken = null;
+      clearUserSession();
+      clientsData = [];
+      tableBody.innerHTML = '';
+      showSignInPage();
+    });
+
+    // CHANGE: Load session on page load
+    document.addEventListener('DOMContentLoaded', () => {
+      loadUserSession();
+    });
+
+    function updateSerialNumbers() {
+      const rows = tableBody.querySelectorAll('tr');
+      rows.forEach((row, index) => {
+        const serialCell = row.querySelector('.serial-cell');
+        if (serialCell) {
+          serialCell.textContent = index + 1;
         }
-    });
-};
+      });
+    }
 
-  // // Modified Google Sign-In callback function to handle errors better
-  // window.handleCredentialResponse = function(response) {
-  //   if (!response.credential) {
-  //     console.error('Google Sign-In failed: No credential received', response);
-  //     alert('Failed to sign in with Google. Please check your configuration or try again.');
-  //     showSignInPage();
-  //     return;
-  //   }
-  //   idToken = response.credential;
-  //   console.log('Set idToken:', idToken);
-  //   fetch('https://payment-tracker-aswa.onrender.com/api/verify-token', {
-  //     method: 'POST',
-  //     headers: {
-  //       'Content-Type': 'application/json'
-  //     },
-  //     body: JSON.stringify({ idToken })
-  //   })
-  //     .then(res => {
-  //       if (!res.ok) throw new Error('Failed to verify token' + res.statusText);
-  //       return res.json();
-  //     })
-  //     .then(data => {
-  //       currentGmailID = data.email;
-  //       console.log('Set currentGmailID:', currentGmailID); // Debug log
-  //       persistUserSession();
-  //       fetchClients();
-  //       fetchPayments();
-  //       showHomePage();
-  //     })
-  //     .catch(error => {
-  //       console.error('Error verifying token:', error);
-  //       if (error.message.includes('401')) {
-  //           alert('Session expired or invalid. Please sign in again.');
-  //           clearUserSession();
-  //           showSignInPage();
-  //       } else {
-  //           alert('Failed to sign in with Google. Please try again.');
-  //           showSignInPage();
-  //       }
-  //   });
-  // };
+    // CHANGE: Updated row creation to filter clients by currentUser
+    function createEditableRow(clientName = '', type = '', amount = '') {
+      const tr = document.createElement('tr');
+      let td = document.createElement('td');
+      td.className = 'serial-cell';
+      tr.appendChild(td);
 
-  // Added: Function to manually trigger Google Sign-In with account selection
-  function triggerGoogleSignIn() {
-    google.accounts.id.prompt((notification) => {
-      if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-        console.warn('Google Sign-In prompt not displayed:', notification.getNotDisplayedReason());
-        alert('Unable to display Google Sign-In prompt. Please ensure you are not in incognito mode and try again.');
-      }
-    });
-  }
-
-  // Added: Event listener for the custom Google Sign-In button
-  googleSignInButton.addEventListener('click', () => {
-    triggerGoogleSignIn();
-  });
-  
-  // Updated logout to clear currentGmailID
-  logoutLink.addEventListener('click', (e) => {
-    e.preventDefault();
-    google.accounts.id.disableAutoSelect();
-    currentGmailID = null;
-    idToken = null;
-    clearUserSession();
-    clientsData = [];
-    tableBody.innerHTML = '';
-    showSignInPage();
-  });
-
-  document.addEventListener('DOMContentLoaded', () => {
-    loadUserSession(); // Modified: Now loads both currentGmailID and idToken
-  });
-
-  // Added: Initialize Google Sign-In with UX mode to force account selection
-  google.accounts.id.initialize({
-    client_id: '848204323516-p15s9a090fqjtrfclco6rbocp9sov0t5.apps.',
-    callback: handleCredentialResponse,
-    auto_select: false, // Disable automatic account selection
-    ux_mode: 'popup', // Use popup mode for better UX
-    prompt: 'select_account' // Force account selection prompt
-  });
-
-  function updateSerialNumbers() {
-    const rows = tableBody.querySelectorAll('tr');
-    rows.forEach((row, index) => {
-      const serialCell = row.querySelector('.serial-cell');
-      if (serialCell) {
-        serialCell.textContent = index + 1;
-      }
-    });
-  }
-  // need to change key names to match backend response
-  function createEditableRow(clientName = '', type = '', amount = '') {
-    const tr = document.createElement('tr');
-
-    let td = document.createElement('td');
-    td.className = 'serial-cell';
-    tr.appendChild(td);
-
-    td = document.createElement('td');
-    let select = document.createElement('select');
-    select.className = 'form-control client-name-input';
-    select.setAttribute('aria-label', 'Select Client Name');
-    let option = document.createElement('option');
-    option.value = '';
-    option.textContent = 'Select Client';
-    select.appendChild(option);    // Modified to show unique client names in the dropdown
-    const userClients = clientsData.filter(client => client.GmailID === currentGmailID);
-    const uniqueClients = [...new Set(userClients.map(client => client.Client_Name))];
-    uniqueClients.forEach(client => {
-      option = document.createElement('option');
-      option.value = client;
-      option.textContent = client;
+      td = document.createElement('td');
+      let select = document.createElement('select');
+      select.className = 'form-control client-name-input';
+      select.setAttribute('aria-label', 'Select Client Name');
+      let option = document.createElement('option');
+      option.value = '';
+      option.textContent = 'Select Client';
       select.appendChild(option);
-    });
-    select.value = clientName;
-    td.appendChild(select);
-    tr.appendChild(td);
-
-    td = document.createElement('td');
-    select = document.createElement('select');
-    select.className = 'form-control type-input';
-    select.setAttribute('aria-label', 'Select Type');
-    option = document.createElement('option');
-    option.value = '';
-    option.textContent = 'Select Type';
-    select.appendChild(option);
-    if (clientName) {
-      const clientTypes = userClients.filter(client => client.Client_Name === clientName).map(client => client.Type);
-      clientTypes.forEach(typeOption => {
+      const userClients = clientsData.filter(client => client.User === currentUser);
+      const uniqueClients = [...new Set(userClients.map(client => client.Client_Name))];
+      uniqueClients.forEach(client => {
         option = document.createElement('option');
-        option.value = typeOption;
-        option.textContent = typeOption;
+        option.value = client;
+        option.textContent = client;
         select.appendChild(option);
       });
-      select.value = type;
-    }
-    td.appendChild(select);
-    tr.appendChild(td);
+      select.value = clientName;
+      td.appendChild(select);
+      tr.appendChild(td);
 
-    td = document.createElement('td');
-    select = document.createElement('select');
-    select.className = 'form-control amount-input';
-    select.setAttribute('aria-label', 'Select Amount To be Paid');
-    select.disabled = true;
-    option = document.createElement('option');
-    option.value = '';
-    option.textContent = 'Select Amount';
-    select.appendChild(option);
-    if (clientName && type) {
-      const clientData = userClients.find(client => client.Client_Name === clientName && client.Type === type);
-      if (clientData) {
-        option = document.createElement('option');
-        option.value = clientData.monthly_payment;
-        option.textContent = clientData.monthly_payment;
-        select.appendChild(option);
-        select.value = clientData.monthly_payment;
-      }
-    }
-    td.appendChild(select);
-    tr.appendChild(td);
-
-    const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
-    months.forEach(month => {
       td = document.createElement('td');
+      select = document.createElement('select');
+      select.className = 'form-control type-input';
+      select.setAttribute('aria-label', 'Select Type');
+      option = document.createElement('option');
+      option.value = '';
+      option.textContent = 'Select Type';
+      select.appendChild(option);
+      if (clientName) {
+        const clientTypes = userClients.filter(client => client.Client_Name === clientName).map(client => client.Type);
+        clientTypes.forEach(typeOption => {
+          option = document.createElement('option');
+          option.value = typeOption;
+          option.textContent = typeOption;
+          select.appendChild(option);
+        });
+        select.value = type;
+      }
+      td.appendChild(select);
+      tr.appendChild(td);
+
+      td = document.createElement('td');
+      select = document.createElement('select');
+      select.className = 'form-control amount-input';
+      select.setAttribute('aria-label', 'Select Amount To be Paid');
+      select.disabled = true;
+      option = document.createElement('option');
+      option.value = '';
+      option.textContent = 'Select Amount';
+      select.appendChild(option);
+      if (clientName && type) {
+        const clientData = userClients.find(client => client.Client_Name === clientName && client.Type === type);
+        if (clientData) {
+          option = document.createElement('option');
+          option.value = clientData.monthly_payment;
+          option.textContent = clientData.monthly_payment;
+          select.appendChild(option);
+          select.value = clientData.monthly_payment;
+        }
+      }
+      td.appendChild(select);
+      tr.appendChild(td);
+
+      const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+      months.forEach(month => {
+        td = document.createElement('td');
+        let input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = month;
+        input.className = 'form-control';
+        td.appendChild(input);
+        tr.appendChild(td);
+      });
+
+      td = document.createElement('td');
+      td.className = 'due-payment-cell';
       let input = document.createElement('input');
       input.type = 'text';
-      input.placeholder = month;
-      input.className = 'form-control';
+      input.className = 'form-control due-payment-display';
+      input.readOnly = true;
+      input.value = '0.00';
       td.appendChild(input);
       tr.appendChild(td);
-    });
 
-    td = document.createElement('td');
-    td.className = 'due-payment-cell';
-    let input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'form-control due-payment-display';
-    input.readOnly = true;
-    input.value = '0.00';
-    td.appendChild(input);
-    tr.appendChild(td);
-
-    return tr;
-  }
-
-  function updateDuePayment(row) {
-    const amountInput = row.cells[3].querySelector('select');
-    const monthInputs = Array.from(row.cells).slice(4, 16).map(cell => cell.querySelector('input'));
-    const duePaymentDisplay = row.querySelector('.due-payment-display');
-
-    const amountToBePaidPerMonth = parseFloat(amountInput.value) || 0;
-    const activeMonths = monthInputs.filter(input => input.value.trim() !== '' && parseFloat(input.value) >= 0).length;
-
-    if (activeMonths === 0) {
-      duePaymentDisplay.value = '0.00';
-      row.querySelectorAll('td input').forEach(input => input.classList.remove('payment-full', 'payment-partial', 'payment-none'));
-      return;
+      return tr;
     }
 
-    const expectedPayment = amountToBePaidPerMonth * activeMonths;
-    const totalPayments = monthInputs.reduce((sum, input) => {
-      const value = parseFloat(input.value) || 0;
-      return sum + value;
-    }, 0);
+    function updateDuePayment(row) {
+      const amountInput = row.cells[3].querySelector('select');
+      const monthInputs = Array.from(row.cells).slice(4, 16).map(cell => cell.querySelector('input'));
+      const duePaymentDisplay = row.querySelector('.due-payment-display');
 
-    const duePayment = Math.max(expectedPayment - totalPayments, 0);
-    duePaymentDisplay.value = duePayment.toFixed(2);
+      const amountToBePaidPerMonth = parseFloat(amountInput.value) || 0;
+      const activeMonths = monthInputs.filter(input => input.value.trim() !== '' && parseFloat(input.value) >= 0).length;
 
-    monthInputs.forEach(input => updatePaymentStatus(input));
-  }
+      if (activeMonths === 0) {
+        duePaymentDisplay.value = '0.00';
+        row.querySelectorAll('td input').forEach(input => input.classList.remove('payment-full', 'payment-partial', 'payment-none'));
+        return;
+      }
 
-  function updatePaymentStatus(cellInput) {
-    const row = cellInput.closest('tr');
-    const amountInput = row.cells[3].querySelector('select');
-    const amountToBePaid = parseFloat(amountInput.value) || 0;
-    const enteredValue = parseFloat(cellInput.value) || 0;
+      const expectedPayment = amountToBePaidPerMonth * activeMonths;
+      const totalPayments = monthInputs.reduce((sum, input) => {
+        const value = parseFloat(input.value) || 0;
+        return sum + value;
+      }, 0);
 
-    cellInput.classList.remove('payment-full', 'payment-partial', 'payment-none');
+      const duePayment = Math.max(expectedPayment - totalPayments, 0);
+      duePaymentDisplay.value = duePayment.toFixed(2);
 
-    if (enteredValue === 0 || cellInput.value.trim() === '') {
-      cellInput.classList.add('payment-none');
-    } else if (enteredValue >= amountToBePaid && amountToBePaid > 0) {
-      cellInput.classList.add('payment-full');
-    } else if (enteredValue > 0 && enteredValue < amountToBePaid) {
-      cellInput.classList.add('payment-partial');
-    }
-  }
-
-  function saveToGoogleSheets() {
-    const rows = tableBody.querySelectorAll('tr');
-    const data = Array.from(rows).map(row => {
-      const inputs = row.querySelectorAll('.form-control');
-      return {
-        GmailID: currentGmailID,
-        Client_Name: inputs[0].value,
-        Type: inputs[1].value,
-        Amount_To_Be_Paid: inputs[2].value,
-        january: inputs[3].value,
-        february: inputs[4].value,
-        march: inputs[5].value,
-        april: inputs[6].value,
-        may: inputs[7].value,
-        june: inputs[8].value,
-        july: inputs[9].value,
-        august: inputs[10].value,
-        september: inputs[11].value,
-        october: inputs[12].value,
-        november: inputs[13].value,
-        december: inputs[14].value,
-        Due_Payment: inputs[15].value
-      };
-    });
-
-    // Modified: Check if idToken exists before making the request
-    if (!sessionToken) {
-      console.error('No sessionToken available. Redirecting to sign-in page.');
-      showSignInPage();
-      return;
+      monthInputs.forEach(input => updatePaymentStatus(input));
     }
 
-    fetch('https://payment-tracker-aswa.onrender.com/api/save-payments', {
-      method: 'POST',
-      headers: {
-        'gmailid': currentGmailID,
-        'Authorization': `Bearer ${sessionToken}`, // Modified: Add Authorization header
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(data)
-    })
-      .then(response => {
-        if (!response.ok) {
+    function updatePaymentStatus(cellInput) {
+      const row = cellInput.closest('tr');
+      const amountInput = row.cells[3].querySelector('select');
+      const amountToBePaid = parseFloat(amountInput.value) || 0;
+      const enteredValue = parseFloat(cellInput.value) || 0;
+
+      cellInput.classList.remove('payment-full', 'payment-partial', 'payment-none');
+
+      if (enteredValue === 0 || cellInput.value.trim() === '') {
+        cellInput.classList.add('payment-none');
+      } else if (enteredValue >= amountToBePaid && amountToBePaid > 0) {
+        cellInput.classList.add('payment-full');
+      } else if (enteredValue > 0 && enteredValue < amountToBePaid) {
+        cellInput.classList.add('payment-partial');
+      }
+    }
+
+    // CHANGE: Updated save function to include user in data and use session token
+    function saveToGoogleSheets() {
+      const rows = tableBody.querySelectorAll('tr');
+      const data = Array.from(rows).map(row => {
+        const inputs = row.querySelectorAll('.form-control');
+        return {
+          User: currentUser,
+          Client_Name: inputs[0].value,
+          Type: inputs[1].value,
+          Amount_To_Be_Paid: inputs[2].value,
+          january: inputs[3].value,
+          february: inputs[4].value,
+          march: inputs[5].value,
+          april: inputs[6].value,
+          may: inputs[7].value,
+          june: inputs[8].value,
+          july: inputs[9].value,
+          august: inputs[10].value,
+          september: inputs[11].value,
+          october: inputs[12].value,
+          november: inputs[13].value,
+          december: inputs[14].value,
+          Due_Payment: inputs[15].value
+        };
+      });
+
+      if (!sessionToken) {
+        console.error('No sessionToken available. Redirecting to sign-in page.');
+        showSignInPage();
+        return;
+      }
+
+      fetch('https://payment-tracker-aswa.onrender.com/api/save-payments', {
+        method: 'POST',
+        headers: {
+          'user': currentUser,
+          'Authorization': `Bearer ${sessionToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+      })
+        .then(response => {
+          if (!response.ok) {
             if (response.status === 401) {
-                return response.json().then(data => {
-                    console.error('saveToGoogleSheets 401 error:', data);
-                    console.error('Session token invalid. Redirecting to sign-in page.');
-                    clearUserSession();
-                    showSignInPage();
-                    return;
-                });
+              console.error('Session token invalid. Redirecting to sign-in page.');
+              clearUserSession();
+              showSignInPage();
+              return;
             }
             throw new Error('Failed to save to Google Sheets');
-        }
-    })
-      .catch(error => {
-        console.error('Error saving to Google Sheets:', error);
-      });
-  }
-
-  tableBody.addEventListener('input', e => {
-    const cellInput = e.target;
-    const row = cellInput.closest('tr');
-    const cellIndex = cellInput.closest('td').cellIndex;
-
-    if (cellIndex >= 4 && cellIndex <= 15) {
-      updatePaymentStatus(cellInput);
+          }
+        })
+        .catch(error => {
+          console.error('Error saving to Google Sheets:', error);
+        });
     }
 
-    if (cellIndex === 3 || (cellIndex >= 4 && cellIndex <= 15)) {
-      updateDuePayment(row);
-    }
-    saveToGoogleSheets();
-  });
+    tableBody.addEventListener('input', e => {
+      const cellInput = e.target;
+      const row = cellInput.closest('tr');
+      const cellIndex = cellInput.closest('td').cellIndex;
 
-  tableBody.addEventListener('change', e => {
-    if (e.target.classList.contains('client-name-input')) {
-      const row = e.target.closest('tr');
-      const clientName = e.target.value;
-      const typeSelect = row.querySelector('.type-input');
-      const amountSelect = row.querySelector('.amount-input');
-      const userClients = clientsData.filter(client => client.GmailID === currentGmailID && client.Client_Name === clientName);
+      if (cellIndex >= 4 && cellIndex <= 15) {
+        updatePaymentStatus(cellInput);
+      }
 
-      typeSelect.innerHTML = '<option value="">Select Type</option>';
-      amountSelect.innerHTML = '<option value="">Select Amount</option>';
-      amountSelect.disabled = true;
-      
-      const clientTypes = [...new Set(userClients.map(client => client.Type))];
-      clientTypes.forEach(type => {
-        const option = document.createElement('option');
-        option.value = type;
-        option.textContent = type;
-        typeSelect.appendChild(option);
-      });
-
-      if (clientTypes.length === 1) {
-        typeSelect.value = clientTypes[0];
-        const clientData = userClients.find(client => client.Type === clientTypes[0]);
-        amountSelect.disabled = false;
-        const amountOption = document.createElement('option');
-        amountOption.value = clientData.monthly_payment;
-        amountOption.textContent = clientData.monthly_payment;
-        amountSelect.appendChild(amountOption);
-        amountSelect.value = clientData.monthly_payment;
-        fetchPaymentForClient(clientName, clientTypes[0], row);
-      } else {
-        typeSelect.disabled = false;
+      if (cellIndex === 3 || (cellIndex >= 4 && cellIndex <= 15)) {
+        updateDuePayment(row);
       }
       saveToGoogleSheets();
-    }
+    });
 
-    if (e.target.classList.contains('type-input')) {
-      const row = e.target.closest('tr');
-      const clientName = row.querySelector('.client-name-input').value;
-      const type = e.target.value;
-      const amountSelect = row.querySelector('.amount-input');
-      const userClients = clientsData.filter(client => client.GmailID === currentGmailID && client.Client_Name === clientName && client.Type === type);
+    tableBody.addEventListener('change', e => {
+      if (e.target.classList.contains('client-name-input')) {
+        const row = e.target.closest('tr');
+        const clientName = e.target.value;
+        const typeSelect = row.querySelector('.type-input');
+        const amountSelect = row.querySelector('.amount-input');
+        const userClients = clientsData.filter(client => client.User === currentUser);
 
-      amountSelect.innerHTML = '<option value="">Select Amount</option>';
-      if (userClients.length > 0) {
-        const clientData = userClients[0];
-        amountSelect.disabled = false;
-        const amountOption = document.createElement('option');
-        amountOption.value = clientData.monthly_payment;
-        amountOption.textContent = clientData.monthly_payment;
-        amountSelect.appendChild(amountOption);
-        amountSelect.value = clientData.monthly_payment;
-        fetchPaymentForClient(clientName, type, row);
-      }
-      saveToGoogleSheets();
-    }
-  });
+        typeSelect.innerHTML = '<option value="">Select Type</option>';
+        amountSelect.innerHTML = '<option value="">Select Amount</option>';
+        amountSelect.disabled = true;
 
-  // Updated to show Add Client page instead of adding a row
-  addClientBtn.addEventListener('click', () => {
-    showAddClientPage();
-  });
+        const clientTypes = [...new Set(userClients.filter(client => client.Client_Name === clientName).map(client => client.Type))];
+        clientTypes.forEach(type => {
+          const option = document.createElement('option');
+          option.value = type;
+          option.textContent = type;
+          typeSelect.appendChild(option);
+        });
 
-  updateSerialNumbers();
-
-  // Added function to fetch payment data for a specific client-type combination
-  function fetchPaymentForClient(clientName, type, row) {
-    // Modified: Check if idToken exists before making the request
-    if (!sessionToken) {
-      console.error('No idToken available. Redirecting to sign-in page.');
-      showSignInPage();
-      return;
-    }
-
-    fetch('https://payment-tracker-aswa.onrender.com/api/get-payments', {
-      headers: {
-        'gmailid': currentGmailID, // Changed header from 'user' to 'gmailid'
-        'Authorization': `Bearer ${sessionToken}`
-      }
-    })
-      .then(response => {
-        if (!response.ok) {
-            if (response.status === 401) {
-                return response.json().then(data => {
-                    console.error('fetchPaymentForClient 401 error:', data);
-                    console.error('Session token invalid. Redirecting to sign-in page.');
-                    clearUserSession();
-                    showSignInPage();
-                    return;
-                });
-            }
-            throw new Error('Failed to fetch payments');
+        if (clientTypes.length === 1) {
+          typeSelect.value = clientTypes[0];
+          const clientData = userClients.find(client => client.Client_Name === clientName && client.Type === clientTypes[0]);
+          amountSelect.disabled = false;
+          const amountOption = document.createElement('option');
+          amountOption.value = clientData.monthly_payment;
+          amountOption.textContent = clientData.monthly_payment;
+          amountSelect.appendChild(amountOption);
+          amountSelect.value = clientData.monthly_payment;
+          fetchPaymentForClient(clientName, clientTypes[0], row);
+        } else {
+          typeSelect.disabled = false;
         }
-        return response.json();
-    })
-      .then(data => {
-        const payment = data.find(p => p.Client_Name === clientName && p.Type === type);
-        if (payment) {
-          const inputs = row.querySelectorAll('.form-control');
-          inputs[2].value = payment.Amount_To_Be_Paid || '';
-          inputs[3].value = payment.january || '';
-          inputs[4].value = payment.february || '';
-          inputs[5].value = payment.march || '';
-          inputs[6].value = payment.april || '';
-          inputs[7].value = payment.may || '';
-          inputs[8].value = payment.june || '';
-          inputs[9].value = payment.july || '';
-          inputs[10].value = payment.august || '';
-          inputs[11].value = payment.september || '';
-          inputs[12].value = payment.october || '';
-          inputs[13].value = payment.november || '';
-          inputs[14].value = payment.december || '';
-          inputs[15].value = payment.Due_Payment || '0.00';
-          updateDuePayment(row);
-          const monthInputs = Array.from(inputs).slice(3, 15);
-          monthInputs.forEach(input => updatePaymentStatus(input));
+        saveToGoogleSheets();
+      }
+
+      if (e.target.classList.contains('type-input')) {
+        const row = e.target.closest('tr');
+        const clientName = row.querySelector('.client-name-input').value;
+        const type = e.target.value;
+        const amountSelect = row.querySelector('.amount-input');
+        const userClients = clientsData.filter(client => client.User === currentUser && client.Client_Name === clientName && client.Type === type);
+
+        amountSelect.innerHTML = '<option value="">Select Amount</option>';
+        if (userClients.length > 0) {
+          const clientData = userClients[0];
+          amountSelect.disabled = false;
+          const amountOption = document.createElement('option');
+          amountOption.value = clientData.monthly_payment;
+          amountOption.textContent = clientData.monthly_payment;
+          amountSelect.appendChild(amountOption);
+          amountSelect.value = clientData.monthly_payment;
+          fetchPaymentForClient(clientName, type, row);
+        }
+        saveToGoogleSheets();
+      }
+    });
+
+    addClientBtn.addEventListener('click', () => {
+      showAddClientPage();
+    });
+
+    updateSerialNumbers();
+
+    // CHANGE: Updated fetchPaymentForClient to use session token
+    function fetchPaymentForClient(clientName, type, row) {
+      if (!sessionToken) {
+        console.error('No sessionToken available. Redirecting to sign-in page.');
+        showSignInPage();
+        return;
+      }
+
+      fetch('https://payment-tracker-aswa.onrender.com/api/get-payments', {
+        headers: {
+          'user': currentUser,
+          'Authorization': `Bearer ${sessionToken}`
         }
       })
-      .catch(error => {
-        console.error('Error fetching payment:', error);
+        .then(response => {
+          if (!response.ok) {
+            if (response.status === 401) {
+              console.error('Session token invalid. Redirecting to sign-in page.');
+              clearUserSession();
+              showSignInPage();
+              return;
+            }
+            throw new Error('Failed to fetch payments');
+          }
+          return response.json();
+        })
+        .then(data => {
+          const payment = data.find(p => p.Client_Name === clientName && p.Type === type);
+          if (payment) {
+            const inputs = row.querySelectorAll('.form-control');
+            inputs[2].value = payment.Amount_To_Be_Paid || '';
+            inputs[3].value = payment.january || '';
+            inputs[4].value = payment.february || '';
+            inputs[5].value = payment.march || '';
+            inputs[6].value = payment.april || '';
+            inputs[7].value = payment.may || '';
+            inputs[8].value = payment.june || '';
+            inputs[9].value = payment.july || '';
+            inputs[10].value = payment.august || '';
+            inputs[11].value = payment.september || '';
+            inputs[12].value = payment.october || '';
+            inputs[13].value = payment.november || '';
+            inputs[14].value = payment.december || '';
+            inputs[15].value = payment.Due_Payment || '0.00';
+            updateDuePayment(row);
+            const monthInputs = Array.from(inputs).slice(3, 15);
+            monthInputs.forEach(input => updatePaymentStatus(input));
+          }
+        })
+        .catch(error => {
+          console.error('Error fetching payment:', error);
+        });
+    }
+
+    function searchClients() {
+      const filter = searchInput.value.trim().toLowerCase();
+      const rows = tableBody.querySelectorAll('tr');
+      let anyVisible = false;
+      rows.forEach(row => {
+        const clientSelect = row.querySelector('.client-name-input');
+        if (!clientSelect) return;
+        const clientName = clientSelect.value.toLowerCase();
+        if (clientName.includes(filter)) {
+          row.style.display = '';
+          anyVisible = true;
+        } else {
+          row.style.display = 'none';
+        }
       });
-  }
-  function searchClients() {
-    const filter = searchInput.value.trim().toLowerCase();
-    const rows = tableBody.querySelectorAll('tr');
-    let anyVisible = false;
-    rows.forEach(row => {
-      const clientSelect = row.querySelector('.client-name-input');
-      if (!clientSelect) return;
-      const clientName = clientSelect.value.toLowerCase();
-      if (clientName.includes(filter)) {
-        row.style.display = '';
-        anyVisible = true;
-      } else {
-        row.style.display = 'none';
+      updateSerialNumbers();
+      if (!filter || !anyVisible) {
+        rows.forEach(row => (row.style.display = ''));
+        updateSerialNumbers();
+      }
+    }
+
+    searchBtn.addEventListener('click', searchClients);
+
+    searchInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        searchClients();
       }
     });
-    updateSerialNumbers();
-    if (!filter || !anyVisible) {
+
+    clearSearchBtn.addEventListener('click', () => {
+      searchInput.value = '';
+      const rows = tableBody.querySelectorAll('tr');
       rows.forEach(row => (row.style.display = ''));
       updateSerialNumbers();
-    }
-  }
+      searchInput.focus();
+    });
 
-  searchBtn.addEventListener('click', searchClients);
+    tableBody.addEventListener('keydown', e => {
+      const arrowKeys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
+      if (!arrowKeys.includes(e.key)) return;
 
-  searchInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter') {
+      const inputs = Array.from(tableBody.querySelectorAll('.form-control'));
+      const currentInput = e.target;
+      const currentIndex = inputs.indexOf(currentInput);
+      if (currentIndex === -1) return;
+
       e.preventDefault();
-      searchClients();
+
+      const inputsPerRow = 16;
+      const totalInputs = inputs.length;
+
+      let nextIndex = currentIndex;
+
+      switch (e.key) {
+        case 'ArrowRight':
+          nextIndex = currentIndex + 1;
+          if (nextIndex >= totalInputs) nextIndex = 0;
+          break;
+        case 'ArrowLeft':
+          nextIndex = currentIndex - 1;
+          if (nextIndex < 0) nextIndex = totalInputs - 1;
+          break;
+        case 'ArrowDown':
+          nextIndex = currentIndex + inputsPerRow;
+          if (nextIndex >= totalInputs) nextIndex = currentIndex % inputsPerRow;
+          break;
+        case 'ArrowUp':
+          nextIndex = currentIndex - inputsPerRow;
+          if (nextIndex < 0) {
+            const rowsCount = Math.floor(totalInputs / inputsPerRow);
+            nextIndex = currentIndex + inputsPerRow * (rowsCount - 1);
+            if (nextIndex >= totalInputs) nextIndex = totalInputs - 1;
+          }
+          break;
+      }
+
+      inputs[nextIndex].focus();
+      if (inputs[nextIndex].tagName === 'INPUT') {
+        inputs[nextIndex].select();
+      }
+    });
+
+    function openSidebar() {
+      sidebarMenu.classList.add('show');
+      sidebarOverlay.classList.add('show');
+      menuToggle.setAttribute('aria-expanded', 'true');
     }
-  });
 
-  clearSearchBtn.addEventListener('click', () => {
-    searchInput.value = '';
-    const rows = tableBody.querySelectorAll('tr');
-    rows.forEach(row => (row.style.display = ''));
-    updateSerialNumbers();
-    searchInput.focus();
-  });
+    function closeSidebar() {
+      sidebarMenu.classList.remove('show');
+      sidebarOverlay.classList.remove('show');
+      menuToggle.setAttribute('aria-expanded', 'false');
+    }
 
-  tableBody.addEventListener('keydown', e => {
-    const arrowKeys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
-    if (!arrowKeys.includes(e.key)) return;
+    menuToggle.addEventListener('click', () => {
+      if (sidebarMenu.classList.contains('show')) {
+        closeSidebar();
+      } else {
+        openSidebar();
+      }
+    });
 
-    const inputs = Array.from(tableBody.querySelectorAll('.form-control'));
-    const currentInput = e.target;
-    const currentIndex = inputs.indexOf(currentInput);
-    if (currentIndex === -1) return;
+    sidebarOverlay.addEventListener('click', closeSidebar);
 
-    e.preventDefault();
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && sidebarMenu.classList.contains('show')) {
+        closeSidebar();
+        menuToggle.focus();
+      }
+      if (e.key === 'Escape' && contextMenu.style.display === 'block') {
+        hideContextMenu();
+      }
+    });
 
-    const inputsPerRow = 16;
-    const totalInputs = inputs.length;
-
-    let nextIndex = currentIndex;
-
-    switch (e.key) {
-      case 'ArrowRight':
-        nextIndex = currentIndex + 1;
-        if (nextIndex >= totalInputs) nextIndex = 0;
-        break;
-      case 'ArrowLeft':
-        nextIndex = currentIndex - 1;
-        if (nextIndex < 0) nextIndex = totalInputs - 1;
-        break;
-      case 'ArrowDown':
-        nextIndex = currentIndex + inputsPerRow;
-        if (nextIndex >= totalInputs) nextIndex = currentIndex % inputsPerRow;
-        break;
-      case 'ArrowUp':
-        nextIndex = currentIndex - inputsPerRow;
-        if (nextIndex < 0) {
-          const rowsCount = Math.floor(totalInputs / inputsPerRow);
-          nextIndex = currentIndex + inputsPerRow * (rowsCount - 1);
-          if (nextIndex >= totalInputs) nextIndex = totalInputs - 1;
+    const sidebarItems = sidebarMenu.querySelectorAll('li');
+    sidebarItems.forEach(item => {
+      item.addEventListener('click', () => {
+        closeSidebar();
+        if (item.id === 'dashboardLink') {
+          showHomePage();
+        } else if (item.id === 'clientsLink') {
+          showClientsPage();
+        } else if (item.id === 'paymentsLink') {
+          showPaymentsPage();
+        } else if (item.id === 'reportsLink') {
+          alert(`Navigating to: ${item.textContent}`);
         }
-        break;
+      });
+      item.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          item.click();
+        }
+      });
+    });
+
+    function showContextMenu(x, y, targetRow) {
+      contextTargetRow = targetRow;
+      contextMenu.style.left = x + 'px';
+      contextMenu.style.top = y + 'px';
+      contextMenu.style.display = 'block';
+      contextMenu.setAttribute('aria-hidden', 'false');
+      contextMenu.focus();
     }
 
-    inputs[nextIndex].focus();
-    if (inputs[nextIndex].tagName === 'INPUT') {
-      inputs[nextIndex].select();
+    function hideContextMenu() {
+      contextMenu.style.display = 'none';
+      contextMenu.setAttribute('aria-hidden', 'true');
+      contextTargetRow = null;
     }
-  });
 
-  function openSidebar() {
-    sidebarMenu.classList.add('show');
-    sidebarOverlay.classList.add('show');
-    menuToggle.setAttribute('aria-expanded', 'true');
-  }
-  function closeSidebar() {
-    sidebarMenu.classList.remove('show');
-    sidebarOverlay.classList.remove('show');
-    menuToggle.setAttribute('aria-expanded', 'false');
-  }
-
-  menuToggle.addEventListener('click', () => {
-    if (sidebarMenu.classList.contains('show')) {
-      closeSidebar();
-    } else {
-      openSidebar();
-    }
-  });
-
-  sidebarOverlay.addEventListener('click', closeSidebar);
-
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && sidebarMenu.classList.contains('show')) {
-      closeSidebar();
-      menuToggle.focus();
-    }
-    if (e.key === 'Escape' && contextMenu.style.display === 'block') {
+    insertRowBtn.addEventListener('click', () => {
+      if (!contextTargetRow) return;
+      const newRow = createEditableRow();
+      tableBody.insertBefore(newRow, contextTargetRow);
+      updateSerialNumbers();
+      saveToGoogleSheets();
       hideContextMenu();
-    }
-  });
-
-  const sidebarItems = sidebarMenu.querySelectorAll('li');
-  sidebarItems.forEach(item => {
-    item.addEventListener('click', () => {
-      closeSidebar();
-      if (item.id === 'dashboardLink') {
-        showHomePage();
-      } else if (item.id === 'clientsLink') { // Updated to show Clients page
-        showClientsPage();
-      } else if (item.id === 'paymentsLink') { // Updated to show Payments page
-        showPaymentsPage();
-      } else if (item.id === 'reportsLink') {
-        alert(`Navigating to: ${item.textContent}`);
+      const firstInput = newRow.querySelector('.form-control');
+      if (firstInput) {
+        firstInput.focus();
       }
     });
-    item.addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        item.click();
+
+    deleteRowBtn.addEventListener('click', () => {
+      if (!contextTargetRow) return;
+      if (tableBody.rows.length === 1) {
+        alert('Cannot delete the last row.');
+        hideContextMenu();
+        return;
       }
-    });
-  });
-
-  function showContextMenu(x, y, targetRow) {
-    contextTargetRow = targetRow;
-    contextMenu.style.left = x + 'px';
-    contextMenu.style.top = y + 'px';
-    contextMenu.style.display = 'block';
-    contextMenu.setAttribute('aria-hidden', 'false');
-    contextMenu.focus();
-  }
-  function hideContextMenu() {
-    contextMenu.style.display = 'none';
-    contextMenu.setAttribute('aria-hidden', 'true');
-    contextTargetRow = null;
-  }
-
-  insertRowBtn.addEventListener('click', () => {
-    if (!contextTargetRow) return;
-    const newRow = createEditableRow();
-    tableBody.insertBefore(newRow, contextTargetRow);
-    updateSerialNumbers();
-    saveToGoogleSheets();
-    hideContextMenu();
-    const firstInput = newRow.querySelector('.form-control');
-    if (firstInput) {
-      firstInput.focus();
-    }
-  });
-
-  deleteRowBtn.addEventListener('click', () => {
-    if (!contextTargetRow) return;
-    if (tableBody.rows.length === 1) {
-      alert('Cannot delete the last row.');
+      contextTargetRow.remove();
+      updateSerialNumbers();
+      saveToGoogleSheets();
       hideContextMenu();
-      return;
-    }
-    contextTargetRow.remove();
-    updateSerialNumbers();
-    saveToGoogleSheets();
-    hideContextMenu();
-  });
+    });
 
-  tableBody.addEventListener('contextmenu', e => {
-    if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') return;
-    e.preventDefault();
-    const tr = e.target.closest('tr');
-    if (!tr) return;
-    showContextMenu(e.pageX, e.pageY, tr);
-  });
-
-  tableBody.addEventListener('keydown', e => {
-    if ((e.shiftKey && e.key === 'F10') || e.key === 'ContextMenu') {
+    tableBody.addEventListener('contextmenu', e => {
       if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') return;
       e.preventDefault();
       const tr = e.target.closest('tr');
       if (!tr) return;
-      const rect = e.target.getBoundingClientRect();
-      showContextMenu(rect.left + window.pageXOffset, rect.bottom + window.pageYOffset, tr);
-    }
-  });
-
-  document.addEventListener('click', e => {
-    if (!contextMenu.contains(e.target)) {
-      hideContextMenu();
-    }
-  });
-  window.addEventListener('scroll', () => {
-    if (contextMenu.style.display === 'block') {
-      hideContextMenu();
-    }
-  }, true);
-
-  function addRowToTable(rowData) {
-    const tableBody = document.querySelector('#mainTable tbody');
-    const newRow = createEditableRow(rowData.Client_Name || '', rowData.Type || '', rowData.Amount_To_Be_Paid || ''); // Changed service_type to type
-    const inputs = newRow.querySelectorAll('.form-control');
-    inputs[2].value = rowData.Amount_To_Be_Paid || '';
-    inputs[3].value = rowData.january || '';
-    inputs[4].value = rowData.february || '';
-    inputs[5].value = rowData.march || '';
-    inputs[6].value = rowData.april || '';
-    inputs[7].value = rowData.may || '';
-    inputs[8].value = rowData.june || '';
-    inputs[9].value = rowData.july || '';
-    inputs[10].value = rowData.august || '';
-    inputs[11].value = rowData.september || '';
-    inputs[12].value = rowData.october || '';
-    inputs[13].value = rowData.november || '';
-    inputs[14].value = rowData.december || '';
-    inputs[15].value = rowData.Due_Payment || '0.00';
-
-    tableBody.appendChild(newRow);
-    updateDuePayment(newRow);
-    const monthInputs = Array.from(inputs).slice(3, 15);
-    monthInputs.forEach(input => updatePaymentStatus(input));
-  }
-
-  // Updated saveDataToDB to use GmailID
-  function saveDataToDB() {
-    const rows = tableBody.querySelectorAll('tr');
-    const data = Array.from(rows).map(row => {
-      const inputs = row.querySelectorAll('.form-control');
-      return {
-        GmailID: currentGmailID,
-        Client_Name: inputs[0].value,
-        Type: inputs[1].value,
-        Amount_To_Be_Paid: inputs[2].value,
-        january: inputs[3].value,
-        february: inputs[4].value,
-        march: inputs[5].value,
-        april: inputs[6].value,
-        may: inputs[7].value,
-        june: inputs[8].value,
-        july: inputs[9].value,
-        august: inputs[10].value,
-        september: inputs[11].value,
-        october: inputs[12].value,
-        november: inputs[13].value,
-        december: inputs[14].value,
-        Due_Payment: inputs[15].value
-      };
+      showContextMenu(e.pageX, e.pageY, tr);
     });
-    
-    // Modified: Check if idToken exists before making the request
-    if (!sessionToken) {
-      console.error('No idToken available. Redirecting to sign-in page.');
-      showSignInPage();
-      return;
+
+    tableBody.addEventListener('keydown', e => {
+      if ((e.shiftKey && e.key === 'F10') || e.key === 'ContextMenu') {
+        if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') return;
+        e.preventDefault();
+        const tr = e.target.closest('tr');
+        if (!tr) return;
+        const rect = e.target.getBoundingClientRect();
+        showContextMenu(rect.left + window.pageXOffset, rect.bottom + window.pageYOffset, tr);
+      }
+    });
+
+    document.addEventListener('click', e => {
+      if (!contextMenu.contains(e.target)) {
+        hideContextMenu();
+      }
+    });
+
+    window.addEventListener('scroll', () => {
+      if (contextMenu.style.display === 'block') {
+        hideContextMenu();
+      }
+    }, true);
+
+    function addRowToTable(rowData) {
+      const tableBody = document.querySelector('#mainTable tbody');
+      const newRow = createEditableRow(rowData.Client_Name || '', rowData.Type || '', rowData.Amount_To_Be_Paid || '');
+      const inputs = newRow.querySelectorAll('.form-control');
+      inputs[2].value = rowData.Amount_To_Be_Paid || '';
+      inputs[3].value = rowData.january || '';
+      inputs[4].value = rowData.february || '';
+      inputs[5].value = rowData.march || '';
+      inputs[6].value = rowData.april || '';
+      inputs[7].value = rowData.may || '';
+      inputs[8].value = rowData.june || '';
+      inputs[9].value = rowData.july || '';
+      inputs[10].value = rowData.august || '';
+      inputs[11].value = rowData.september || '';
+      inputs[12].value = rowData.october || '';
+      inputs[13].value = rowData.november || '';
+      inputs[14].value = rowData.december || '';
+      inputs[15].value = rowData.Due_Payment || '0.00';
+
+      tableBody.appendChild(newRow);
+      updateDuePayment(newRow);
+      const monthInputs = Array.from(inputs).slice(3, 15);
+      monthInputs.forEach(input => updatePaymentStatus(input));
     }
-    fetch('https://payment-tracker-aswa.onrender.com/api/save-payments', {
-      method: 'POST',
-      headers: {
-        'gmailid': currentGmailID,
-        'Authorization': `Bearer ${sessionToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(data)
-    })
-      .then(response => {
-        if (!response.ok) {
+
+    // CHANGE: Updated saveDataToDB to use session token
+    function saveDataToDB() {
+      const rows = tableBody.querySelectorAll('tr');
+      const data = Array.from(rows).map(row => {
+        const inputs = row.querySelectorAll('.form-control');
+        return {
+          User: currentUser,
+          Client_Name: inputs[0].value,
+          Type: inputs[1].value,
+          Amount_To_Be_Paid: inputs[2].value,
+          january: inputs[3].value,
+          february: inputs[4].value,
+          march: inputs[5].value,
+          april: inputs[6].value,
+          may: inputs[7].value,
+          june: inputs[8].value,
+          july: inputs[9].value,
+          august: inputs[10].value,
+          september: inputs[11].value,
+          october: inputs[12].value,
+          november: inputs[13].value,
+          december: inputs[14].value,
+          Due_Payment: inputs[15].value
+        };
+      });
+
+      if (!sessionToken) {
+        console.error('No sessionToken available. Redirecting to sign-in page.');
+        showSignInPage();
+        return;
+      }
+
+      fetch('https://payment-tracker-aswa.onrender.com/api/save-payments', {
+        method: 'POST',
+        headers: {
+          'user': currentUser,
+          'Authorization': `Bearer ${sessionToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+      })
+        .then(response => {
+          if (!response.ok) {
             if (response.status === 401) {
-                return response.json().then(data => {
-                    console.error('saveDataToDB 401 error:', data);
-                    console.error('Session token invalid. Redirecting to sign-in page.');
-                    clearUserSession();
-                    showSignInPage();
-                    return;
-                });
+              console.error('Session token invalid. Redirecting to sign-in page.');
+              clearUserSession();
+              showSignInPage();
+              return;
             }
             throw new Error('Failed to save to Google Sheets');
-        }
-    })
-      .then(result => {
-        alert('Data saved successfully!');
-      })
-      .catch(error => {
-        console.error('Error saving to Google Sheets:', error);
-        alert('Failed to save data to Google Sheets. Please try again.');
-      });
-  }
-
-  function fetchClients() {
-    // Modified: Check if idToken exists before making the request
-    if (!sessionToken) {
-      console.error('No idToken available. Redirecting to sign-in page.');
-      showSignInPage();
-      return;
+          }
+          alert('Data saved successfully!');
+        })
+        .catch(error => {
+          console.error('Error saving to Google Sheets:', error);
+          alert('Failed to save data to Google Sheets. Please try again.');
+        });
     }
-    console.log('Sending fetchClients with sessionToken:', sessionToken); // Debug log
-    fetch('https://payment-tracker-aswa.onrender.com/api/get-clients', {
-      headers: {
-        'gmailid': currentGmailID, // Added user header to match backend expectation
-        'Authorization': `Bearer ${sessionToken}`
+
+    // CHANGE: Updated fetchClients to filter by currentUser and use session token
+    function fetchClients() {
+      if (!sessionToken) {
+        console.error('No sessionToken available. Redirecting to sign-in page.');
+        showSignInPage();
+        return;
       }
-    })
-      .then(response => {
-        console.log('fetchClients response status:', response.status);
-        if (!response.ok) {
+
+      fetch('https://payment-tracker-aswa.onrender.com/api/get-clients', {
+        headers: {
+          'user': currentUser,
+          'Authorization': `Bearer ${sessionToken}`
+        }
+      })
+        .then(response => {
+          if (!response.ok) {
             if (response.status === 401) {
-                return response.json().then(data => {
-                    console.error('fetchClients 401 error:', data);
-                    // Modified: Handle session token expiration
-                    console.error('Session token invalid. Redirecting to sign-in page.');
-                    clearUserSession();
-                    showSignInPage();
-                    return;
-                });
+              console.error('Session token invalid. Redirecting to sign-in page.');
+              clearUserSession();
+              showSignInPage();
+              return;
             }
             throw new Error('Failed to fetch clients');
-        }
-        return response.json();
-    })
-      .then(data => {
-        console.log('fetchClients response data:', data); // Debug log
-        clientsData = data;
-        const rows = tableBody.querySelectorAll('tr');
-        rows.forEach(row => {
-          const clientSelect = row.querySelector('.client-name-input');
-          const typeSelect = row.querySelector('.type-input');
-          const amountSelect = row.querySelector('.amount-input');
-          const currentClient = clientSelect.value;
-          const currentType = typeSelect.value;
-          const currentAmount = amountSelect.value;
-          clientSelect.innerHTML = '<option value="">Select Client</option>';
-          typeSelect.innerHTML = '<option value="">Select Type</option>';
-          amountSelect.innerHTML = '<option value="">Select Amount</option>';
-          amountSelect.disabled = true;
-          const UserClients = clientsData.filter(client => client.GmailID === currentGmailID);
-          const uniqueClients = [...new Set(userClients.map(client => client.Client_Name))];
-          UserClients.forEach(client => {
-            const option = document.createElement('option');
-            option.value = client;
-            option.textContent = client;
-            clientSelect.appendChild(option);
-          });
-          clientSelect.value = currentClient;
-          if (currentClient) {
-            const clientTypes = userClients.filter(client => client.Client_Name === currentClient).map(client => client.Type);
-            clientTypes.forEach(type => {
+          }
+          return response.json();
+        })
+        .then(data => {
+          clientsData = data;
+          const rows = tableBody.querySelectorAll('tr');
+          rows.forEach(row => {
+            const clientSelect = row.querySelector('.client-name-input');
+            const typeSelect = row.querySelector('.type-input');
+            const amountSelect = row.querySelector('.amount-input');
+            const currentClient = clientSelect.value;
+            const currentType = typeSelect.value;
+            const currentAmount = amountSelect.value;
+            clientSelect.innerHTML = '<option value="">Select Client</option>';
+            typeSelect.innerHTML = '<option value="">Select Type</option>';
+            amountSelect.innerHTML = '<option value="">Select Amount</option>';
+            amountSelect.disabled = true;
+            const userClients = clientsData.filter(client => client.User === currentUser);
+            const uniqueClients = [...new Set(userClients.map(client => client.Client_Name))];
+            uniqueClients.forEach(client => {
               const option = document.createElement('option');
-              option.value = type;
-              option.textContent = type;
-              typeSelect.appendChild(option);
+              option.value = client;
+              option.textContent = client;
+              clientSelect.appendChild(option);
             });
-            typeSelect.value = currentType;
-            if (currentType) {
-              const clientData = userClients.find(client => client.Client_Name === currentClient && client.Type === currentType);
-              if (clientData) {
-                amountSelect.disabled = false;
-                const amountOption = document.createElement('option');
-                amountOption.value = clientData.monthly_payment;
-                amountOption.textContent = clientData.monthly_payment;
-                amountSelect.appendChild(amountOption);
-                amountSelect.value = clientData.monthly_payment;
+            clientSelect.value = currentClient;
+            if (currentClient) {
+              const clientTypes = userClients.filter(client => client.Client_Name === currentClient).map(client => client.Type);
+              clientTypes.forEach(type => {
+                const option = document.createElement('option');
+                option.value = type;
+                option.textContent = type;
+                typeSelect.appendChild(option);
+              });
+              typeSelect.value = currentType;
+              if (currentType) {
+                const clientData = userClients.find(client => client.Client_Name === currentClient && client.Type === currentType);
+                if (clientData) {
+                  amountSelect.disabled = false;
+                  const amountOption = document.createElement('option');
+                  amountOption.value = clientData.monthly_payment;
+                  amountOption.textContent = clientData.monthly_payment;
+                  amountSelect.appendChild(amountOption);
+                  amountSelect.value = clientData.monthly_payment;
+                }
               }
             }
-          }
-        });
-      })
-      .catch(error => {
-        console.error('Error fetching clients:', error);
-        alert('Failed to load client data from Google Sheets.');
-        clientsData = [{ GmailID: currentGmailID, Client_Name: 'Test Client', Type: 'Test Type', monthly_payment: '100' }];
-        const rows = tableBody.querySelectorAll('tr');
-        rows.forEach(row => {
-          const clientSelect = row.querySelector('.client-name-input');
-          const typeSelect = row.querySelector('.type-input');
-          const amountSelect = row.querySelector('.amount-input');
-          clientSelect.innerHTML = '<option value="">Select Client</option><option value="Test Client">Test Client</option>';
-          typeSelect.innerHTML = '<option value="">Select Type</option><option value="Test Type">Test Type</option>';
-          amountSelect.innerHTML = '<option value="">Select Amount</option><option value="100">100</option>';
-        });
-      });
-  }
-
-  function fetchPayments() {
-    // Modified: Check if idToken exists before making the request
-    if (!sessionToken) {
-      console.error('No sessionidToken available. Redirecting to sign-in page.');
-      showSignInPage();
-      return;
-    }
-
-    fetch('https://payment-tracker-aswa.onrender.com/api/get-payments', {
-      headers: {
-        'gmailid': currentGmailID, // Added user header
-        'Authorization': `Bearer ${sessionToken}`
-      }
-    })
-      .then(response => {
-     if (!response.ok) {
-         if (response.status === 401) {
-             return response.json().then(data => {
-                 console.error('fetchPayments 401 error:', data);
-                 console.error('Session token invalid. Redirecting to sign-in page.');
-                 clearUserSession();
-                 showSignInPage();
-                 return;
-             });
-         }
-         throw new Error('Failed to fetch payments');
-     }
-     return response.json();
- })
-      .then(data => {
-        const UserPayments = data.filter(payment => payment.GmailID === currentGmailID);
-        if (UserPayments.length > 0) {
-          tableBody.innerHTML = '';
-          UserPayments.forEach(row => addRowToTable(row));
-        }
-        updateSerialNumbers();
-      })
-      .catch(error => {
-        console.error('Error fetching payments:', error);
-        alert('Failed to load payments from Google Sheets.');
-      });
-  }
-  // Added: Function to fetch and display clients on the Clients page
-  function fetchClientsForDisplay() {
-    // Modified: Check if idToken exists before making the request
-    if (!sessionToken) {
-      console.error('No idToken available. Redirecting to sign-in page.');
-      showSignInPage();
-      return;
-    }
-
-    fetch('https://payment-tracker-aswa.onrender.com/api/get-clients', {
-      headers: {
-        'gmailid': currentGmailID,
-        'Authorization': `Bearer ${sessionToken}`
-      }
-    })
-      .then(response => {
-        if (!response.ok) {
-            if (response.status === 401) {
-                return response.json().then(data => {
-                    console.error('fetchClientsForDisplay 401 error:', data);
-                    console.error('Session token invalid. Redirecting to sign-in page.');
-                    clearUserSession();
-                    showSignInPage();
-                    return;
-                });
-            }
-            throw new Error('Failed to fetch clients');
-        }
-        return response.json();
-    })
-      .then(data => {
-        const clientsTableBody = document.getElementById('clientsTableBody');
-        clientsTableBody.innerHTML = '';
-        const userClients = data.filter(client => client.GmailID === currentGmailID);
-        userClients.forEach(client => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${client.Client_Name}</td>
-            <td>${client.Email || 'N/A'}</td>
-            <td>${client.monthly_payment}</td>
-            <td>
-              <button class="btn btn-edit btn-sm edit-client-btn" data-client="${client.Client_Name}" data-type="${client.Type}">Edit</button>
-              <button class="btn btn-delete btn-sm delete-client-btn" data-client="${client.Client_Name}" data-type="${client.Type}">Delete</button>
-            </td>
-          `;
-          clientsTableBody.appendChild(tr);
-        });
-
-        // Add event listeners for Edit buttons
-        document.querySelectorAll('.edit-client-btn').forEach(btn => {
-          btn.addEventListener('click', () => {
-            const clientName = btn.dataset.client;
-            const type = btn.dataset.type;
-            const clientData = userClients.find(client => client.Client_Name === clientName && client.Type === type);
-            clientNameInput.value = clientData.Client_Name;
-            clientEmailInput.value = clientData.Email || '';
-            typeInput.value = clientData.Type;
-            monthlyPaymentInput.value = clientData.monthly_payment;
-            showAddClientPage();
-            saveClientBtn.textContent = 'Update Client';
-            saveClientBtn.dataset.client = clientName;
-            saveClientBtn.dataset.type = type;
+          });
+        })
+        .catch(error => {
+          console.error('Error fetching clients:', error);
+          alert('Failed to load client data from Google Sheets.');
+          clientsData = [{ User: currentUser, Client_Name: 'Test Client', Type: 'Test Type', monthly_payment: '100' }];
+          const rows = tableBody.querySelectorAll('tr');
+          rows.forEach(row => {
+            const clientSelect = row.querySelector('.client-name-input');
+            const typeSelect = row.querySelector('.type-input');
+            const amountSelect = row.querySelector('.amount-input');
+            clientSelect.innerHTML = '<option value="">Select Client</option><option value="Test Client">Test Client</option>';
+            typeSelect.innerHTML = '<option value="">Select Type</option><option value="Test Type">Test Type</option>';
+            amountSelect.innerHTML = '<option value="">Select Amount</option><option value="100">100</option>';
           });
         });
-
-        // Add event listeners for Delete buttons
-        document.querySelectorAll('.delete-client-btn').forEach(btn => {
-          btn.addEventListener('click', () => {
-            const clientName = btn.dataset.client;
-            const type = btn.dataset.type;
-            if (confirm(`Are you sure you want to delete ${clientName} (${type})?`)) {
-              deleteClient(clientName, type);
-            }
-          });
-        });
-      })
-      .catch(error => {
-        console.error('Error fetching clients:', error);
-        alert('Failed to load clients.');
-      });
-  }
-
-  // Added: Function to fetch and display payments on the Payments page
-  function fetchPaymentsForDisplay() {
-    // Modified: Check if idToken exists before making the request
-    if (!sessionToken) {
-      console.error('No idToken available. Redirecting to sign-in page.');
-      showSignInPage();
-      return;
     }
 
-    fetch('https://payment-tracker-aswa.onrender.com/api/get-payments', {
-      headers: {
-        'gmailid': currentGmailID,
-        'Authorization': `Bearer ${sessionToken}`
+    // CHANGE: Updated fetchPayments to filter by currentUser and use session token
+    function fetchPayments() {
+      if (!sessionToken) {
+        console.error('No sessionToken available. Redirecting to sign-in page.');
+        showSignInPage();
+        return;
       }
-    })
-      .then(response => {
-        if (!response.ok) {
+
+      fetch('https://payment-tracker-aswa.onrender.com/api/get-payments', {
+        headers: {
+          'user': currentUser,
+          'Authorization': `Bearer ${sessionToken}`
+        }
+      })
+        .then(response => {
+          if (!response.ok) {
             if (response.status === 401) {
-                return response.json().then(data => {
-                    console.error('fetchPaymentsForDisplay 401 error:', data);
-                    console.error('Session token invalid. Redirecting to sign-in page.');
-                    clearUserSession();
-                    showSignInPage();
-                    return;
-                });
+              console.error('Session token invalid. Redirecting to sign-in page.');
+              clearUserSession();
+              showSignInPage();
+              return;
             }
             throw new Error('Failed to fetch payments');
-        }
-        return response.json();
-    })
-      .then(data => {
-        const paymentsTableBody = document.getElementById('paymentsTableBody');
-        paymentsTableBody.innerHTML = '';
-        const userPayments = data.filter(payment => payment.GmailID === currentGmailID);
-        userPayments.forEach(payment => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${payment.GmailID}</td>
-            <td>${payment.Client_Name}</td>
-            <td>${payment.Type}</td>
-            <td>${payment.Amount_To_Be_Paid}</td>
-            <td>${payment.january || ''}</td>
-            <td>${payment.february || ''}</td>
-            <td>${payment.march || ''}</td>
-            <td>${payment.april || ''}</td>
-            <td>${payment.may || ''}</td>
-            <td>${payment.june || ''}</td>
-            <td>${payment.july || ''}</td>
-            <td>${payment.august || ''}</td>
-            <td>${payment.september || ''}</td>
-            <td>${payment.october || ''}</td>
-            <td>${payment.november || ''}</td>
-            <td>${payment.december || ''}</td>
-            <td>${payment.Due_Payment}</td>
-          `;
-          paymentsTableBody.appendChild(tr);
+          }
+          return response.json();
+        })
+        .then(data => {
+          const userPayments = data.filter(payment => payment.User === currentUser);
+          if (userPayments.length > 0) {
+            tableBody.innerHTML = '';
+            userPayments.forEach(row => addRowToTable(row));
+          }
+          updateSerialNumbers();
+        })
+        .catch(error => {
+          console.error('Error fetching payments:', error);
+          alert('Failed to load payments from Google Sheets.');
         });
+    }
+
+    // CHANGE: Updated fetchClientsForDisplay to use session token
+    function fetchClientsForDisplay() {
+      if (!sessionToken) {
+        console.error('No sessionToken available. Redirecting to sign-in page.');
+        showSignInPage();
+        return;
+      }
+
+      fetch('https://payment-tracker-aswa.onrender.com/api/get-clients', {
+        headers: {
+          'user': currentUser,
+          'Authorization': `Bearer ${sessionToken}`
+        }
       })
-      .catch(error => {
-        console.error('Error fetching payments:', error);
-        alert('Failed to load payments.');
-      });
-  }
+        .then(response => {
+          if (!response.ok) {
+            if (response.status === 401) {
+              console.error('Session token invalid. Redirecting to sign-in page.');
+              clearUserSession();
+              showSignInPage();
+              return;
+            }
+            throw new Error('Failed to fetch clients');
+          }
+          return response.json();
+        })
+        .then(data => {
+          const clientsTableBody = document.getElementById('clientsTableBody');
+          clientsTableBody.innerHTML = '';
+          const userClients = data.filter(client => client.User === currentUser);
+          userClients.forEach(client => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>${client.Client_Name}</td>
+              <td>${client.Email || 'N/A'}</td>
+              <td>${client.monthly_payment}</td>
+              <td>
+                <button class="btn btn-edit btn-sm edit-client-btn" data-client="${client.Client_Name}" data-type="${client.Type}">Edit</button>
+                <button class="btn btn-delete btn-sm delete-client-btn" data-client="${client.Client_Name}" data-type="${client.Type}">Delete</button>
+              </td>
+            `;
+            clientsTableBody.appendChild(tr);
+          });
 
-  function addNewClient() {
-    const clientName = clientNameInput.value.trim();
-    const clientEmail = clientEmailInput.value.trim();
-    const type = typeInput.value.trim();
-    const monthlyPayment = monthlyPaymentInput.value.trim();
+          document.querySelectorAll('.edit-client-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const clientName = btn.dataset.client;
+              const type = btn.dataset.type;
+              const clientData = userClients.find(client => client.Client_Name === clientName && client.Type === type);
+              clientNameInput.value = clientData.Client_Name;
+              clientEmailInput.value = clientData.Email || '';
+              typeInput.value = clientData.Type;
+              monthlyPaymentInput.value = clientData.monthly_payment;
+              showAddClientPage();
+              saveClientBtn.textContent = 'Update Client';
+              saveClientBtn.dataset.client = clientName;
+              saveClientBtn.dataset.type = type;
+            });
+          });
 
-    // Basic required field validation
-    if (!clientName || !clientEmail || !type || !monthlyPayment) {
+          document.querySelectorAll('.delete-client-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const clientName = btn.dataset.client;
+              const type = btn.dataset.type;
+              if (confirm(`Are you sure you want to delete ${clientName} (${type})?`)) {
+                deleteClient(clientName, type);
+              }
+            });
+          });
+        })
+        .catch(error => {
+          console.error('Error fetching clients:', error);
+          alert('Failed to load clients.');
+        });
+    }
+
+    // CHANGE: Updated fetchPaymentsForDisplay to use session token
+    function fetchPaymentsForDisplay() {
+      if (!sessionToken) {
+        console.error('No sessionToken available. Redirecting to sign-in page.');
+        showSignInPage();
+        return;
+      }
+
+      fetch('https://payment-tracker-aswa.onrender.com/api/get-payments', {
+        headers: {
+          'user': currentUser,
+          'Authorization': `Bearer ${sessionToken}`
+        }
+      })
+        .then(response => {
+          if (!response.ok) {
+            if (response.status === 401) {
+              console.error('Session token invalid. Redirecting to sign-in page.');
+              clearUserSession();
+              showSignInPage();
+              return;
+            }
+            throw new Error('Failed to fetch payments');
+          }
+          return response.json();
+        })
+        .then(data => {
+          const paymentsTableBody = document.getElementById('paymentsTableBody');
+          paymentsTableBody.innerHTML = '';
+          const userPayments = data.filter(payment => payment.User === currentUser);
+          userPayments.forEach(payment => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>${payment.User}</td>
+              <td>${payment.Client_Name}</td>
+              <td>${payment.Type}</td>
+              <td>${payment.Amount_To_Be_Paid}</td>
+              <td>${payment.january || ''}</td>
+              <td>${payment.february || ''}</td>
+              <td>${payment.march || ''}</td>
+              <td>${payment.april || ''}</td>
+              <td>${payment.may || ''}</td>
+              <td>${payment.june || ''}</td>
+              <td>${payment.july || ''}</td>
+              <td>${payment.august || ''}</td>
+              <td>${payment.september || ''}</td>
+              <td>${payment.october || ''}</td>
+              <td>${payment.november || ''}</td>
+              <td>${payment.december || ''}</td>
+              <td>${payment.Due_Payment}</td>
+            `;
+            paymentsTableBody.appendChild(tr);
+          });
+        })
+        .catch(error => {
+          console.error('Error fetching payments:', error);
+          alert('Failed to load payments.');
+        });
+    }
+
+    // CHANGE: Updated addNewClient to include user in data and use session token
+    function addNewClient() {
+      const clientName = clientNameInput.value.trim();
+      const clientEmail = clientEmailInput.value.trim();
+      const type = typeInput.value.trim();
+      const monthlyPayment = monthlyPaymentInput.value.trim();
+
+      if (!clientName || !clientEmail || !type || !monthlyPayment) {
         alert('All fields are required.');
         return;
-    }
+      }
 
-    // Email format validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(clientEmail)) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(clientEmail)) {
         alert('Please enter a valid email address.');
         return;
-    }
+      }
 
-    // Monthly payment numeric validation
-    const paymentValue = parseFloat(monthlyPayment);
-    if (isNaN(paymentValue) || paymentValue <= 0) {
+      const paymentValue = parseFloat(monthlyPayment);
+      if (isNaN(paymentValue) || paymentValue <= 0) {
         alert('Monthly payment must be a positive number.');
         return;
-    }
+      }
 
-    const newClient = {
-        GmailID: currentGmailID,
+      const newClient = {
+        User: currentUser,
         Client_Name: clientName,
         Email: clientEmail,
         Type: type,
         monthly_payment: paymentValue
-    };
+      };
 
-    const isUpdate = saveClientBtn.textContent === 'Update Client';
-    const endpoint = isUpdate ? '/api/update-client' : '/api/add-client';
-    const method = isUpdate ? 'PUT' : 'POST';
+      const isUpdate = saveClientBtn.textContent === 'Update Client';
+      const endpoint = isUpdate ? '/api/update-client' : '/api/add-client';
+      const method = isUpdate ? 'PUT' : 'POST';
 
-    if (isUpdate) {
+      if (isUpdate) {
         newClient.Old_Client_Name = saveClientBtn.dataset.client;
         newClient.Old_Type = saveClientBtn.dataset.type;
-    }
+      }
 
-    // Modified: Check if idToken exists before making the request
-    if (!sessionToken) {
-      console.error('No idToken available. Redirecting to sign-in page.');
-      showSignInPage();
-      return;
-    }
+      if (!sessionToken) {
+        console.error('No sessionToken available. Redirecting to sign-in page.');
+        showSignInPage();
+        return;
+      }
 
-    fetch(`https://payment-tracker-aswa.onrender.com${endpoint}`, {
+      fetch(`https://payment-tracker-aswa.onrender.com${endpoint}`, {
         method: method,
         headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${sessionToken}`
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionToken}`
         },
         body: JSON.stringify(newClient)
-    })
+      })
         .then(response => {
-        if (!response.ok) {
+          if (!response.ok) {
             if (response.status === 401) {
-                return response.json().then(data => {
-                    console.error('addNewClient 401 error:', data);
-                    console.error('Session token invalid. Redirecting to sign-in page.');
-                    clearUserSession();
-                    showSignInPage();
-                    return;
-                });
+              console.error('Session token invalid. Redirecting to sign-in page.');
+              clearUserSession();
+              showSignInPage();
+              return;
             }
             throw new Error(`Failed to ${isUpdate ? 'update' : 'add'} client`);
-        }
-        return response.json();
-    })
+          }
+          return response.json();
+        })
         .then(data => {
-            alert(`Client ${isUpdate ? 'updated' : 'added'} successfully!`);
-            resetAddClientForm();
-            fetchClients();
-            showHomePage();
+          alert(`Client ${isUpdate ? 'updated' : 'added'} successfully!`);
+          resetAddClientForm();
+          fetchClients();
+          showHomePage();
         })
         .catch(error => {
-            console.error(`Error ${isUpdate ? 'updating' : 'adding'} client:`, error);
-            alert(`Failed to ${isUpdate ? 'update' : 'add'} client to Google Sheets: ${error.message}`);
-            resetAddClientForm();
-            fetchClients();
-            showHomePage();
+          console.error(`Error ${isUpdate ? 'updating' : 'adding'} client:`, error);
+          alert(`Failed to ${isUpdate ? 'update' : 'add'} client to Google Sheets: ${error.message}`);
+          resetAddClientForm();
+          fetchClients();
+          showHomePage();
         });
-  }
-
-  // Added: Function to delete a client
-  function deleteClient(clientName, type) {
-    // Modified: Check if idToken exists before making the request
-    if (!sessionToken) {
-      console.error('No idToken available. Redirecting to sign-in page.');
-      showSignInPage();
-      return;
     }
-    fetch('https://payment-tracker-aswa.onrender.com/api/delete-client', {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${sessionToken}`
-      },
-      body: JSON.stringify({ GmailID: currentGmailID, Client_Name: clientName, Type: type })
-    })
-      .then(response => {
-        if (!response.ok) {
+
+    // CHANGE: Updated deleteClient to use session token
+    function deleteClient(clientName, type) {
+      if (!sessionToken) {
+        console.error('No sessionToken available. Redirecting to sign-in page.');
+        showSignInPage();
+        return;
+      }
+
+      fetch('https://payment-tracker-aswa.onrender.com/api/delete-client', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionToken}`
+        },
+        body: JSON.stringify({ User: currentUser, Client_Name: clientName, Type: type })
+      })
+        .then(response => {
+          if (!response.ok) {
             if (response.status === 401) {
-                return response.json().then(data => {
-                    console.error('deleteClient 401 error:', data);
-                    console.error('Session token invalid. Redirecting to sign-in page.');
-                    clearUserSession();
-                    showSignInPage();
-                    return;
-                });
+              console.error('Session token invalid. Redirecting to sign-in page.');
+              clearUserSession();
+              showSignInPage();
+              return;
             }
             throw new Error('Failed to delete client');
-        }
-        return response.json();
-    })
-      .then(data => {
-        alert('Client deleted successfully!');
-        fetchClientsForDisplay();
-        fetchClients();
-      })
-      .catch(error => {
-        console.error('Error deleting client:', error);
-        alert('Failed to delete client from Google Sheets. Please try again.');
-      });
-  }
+          }
+          return response.json();
+        })
+        .then(data => {
+          alert('Client deleted successfully!');
+          fetchClientsForDisplay();
+          fetchClients();
+        })
+        .catch(error => {
+          console.error('Error deleting client:', error);
+          alert('Failed to delete client from Google Sheets. Please try again.');
+        });
+    }
 
-  // Added: Function to reset the Add Client form
-  function resetAddClientForm() {
-    clientNameInput.value = '';
-    clientEmailInput.value = '';
-    typeInput.value = '';
-    monthlyPaymentInput.value = '';
-    saveClientBtn.textContent = 'Add Client';
-    delete saveClientBtn.dataset.client;
-    delete saveClientBtn.dataset.type;
-  }
-  saveClientBtn.addEventListener('click', addNewClient);
+    function resetAddClientForm() {
+      clientNameInput.value = '';
+      clientEmailInput.value = '';
+      typeInput.value = '';
+      monthlyPaymentInput.value = '';
+      saveClientBtn.textContent = 'Add Client';
+      delete saveClientBtn.dataset.client;
+      delete saveClientBtn.dataset.type;
+    }
 
-  cancelAddClientBtn.addEventListener('click', () => {
-    resetAddClientForm();
-    showHomePage();
-  });
-</script>
+    saveClientBtn.addEventListener('click', addNewClient);
 
+    cancelAddClientBtn.addEventListener('click', () => {
+      resetAddClientForm();
+      showHomePage();
+    });
+
+    // CHANGE: Removed Google OAuth functions (handleCredentialResponse, scheduleSilentReauth, onSignIn)
+  </script>
 </body>
 </html>
