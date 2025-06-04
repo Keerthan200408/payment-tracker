@@ -317,7 +317,6 @@
   </nav>
   <div id="sidebarOverlay"></div>
 
-  <!-- CHANGE: Added new sign-in page with username/password and signup form -->
   <div id="signInPage" class="sign-in-container">
     <h2 class="text-center mb-4">Sign In</h2>
     <div id="loginForm">
@@ -365,15 +364,16 @@
 
   <div id="homePage" style="display: none;">
     <div class="controls-container">
-  <button id="addClientBtn" class="btn btn-add-client px-3 py-1">+ Add Client</button>
-  <button id="addNewRowBtn" class="btn btn-add-new px-3 py-1">Add New Row</button>
-  <div class="input-group search-group">
-    <input id="searchInput" type="text" class="form-control" placeholder="Search Client Name" aria-label="Search Client Name" />
-    <button id="searchBtn" class="btn btn-outline-primary" type="button">Search</button>
-    <button id="clearSearchBtn" class="btn btn-outline-secondary" type="button" title="Clear Search">×</button>
-  </div>
-  <button onclick="saveDataToDB()" class="btn btn-success">Save to DB</button>
-</div>
+      <button id="addClientBtn" class="btn btn-add-client px-3 py-1">+ Add Client</button>
+      <!-- NEW: Added Import CSV button and hidden file input -->
+      <button id="importCsvBtn" class="btn btn-add-new px-3 py-1">Import CSV</button>
+      <input type="file" id="csvFileInput" accept=".csv" style="display: none;" />
+      <div class="input-group search-group">
+        <input id="searchInput" type="text" class="form-control" placeholder="Search Client Name" aria-label="Search Client Name" />
+        <button id="searchBtn" class="btn btn-outline-primary" type="button">Search</button>
+        <button id="clearSearchBtn" class="btn btn-outline-secondary" type="button" title="Clear Search">×</button>
+      </div>
+    </div>
 
     <div class="table-responsive">
       <table id="mainTable" class="table table-bordered align-middle text-center mb-0">
@@ -402,23 +402,12 @@
           </tr>
         </thead>
         <tbody id="tableBody">
+          <!-- CHANGE: Removed select elements, using plain text -->
           <tr>
             <td class="serial-cell"></td>
-            <td>
-              <select class="form-control client-name-input" aria-label="Select Client Name">
-                <option value="">Select Client</option>
-              </select>
-            </td>
-            <td>
-              <select class="form-control type-input" aria-label="Select Type">
-                <option value="">Select Type</option>
-              </select>
-            </td>
-            <td>
-              <select class="form-control amount-input" aria-label="Select Amount To be Paid" disabled>
-                <option value="">Select Amount</option>
-              </select>
-            </td>
+            <td><span class="client-name-display"></span></td>
+            <td><span class="type-display"></span></td>
+            <td><span class="amount-display"></span></td>
             <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="january" /></td>
             <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="february" /></td>
             <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="march" /></td>
@@ -438,7 +427,7 @@
     </div>
 
     <div id="contextMenu" role="menu" aria-hidden="true" tabindex="-1">
-      <button type="button" id="insertRowBtn" role="menuitem">Add Row Above</button>
+      <!-- CHANGE: Removed Add Row Above option since Add New Row button is removed -->
       <button type="button" id="deleteRowBtn" role="menuitem">Delete This Row</button>
     </div>
   </div>
@@ -490,7 +479,7 @@
       <table id="paymentsTable" class="table table-bordered align-middle text-center mb-0">
         <thead>
           <tr>
-            <th>User</th>
+            <!-- CHANGE: Removed User column -->
             <th>Client Name</th>
             <th>Type</th>
             <th>Amount To be Paid</th>
@@ -515,12 +504,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  
-  <!-- CHANGE: Removed Google Sign-In script -->
-  <!-- Previously: <script src="https://accounts.google.com/gsi/client" async defer></script> -->
-
   <script>
-    // CHANGE: Replaced userEmail with sessionToken and currentUser for new auth system
     let sessionToken = null;
     let currentUser = null;
 
@@ -533,7 +517,6 @@
     const sidebarMenu = document.getElementById('sidebarMenu');
     const sidebarOverlay = document.getElementById('sidebarOverlay');
     const contextMenu = document.getElementById('contextMenu');
-    const insertRowBtn = document.getElementById('insertRowBtn');
     const deleteRowBtn = document.getElementById('deleteRowBtn');
     const signInPage = document.getElementById('signInPage');
     const homePage = document.getElementById('homePage');
@@ -552,19 +535,10 @@
     const monthlyPaymentInput = document.getElementById('monthlyPaymentInput');
     const saveClientBtn = document.getElementById('saveClientBtn');
     const cancelAddClientBtn = document.getElementById('cancelAddClientBtn');
-    const addNewRowBtn = document.getElementById('addNewRowBtn');
+    // NEW: Added references for Import CSV functionality
+    const importCsvBtn = document.getElementById('importCsvBtn');
+    const csvFileInput = document.getElementById('csvFileInput');
 
-addNewRowBtn.addEventListener('click', () => {
-  const newRow = createEditableRow();
-  tableBody.appendChild(newRow);
-  updateSerialNumbers();
-  saveToGoogleSheets();
-  const firstInput = newRow.querySelector('.form-control');
-  if (firstInput) {
-    firstInput.focus();
-  }
-});
-    // CHANGE: Added references to new sign-in elements
     const loginForm = document.getElementById('loginForm');
     const signupForm = document.getElementById('signupForm');
     const usernameInput = document.getElementById('usernameInput');
@@ -580,7 +554,6 @@ addNewRowBtn.addEventListener('click', () => {
     let contextTargetRow = null;
     let clientsData = [];
 
-    // CHANGE: Added session persistence functions using localStorage
     function persistUserSession() {
       localStorage.setItem('currentUser', currentUser);
       localStorage.setItem('sessionToken', sessionToken);
@@ -605,7 +578,6 @@ addNewRowBtn.addEventListener('click', () => {
       }
     }
 
-    // CHANGE: Added functions to show/hide pages based on auth state
     function showSignInPage() {
       signInPage.style.display = 'block';
       homePage.style.display = 'none';
@@ -663,7 +635,6 @@ addNewRowBtn.addEventListener('click', () => {
       fetchPaymentsForDisplay();
     }
 
-    // CHANGE: Added event listeners for toggling between login and signup forms
     showSignupLink.addEventListener('click', (e) => {
       e.preventDefault();
       loginForm.style.display = 'none';
@@ -676,7 +647,6 @@ addNewRowBtn.addEventListener('click', () => {
       signupForm.style.display = 'none';
     });
 
-    // CHANGE: Added signup functionality
     signupBtn.addEventListener('click', () => {
       const username = signupUsernameInput.value.trim();
       const password = signupPasswordInput.value.trim();
@@ -720,7 +690,6 @@ addNewRowBtn.addEventListener('click', () => {
         });
     });
 
-    // CHANGE: Added login functionality
     loginBtn.addEventListener('click', () => {
       const username = usernameInput.value.trim();
       const password = passwordInput.value.trim();
@@ -757,7 +726,6 @@ addNewRowBtn.addEventListener('click', () => {
         });
     });
 
-    // CHANGE: Updated logout to clear new session
     logoutLink.addEventListener('click', (e) => {
       e.preventDefault();
       currentUser = null;
@@ -768,7 +736,6 @@ addNewRowBtn.addEventListener('click', () => {
       showSignInPage();
     });
 
-    // CHANGE: Load session on page load
     document.addEventListener('DOMContentLoaded', () => {
       loadUserSession();
     });
@@ -783,7 +750,7 @@ addNewRowBtn.addEventListener('click', () => {
       });
     }
 
-    // CHANGE: Updated row creation to filter clients by currentUser
+    // CHANGE: Updated createEditableRow to display plain text instead of selects
     function createEditableRow(clientName = '', type = '', amount = '') {
       const tr = document.createElement('tr');
       let td = document.createElement('td');
@@ -791,66 +758,24 @@ addNewRowBtn.addEventListener('click', () => {
       tr.appendChild(td);
 
       td = document.createElement('td');
-      let select = document.createElement('select');
-      select.className = 'form-control client-name-input';
-      select.setAttribute('aria-label', 'Select Client Name');
-      let option = document.createElement('option');
-      option.value = '';
-      option.textContent = 'Select Client';
-      select.appendChild(option);
-      const userClients = clientsData.filter(client => client.User === currentUser);
-      const uniqueClients = [...new Set(userClients.map(client => client.Client_Name))];
-      uniqueClients.forEach(client => {
-        option = document.createElement('option');
-        option.value = client;
-        option.textContent = client;
-        select.appendChild(option);
-      });
-      select.value = clientName;
-      td.appendChild(select);
+      let span = document.createElement('span');
+      span.className = 'client-name-display';
+      span.textContent = clientName || '';
+      td.appendChild(span);
       tr.appendChild(td);
 
       td = document.createElement('td');
-      select = document.createElement('select');
-      select.className = 'form-control type-input';
-      select.setAttribute('aria-label', 'Select Type');
-      option = document.createElement('option');
-      option.value = '';
-      option.textContent = 'Select Type';
-      select.appendChild(option);
-      if (clientName) {
-        const clientTypes = userClients.filter(client => client.Client_Name === clientName).map(client => client.Type);
-        clientTypes.forEach(typeOption => {
-          option = document.createElement('option');
-          option.value = typeOption;
-          option.textContent = typeOption;
-          select.appendChild(option);
-        });
-        select.value = type;
-      }
-      td.appendChild(select);
+      span = document.createElement('span');
+      span.className = 'type-display';
+      span.textContent = type || '';
+      td.appendChild(span);
       tr.appendChild(td);
 
       td = document.createElement('td');
-      select = document.createElement('select');
-      select.className = 'form-control amount-input';
-      select.setAttribute('aria-label', 'Select Amount To be Paid');
-      select.disabled = true;
-      option = document.createElement('option');
-      option.value = '';
-      option.textContent = 'Select Amount';
-      select.appendChild(option);
-      if (clientName && type) {
-        const clientData = userClients.find(client => client.Client_Name === clientName && client.Type === type);
-        if (clientData) {
-          option = document.createElement('option');
-          option.value = clientData.monthly_payment;
-          option.textContent = clientData.monthly_payment;
-          select.appendChild(option);
-          select.value = clientData.monthly_payment;
-        }
-      }
-      td.appendChild(select);
+      span = document.createElement('span');
+      span.className = 'amount-display';
+      span.textContent = amount || '';
+      td.appendChild(span);
       tr.appendChild(td);
 
       const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
@@ -878,11 +803,11 @@ addNewRowBtn.addEventListener('click', () => {
     }
 
     function updateDuePayment(row) {
-      const amountInput = row.cells[3].querySelector('select');
+      const amountDisplay = row.querySelector('.amount-display').textContent;
       const monthInputs = Array.from(row.cells).slice(4, 16).map(cell => cell.querySelector('input'));
       const duePaymentDisplay = row.querySelector('.due-payment-display');
 
-      const amountToBePaidPerMonth = parseFloat(amountInput.value) || 0;
+      const amountToBePaidPerMonth = parseFloat(amountDisplay) || 0;
       const activeMonths = monthInputs.filter(input => input.value.trim() !== '' && parseFloat(input.value) >= 0).length;
 
       if (activeMonths === 0) {
@@ -905,8 +830,8 @@ addNewRowBtn.addEventListener('click', () => {
 
     function updatePaymentStatus(cellInput) {
       const row = cellInput.closest('tr');
-      const amountInput = row.cells[3].querySelector('select');
-      const amountToBePaid = parseFloat(amountInput.value) || 0;
+      const amountDisplay = row.querySelector('.amount-display').textContent;
+      const amountToBePaid = parseFloat(amountDisplay) || 0;
       const enteredValue = parseFloat(cellInput.value) || 0;
 
       cellInput.classList.remove('payment-full', 'payment-partial', 'payment-none');
@@ -920,29 +845,32 @@ addNewRowBtn.addEventListener('click', () => {
       }
     }
 
-    // CHANGE: Updated save function to include user in data and use session token
+    // CHANGE: Save permanently to Payments sheet
     function saveToGoogleSheets() {
       const rows = tableBody.querySelectorAll('tr');
       const data = Array.from(rows).map(row => {
+        const clientName = row.querySelector('.client-name-display').textContent;
+        const type = row.querySelector('.type-display').textContent;
+        const amount = row.querySelector('.amount-display').textContent;
         const inputs = row.querySelectorAll('.form-control');
         return {
           User: currentUser,
-          Client_Name: inputs[0].value,
-          Type: inputs[1].value,
-          Amount_To_Be_Paid: inputs[2].value,
-          january: inputs[3].value,
-          february: inputs[4].value,
-          march: inputs[5].value,
-          april: inputs[6].value,
-          may: inputs[7].value,
-          june: inputs[8].value,
-          july: inputs[9].value,
-          august: inputs[10].value,
-          september: inputs[11].value,
-          october: inputs[12].value,
-          november: inputs[13].value,
-          december: inputs[14].value,
-          Due_Payment: inputs[15].value
+          Client_Name: clientName,
+          Type: type,
+          Amount_To_Be_Paid: amount,
+          january: inputs[0].value,
+          february: inputs[1].value,
+          march: inputs[2].value,
+          april: inputs[3].value,
+          may: inputs[4].value,
+          june: inputs[5].value,
+          july: inputs[6].value,
+          august: inputs[7].value,
+          september: inputs[8].value,
+          october: inputs[9].value,
+          november: inputs[10].value,
+          december: inputs[11].value,
+          Due_Payment: inputs[12].value
         };
       });
 
@@ -952,6 +880,21 @@ addNewRowBtn.addEventListener('click', () => {
         return;
       }
 
+      // Save temporarily to TempPayments sheet for refresh handling
+      fetch('https://payment-tracker-aswa.onrender.com/api/save-temp-payments', {
+        method: 'POST',
+        headers: {
+          'user': currentUser,
+          'Authorization': `Bearer ${sessionToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+      })
+        .catch(error => {
+          console.error('Error saving to TempPayments:', error);
+        });
+
+      // Save permanently to Payments sheet
       fetch('https://payment-tracker-aswa.onrender.com/api/save-payments', {
         method: 'POST',
         headers: {
@@ -984,79 +927,7 @@ addNewRowBtn.addEventListener('click', () => {
 
       if (cellIndex >= 4 && cellIndex <= 15) {
         updatePaymentStatus(cellInput);
-      }
-
-      if (cellIndex === 3 || (cellIndex >= 4 && cellIndex <= 15)) {
         updateDuePayment(row);
-      }
-      saveToGoogleSheets();
-    });
-
-    tableBody.addEventListener('change', e => {
-      if (e.target.classList.contains('client-name-input')) {
-        const row = e.target.closest('tr');
-        const clientName = e.target.value;
-        const typeSelect = row.querySelector('.type-input');
-        const amountSelect = row.querySelector('.amount-input');
-        const userClients = clientsData.filter(client => client.User === currentUser);
-
-        typeSelect.innerHTML = '<option value="">Select Type</option>';
-        amountSelect.innerHTML = '<option value="">Select Amount</option>';
-        amountSelect.disabled = true;
-
-        // NEW: Clear payment data if client is deselected
-  if (!clientName) {
-    const monthInputs = Array.from(row.cells).slice(4, 16).map(cell => cell.querySelector('input'));
-    monthInputs.forEach(input => {
-      input.value = '';
-      input.classList.remove('payment-full', 'payment-partial', 'payment-none');
-    });
-    const duePaymentDisplay = row.querySelector('.due-payment-display');
-    duePaymentDisplay.value = '0.00';
-  }
-
-        const clientTypes = [...new Set(userClients.filter(client => client.Client_Name === clientName).map(client => client.Type))];
-        clientTypes.forEach(type => {
-          const option = document.createElement('option');
-          option.value = type;
-          option.textContent = type;
-          typeSelect.appendChild(option);
-        });
-
-        if (clientTypes.length === 1) {
-          typeSelect.value = clientTypes[0];
-          const clientData = userClients.find(client => client.Client_Name === clientName && client.Type === clientTypes[0]);
-          amountSelect.disabled = false;
-          const amountOption = document.createElement('option');
-          amountOption.value = clientData.monthly_payment;
-          amountOption.textContent = clientData.monthly_payment;
-          amountSelect.appendChild(amountOption);
-          amountSelect.value = clientData.monthly_payment;
-          fetchPaymentForClient(clientName, clientTypes[0], row);
-        } else {
-          typeSelect.disabled = false;
-        }
-        saveToGoogleSheets();
-      }
-
-      if (e.target.classList.contains('type-input')) {
-        const row = e.target.closest('tr');
-        const clientName = row.querySelector('.client-name-input').value;
-        const type = e.target.value;
-        const amountSelect = row.querySelector('.amount-input');
-        const userClients = clientsData.filter(client => client.User === currentUser && client.Client_Name === clientName && client.Type === type);
-
-        amountSelect.innerHTML = '<option value="">Select Amount</option>';
-        if (userClients.length > 0) {
-          const clientData = userClients[0];
-          amountSelect.disabled = false;
-          const amountOption = document.createElement('option');
-          amountOption.value = clientData.monthly_payment;
-          amountOption.textContent = clientData.monthly_payment;
-          amountSelect.appendChild(amountOption);
-          amountSelect.value = clientData.monthly_payment;
-          fetchPaymentForClient(clientName, type, row);
-        }
         saveToGoogleSheets();
       }
     });
@@ -1067,68 +938,12 @@ addNewRowBtn.addEventListener('click', () => {
 
     updateSerialNumbers();
 
-    // CHANGE: Updated fetchPaymentForClient to use session token
-    function fetchPaymentForClient(clientName, type, row) {
-      if (!sessionToken) {
-        console.error('No sessionToken available. Redirecting to sign-in page.');
-        showSignInPage();
-        return;
-      }
-
-      fetch('https://payment-tracker-aswa.onrender.com/api/get-payments', {
-        headers: {
-          'user': currentUser,
-          'Authorization': `Bearer ${sessionToken}`
-        }
-      })
-        .then(response => {
-          if (!response.ok) {
-            if (response.status === 401) {
-              console.error('Session token invalid. Redirecting to sign-in page.');
-              clearUserSession();
-              showSignInPage();
-              return;
-            }
-            throw new Error('Failed to fetch payments');
-          }
-          return response.json();
-        })
-        .then(data => {
-          const payment = data.find(p => p.Client_Name === clientName && p.Type === type);
-          if (payment) {
-            const inputs = row.querySelectorAll('.form-control');
-            inputs[2].value = payment.Amount_To_Be_Paid || '';
-            inputs[3].value = payment.january || '';
-            inputs[4].value = payment.february || '';
-            inputs[5].value = payment.march || '';
-            inputs[6].value = payment.april || '';
-            inputs[7].value = payment.may || '';
-            inputs[8].value = payment.june || '';
-            inputs[9].value = payment.july || '';
-            inputs[10].value = payment.august || '';
-            inputs[11].value = payment.september || '';
-            inputs[12].value = payment.october || '';
-            inputs[13].value = payment.november || '';
-            inputs[14].value = payment.december || '';
-            inputs[15].value = payment.Due_Payment || '0.00';
-            updateDuePayment(row);
-            const monthInputs = Array.from(inputs).slice(3, 15);
-            monthInputs.forEach(input => updatePaymentStatus(input));
-          }
-        })
-        .catch(error => {
-          console.error('Error fetching payment:', error);
-        });
-    }
-
     function searchClients() {
       const filter = searchInput.value.trim().toLowerCase();
       const rows = tableBody.querySelectorAll('tr');
       let anyVisible = false;
       rows.forEach(row => {
-        const clientSelect = row.querySelector('.client-name-input');
-        if (!clientSelect) return;
-        const clientName = clientSelect.value.toLowerCase();
+        const clientName = row.querySelector('.client-name-display').textContent.toLowerCase();
         if (clientName.includes(filter)) {
           row.style.display = '';
           anyVisible = true;
@@ -1171,7 +986,7 @@ addNewRowBtn.addEventListener('click', () => {
 
       e.preventDefault();
 
-      const inputsPerRow = 16;
+      const inputsPerRow = 13; // Adjusted since selects are removed
       const totalInputs = inputs.length;
 
       let nextIndex = currentIndex;
@@ -1274,19 +1089,6 @@ addNewRowBtn.addEventListener('click', () => {
       contextTargetRow = null;
     }
 
-    insertRowBtn.addEventListener('click', () => {
-      if (!contextTargetRow) return;
-      const newRow = createEditableRow();
-      tableBody.insertBefore(newRow, contextTargetRow);
-      updateSerialNumbers();
-      saveToGoogleSheets();
-      hideContextMenu();
-      const firstInput = newRow.querySelector('.form-control');
-      if (firstInput) {
-        firstInput.focus();
-      }
-    });
-
     deleteRowBtn.addEventListener('click', () => {
       if (!contextTargetRow) return;
       if (tableBody.rows.length === 1) {
@@ -1294,14 +1096,16 @@ addNewRowBtn.addEventListener('click', () => {
         hideContextMenu();
         return;
       }
+      const clientName = contextTargetRow.querySelector('.client-name-display').textContent;
+      const type = contextTargetRow.querySelector('.type-display').textContent;
       contextTargetRow.remove();
       updateSerialNumbers();
-      saveToGoogleSheets();
+      deleteClient(clientName, type);
       hideContextMenu();
     });
 
     tableBody.addEventListener('contextmenu', e => {
-      if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') return;
+      if (e.target.tagName !== 'INPUT') return;
       e.preventDefault();
       const tr = e.target.closest('tr');
       if (!tr) return;
@@ -1310,7 +1114,7 @@ addNewRowBtn.addEventListener('click', () => {
 
     tableBody.addEventListener('keydown', e => {
       if ((e.shiftKey && e.key === 'F10') || e.key === 'ContextMenu') {
-        if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') return;
+        if (e.target.tagName !== 'INPUT') return;
         e.preventDefault();
         const tr = e.target.closest('tr');
         if (!tr) return;
@@ -1335,87 +1139,26 @@ addNewRowBtn.addEventListener('click', () => {
       const tableBody = document.querySelector('#mainTable tbody');
       const newRow = createEditableRow(rowData.Client_Name || '', rowData.Type || '', rowData.Amount_To_Be_Paid || '');
       const inputs = newRow.querySelectorAll('.form-control');
-      inputs[2].value = rowData.Amount_To_Be_Paid || '';
-      inputs[3].value = rowData.january || '';
-      inputs[4].value = rowData.february || '';
-      inputs[5].value = rowData.march || '';
-      inputs[6].value = rowData.april || '';
-      inputs[7].value = rowData.may || '';
-      inputs[8].value = rowData.june || '';
-      inputs[9].value = rowData.july || '';
-      inputs[10].value = rowData.august || '';
-      inputs[11].value = rowData.september || '';
-      inputs[12].value = rowData.october || '';
-      inputs[13].value = rowData.november || '';
-      inputs[14].value = rowData.december || '';
-      inputs[15].value = rowData.Due_Payment || '0.00';
+      inputs[0].value = rowData.january || '';
+      inputs[1].value = rowData.february || '';
+      inputs[2].value = rowData.march || '';
+      inputs[3].value = rowData.april || '';
+      inputs[4].value = rowData.may || '';
+      inputs[5].value = rowData.june || '';
+      inputs[6].value = rowData.july || '';
+      inputs[7].value = rowData.august || '';
+      inputs[8].value = rowData.september || '';
+      inputs[9].value = rowData.october || '';
+      inputs[10].value = rowData.november || '';
+      inputs[11].value = rowData.december || '';
+      inputs[12].value = rowData.Due_Payment || '0.00';
 
       tableBody.appendChild(newRow);
       updateDuePayment(newRow);
-      const monthInputs = Array.from(inputs).slice(3, 15);
+      const monthInputs = Array.from(inputs).slice(0, 12);
       monthInputs.forEach(input => updatePaymentStatus(input));
     }
 
-    // CHANGE: Updated saveDataToDB to use session token
-    function saveDataToDB() {
-      const rows = tableBody.querySelectorAll('tr');
-      const data = Array.from(rows).map(row => {
-        const inputs = row.querySelectorAll('.form-control');
-        return {
-          User: currentUser,
-          Client_Name: inputs[0].value,
-          Type: inputs[1].value,
-          Amount_To_Be_Paid: inputs[2].value,
-          january: inputs[3].value,
-          february: inputs[4].value,
-          march: inputs[5].value,
-          april: inputs[6].value,
-          may: inputs[7].value,
-          june: inputs[8].value,
-          july: inputs[9].value,
-          august: inputs[10].value,
-          september: inputs[11].value,
-          october: inputs[12].value,
-          november: inputs[13].value,
-          december: inputs[14].value,
-          Due_Payment: inputs[15].value
-        };
-      });
-
-      if (!sessionToken) {
-        console.error('No sessionToken available. Redirecting to sign-in page.');
-        showSignInPage();
-        return;
-      }
-
-      fetch('https://payment-tracker-aswa.onrender.com/api/save-payments', {
-        method: 'POST',
-        headers: {
-          'user': currentUser,
-          'Authorization': `Bearer ${sessionToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(data)
-      })
-        .then(response => {
-          if (!response.ok) {
-            if (response.status === 401) {
-              console.error('Session token invalid. Redirecting to sign-in page.');
-              clearUserSession();
-              showSignInPage();
-              return;
-            }
-            throw new Error('Failed to save to Google Sheets');
-          }
-          alert('Data saved successfully!');
-        })
-        .catch(error => {
-          console.error('Error saving to Google Sheets:', error);
-          alert('Failed to save data to Google Sheets. Please try again.');
-        });
-    }
-
-    // CHANGE: Updated fetchClients to filter by currentUser and use session token
     function fetchClients() {
       if (!sessionToken) {
         console.error('No sessionToken available. Redirecting to sign-in page.');
@@ -1443,67 +1186,15 @@ addNewRowBtn.addEventListener('click', () => {
         })
         .then(data => {
           clientsData = data;
-          const rows = tableBody.querySelectorAll('tr');
-          rows.forEach(row => {
-            const clientSelect = row.querySelector('.client-name-input');
-            const typeSelect = row.querySelector('.type-input');
-            const amountSelect = row.querySelector('.amount-input');
-            const currentClient = clientSelect.value;
-            const currentType = typeSelect.value;
-            const currentAmount = amountSelect.value;
-            clientSelect.innerHTML = '<option value="">Select Client</option>';
-            typeSelect.innerHTML = '<option value="">Select Type</option>';
-            amountSelect.innerHTML = '<option value="">Select Amount</option>';
-            amountSelect.disabled = true;
-            const userClients = clientsData.filter(client => client.User === currentUser);
-            const uniqueClients = [...new Set(userClients.map(client => client.Client_Name))];
-            uniqueClients.forEach(client => {
-              const option = document.createElement('option');
-              option.value = client;
-              option.textContent = client;
-              clientSelect.appendChild(option);
-            });
-            clientSelect.value = currentClient;
-            if (currentClient) {
-              const clientTypes = userClients.filter(client => client.Client_Name === currentClient).map(client => client.Type);
-              clientTypes.forEach(type => {
-                const option = document.createElement('option');
-                option.value = type;
-                option.textContent = type;
-                typeSelect.appendChild(option);
-              });
-              typeSelect.value = currentType;
-              if (currentType) {
-                const clientData = userClients.find(client => client.Client_Name === currentClient && client.Type === currentType);
-                if (clientData) {
-                  amountSelect.disabled = false;
-                  const amountOption = document.createElement('option');
-                  amountOption.value = clientData.monthly_payment;
-                  amountOption.textContent = clientData.monthly_payment;
-                  amountSelect.appendChild(amountOption);
-                  amountSelect.value = clientData.monthly_payment;
-                }
-              }
-            }
-          });
         })
         .catch(error => {
           console.error('Error fetching clients:', error);
           alert('Failed to load client data from Google Sheets.');
           clientsData = [{ User: currentUser, Client_Name: 'Test Client', Type: 'Test Type', monthly_payment: '100' }];
-          const rows = tableBody.querySelectorAll('tr');
-          rows.forEach(row => {
-            const clientSelect = row.querySelector('.client-name-input');
-            const typeSelect = row.querySelector('.type-input');
-            const amountSelect = row.querySelector('.amount-input');
-            clientSelect.innerHTML = '<option value="">Select Client</option><option value="Test Client">Test Client</option>';
-            typeSelect.innerHTML = '<option value="">Select Type</option><option value="Test Type">Test Type</option>';
-            amountSelect.innerHTML = '<option value="">Select Amount</option><option value="100">100</option>';
-          });
         });
     }
 
-    // CHANGE: Updated fetchPayments to filter by currentUser and use session token
+    // CHANGE: Fetch all payments on login and display on dashboard
     function fetchPayments() {
       if (!sessionToken) {
         console.error('No sessionToken available. Redirecting to sign-in page.');
@@ -1543,7 +1234,6 @@ addNewRowBtn.addEventListener('click', () => {
         });
     }
 
-    // CHANGE: Updated fetchClientsForDisplay to use session token
     function fetchClientsForDisplay() {
       if (!sessionToken) {
         console.error('No sessionToken available. Redirecting to sign-in page.');
@@ -1619,7 +1309,7 @@ addNewRowBtn.addEventListener('click', () => {
         });
     }
 
-    // CHANGE: Updated fetchPaymentsForDisplay to use session token
+    // CHANGE: Removed User column from Payments table display
     function fetchPaymentsForDisplay() {
       if (!sessionToken) {
         console.error('No sessionToken available. Redirecting to sign-in page.');
@@ -1652,7 +1342,6 @@ addNewRowBtn.addEventListener('click', () => {
           userPayments.forEach(payment => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
-              <td>${payment.User}</td>
               <td>${payment.Client_Name}</td>
               <td>${payment.Type}</td>
               <td>${payment.Amount_To_Be_Paid}</td>
@@ -1679,7 +1368,6 @@ addNewRowBtn.addEventListener('click', () => {
         });
     }
 
-    // CHANGE: Updated addNewClient to include user in data and use session token
     function addNewClient() {
       const clientName = clientNameInput.value.trim();
       const clientEmail = clientEmailInput.value.trim();
@@ -1749,20 +1437,47 @@ addNewRowBtn.addEventListener('click', () => {
         .then(data => {
           alert(`Client ${isUpdate ? 'updated' : 'added'} successfully!`);
           resetAddClientForm();
-          fetchClients().then(() => {
-    // NEW: Add a new row to the dashboard with the new client pre-selected
-    if (!isUpdate) { // Only add a new row for new clients, not updates
-      const newRow = createEditableRow(clientName, type, paymentValue);
-      tableBody.appendChild(newRow);
-      updateSerialNumbers();
-      saveToGoogleSheets();
-      const firstInput = newRow.querySelector('.form-control');
-      if (firstInput) {
-        firstInput.focus();
-      }
-    }
-    showHomePage();
-  });
+          fetchClients();
+          if (!isUpdate) {
+            // NEW: Add new client directly to dashboard and Payments sheet
+            const newRowData = {
+              User: currentUser,
+              Client_Name: clientName,
+              Type: type,
+              Amount_To_Be_Paid: paymentValue,
+              january: '',
+              february: '',
+              march: '',
+              april: '',
+              may: '',
+              june: '',
+              july: '',
+              august: '',
+              september: '',
+              october: '',
+              november: '',
+              december: '',
+              Due_Payment: '0.00'
+            };
+            addRowToTable(newRowData);
+            updateSerialNumbers();
+            saveToGoogleSheets();
+          } else {
+            // Update existing row on dashboard
+            const rows = tableBody.querySelectorAll('tr');
+            rows.forEach(row => {
+              const rowClientName = row.querySelector('.client-name-display').textContent;
+              const rowType = row.querySelector('.type-display').textContent;
+              if (rowClientName === saveClientBtn.dataset.client && rowType === saveClientBtn.dataset.type) {
+                row.querySelector('.client-name-display').textContent = clientName;
+                row.querySelector('.type-display').textContent = type;
+                row.querySelector('.amount-display').textContent = paymentValue;
+                updateDuePayment(row);
+              }
+            });
+            saveToGoogleSheets();
+          }
+          showHomePage();
         })
         .catch(error => {
           console.error(`Error ${isUpdate ? 'updating' : 'adding'} client:`, error);
@@ -1773,7 +1488,6 @@ addNewRowBtn.addEventListener('click', () => {
         });
     }
 
-    // CHANGE: Updated deleteClient to use session token
     function deleteClient(clientName, type) {
       if (!sessionToken) {
         console.error('No sessionToken available. Redirecting to sign-in page.');
@@ -1805,6 +1519,7 @@ addNewRowBtn.addEventListener('click', () => {
           alert('Client deleted successfully!');
           fetchClientsForDisplay();
           fetchClients();
+          fetchPayments();
         })
         .catch(error => {
           console.error('Error deleting client:', error);
@@ -1829,7 +1544,108 @@ addNewRowBtn.addEventListener('click', () => {
       showHomePage();
     });
 
-    // CHANGE: Removed Google OAuth functions (handleCredentialResponse, scheduleSilentReauth, onSignIn)
+    // NEW: Added Import CSV functionality
+    importCsvBtn.addEventListener('click', () => {
+      csvFileInput.click();
+    });
+
+    csvFileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        const text = event.target.result;
+        const rows = text.split('\n').map(row => row.trim()).filter(row => row);
+        if (rows.length === 0) {
+          alert('CSV file is empty.');
+          csvFileInput.value = '';
+          return;
+        }
+
+        const headers = rows[0].split(',').map(header => header.trim());
+        const expectedHeaders = ['Client Name', 'Type', 'Amount To be Paid'];
+        const headersMatch = expectedHeaders.every((header, index) => headers[index] === header);
+        if (!headersMatch || headers.length !== expectedHeaders.length) {
+          alert('CSV file must have headers: Client Name, Type, Amount To be Paid');
+          csvFileInput.value = '';
+          return;
+        }
+
+        const data = rows.slice(1).map(row => {
+          const cols = row.split(',').map(col => col.trim());
+          if (cols.length < 3) return null;
+          const amount = parseFloat(cols[2]);
+          if (isNaN(amount) || amount <= 0) return null;
+          return {
+            User: currentUser,
+            Client_Name: cols[0],
+            Type: cols[1],
+            Amount_To_Be_Paid: amount,
+            january: '',
+            february: '',
+            march: '',
+            april: '',
+            may: '',
+            june: '',
+            july: '',
+            august: '',
+            september: '',
+            october: '',
+            november: '',
+            december: '',
+            Due_Payment: '0.00'
+          };
+        }).filter(row => row);
+
+        if (data.length === 0) {
+          alert('No valid data found in CSV file.');
+          csvFileInput.value = '';
+          return;
+        }
+
+        if (!sessionToken) {
+          console.error('No sessionToken available. Redirecting to sign-in page.');
+          showSignInPage();
+          csvFileInput.value = '';
+          return;
+        }
+
+        // Send data to backend to save to both Clients and Payments sheets
+        fetch('https://payment-tracker-aswa.onrender.com/api/import-csv', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${sessionToken}`
+          },
+          body: JSON.stringify(data)
+        })
+          .then(response => {
+            if (!response.ok) {
+              if (response.status === 401) {
+                console.error('Session token invalid. Redirecting to sign-in page.');
+                clearUserSession();
+                showSignInPage();
+                return;
+              }
+              throw new Error('Failed to import CSV data');
+            }
+            return response.json();
+          })
+          .then(() => {
+            alert('CSV data imported successfully!');
+            fetchClients();
+            fetchPayments();
+            csvFileInput.value = '';
+          })
+          .catch(error => {
+            console.error('Error importing CSV:', error);
+            alert('Failed to import CSV data: ' + error.message);
+            csvFileInput.value = '';
+          });
+      };
+      reader.readAsText(file);
+    });
   </script>
 </body>
 </html>
