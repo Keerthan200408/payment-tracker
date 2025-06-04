@@ -3,7 +3,8 @@ const { google } = require('googleapis');
 const cors = require('cors');
 const path = require('path');
 const { GoogleAuth, OAuth2Client } = require('google-auth-library');
-const rateLimit = require('express-rate-limit'); // Added for rate limiting
+const rateLimit = require('express-rate-limit');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 app.use(cors());
@@ -19,7 +20,7 @@ app.use(limiter);
 
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
 
-// Using on Render, Parse the GOOGLE_CREDENTIALS environment variable with error handling
+// Parse the GOOGLE_CREDENTIALS environment variable with error handling
 let credentials;
 try {
     credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
@@ -40,10 +41,9 @@ async function getSheetsClient() {
 }
 
 // Added OAuth2Client for verifying Google ID tokens
-const oAuth2Client = new OAuth2Client('848204323516-p15s9a090fqjtrfclco6rbocp9sov0t5.apps.googleusercontent.com'); // Replace with your actual client ID
+const oAuth2Client = new OAuth2Client('848204323516-p15s9a090fqjtrfclco6rbocp9sov0t5.apps.googleusercontent.com');
 
-const jwt = require('jsonwebtoken');
-const SECRET_KEY = 'your-secret-key'; // Replace with a secure key (store in env)
+const SECRET_KEY = process.env.SECRET_KEY || 'your-fallback-secret-key';
 
 // Middleware to verify custom session token
 const verifySessionToken = (req, res, next) => {
@@ -77,33 +77,35 @@ app.post('/api/verify-token', async (req, res) => {
         }
         // Issue a custom session token (valid for 7 days)
         const sessionToken = jwt.sign({ email }, SECRET_KEY, { expiresIn: '7d' });
-        res.json({ email, sessionToken }); // Modified: Return sessionToken
+        res.json({ email, sessionToken });
     } catch (error) {
         console.error('Error verifying token:', error);
         res.status(401).json({ error: 'Invalid token' });
     }
 });
 
-// Update endpoints to use verifySessionToken instead of verifyToken
-app.get('/api/get-clients', verifySessionToken, async (req, res) => {
-    const { userEmail } = req;
-    const gmailid = req.headers.gmailid;
-    if (userEmail !== gmailid) {
-        return res.status(403).json({ error: 'Unauthorized access' });
-    }
-    // ... rest of the endpoint logic
-});
-
-// Apply verifySessionToken to other endpoints (get-payments, save-payments, add-client, delete-client, etc.)
-
 // Get clients from Clients worksheet (filtered by GmailID)
-app.get('/api/get-clients', verifyToken, async (req, res) => {
+app.get('/api/get-clients', verifySessionToken, async (req, res) => {
     try {
         const { userEmail } = req;
-    const gmailid = req.headers.gmailid;
-    if (userEmail !== gmailid) {
-        return res.status(403).json({ error: 'Unauthorized access' });
-    }
+        const gmailid = req.headers.gmailid;
+        if (userEmail !== gmailid) {
+            return res.status(403).json({ error: 'Unauthorized access' });
+        }
+        const sheets = await getSheetsClient();
+        const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
+        const response = await sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: 'Clients!A2:E',
+        });
+        const rows = response.data.values || [];
+        const clients = rows.map(row => ({
+            GmailID: row[0] || '',
+            Client_Name: row[1] || '',
+            Email: row[2] || '',
+            Type: row[3] || '',
+            monthly_payment: row[4] || '',
+        }));
         const userClients = clients.filter(client => client.GmailID === gmailid);
         res.json(userClients);
     } catch (error) {
@@ -113,7 +115,7 @@ app.get('/api/get-clients', verifyToken, async (req, res) => {
 });
 
 // Get payments from Payments worksheet (filtered by GmailID)
-app.get('/api/get-payments', verifyToken, async (req, res) => {
+app.get('/api/get-payments', verifySessionToken, async (req, res) => {
     try {
         const sheets = await getSheetsClient();
         const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
@@ -154,7 +156,7 @@ app.get('/api/get-payments', verifyToken, async (req, res) => {
 });
 
 // Save payments to Payments worksheet
-app.post('/api/save-payments', verifyToken, async (req, res) => {
+app.post('/api/save-payments', verifySessionToken, async (req, res) => {
     try {
         const sheets = await getSheetsClient();
         const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
@@ -163,7 +165,7 @@ app.post('/api/save-payments', verifyToken, async (req, res) => {
             return res.status(400).json({ error: 'Invalid payment data' });
         }
 
-        const gmailid = req.headers.gmailid || data[0]?.GmailID || ''; // Fixed: Use gmailid consistently
+        const gmailid = req.headers.gmailid || data[0]?.GmailID || '';
         if (gmailid !== req.userEmail) {
             return res.status(403).json({ error: 'Unauthorized access' });
         }
@@ -233,7 +235,7 @@ app.post('/api/save-payments', verifyToken, async (req, res) => {
 });
 
 // Add a new client to Clients worksheet
-app.post('/api/add-client', verifyToken, async (req, res) => {
+app.post('/api/add-client', verifySessionToken, async (req, res) => {
     try {
         const sheets = await getSheetsClient();
         const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
@@ -276,7 +278,7 @@ app.post('/api/add-client', verifyToken, async (req, res) => {
     }
 });
 
-app.put('/api/update-client', verifyToken, async (req, res) => {
+app.put('/api/update-client', verifySessionToken, async (req, res) => {
     try {
         const sheets = await getSheetsClient();
         const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
@@ -369,7 +371,7 @@ app.put('/api/update-client', verifyToken, async (req, res) => {
     }
 });
 
-app.delete('/api/delete-client', verifyToken, async (req, res) => {
+app.delete('/api/delete-client', verifySessionToken, async (req, res) => {
     try {
         const sheets = await getSheetsClient();
         const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
