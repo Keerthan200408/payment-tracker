@@ -42,45 +42,30 @@ async function getSheetsClient() {
 // Added OAuth2Client for verifying Google ID tokens
 const oAuth2Client = new OAuth2Client('848204323516-p15s9a090fqjtrfclco6rbocp9sov0t5.apps.googleusercontent.com'); // Replace with your actual client ID
 
-const verifyToken = async (req, res, next) => {
+const jwt = require('jsonwebtoken');
+const SECRET_KEY = 'your-secret-key'; // Replace with a secure key (store in env)
+
+// Middleware to verify custom session token
+const verifySessionToken = (req, res, next) => {
     const authHeader = req.headers.authorization;
-    console.log('Received Authorization header:', authHeader); // Debug log
-    console.log('Received gmailid header:', req.headers.gmailid); // Debug log
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ error: 'No token provided' });
+        return res.status(401).json({ error: 'No session token provided' });
     }
     const token = authHeader.split(' ')[1];
-    if (!token) {
-        return res.status(401).json({ error: 'No token provided' });
-    }
     try {
-        const ticket = await oAuth2Client.verifyIdToken({
-            idToken: token,
-            audience: '848204323516-p15s9a090fqjtrfclco6rbocp9sov0t5.apps.googleusercontent.com',
-        });
-        const payload = ticket.getPayload();
-        req.userEmail = payload['email'];
-        if (!req.userEmail) {
-            throw new Error('No email found in token');
-        }
-        console.log('Verified user email:', req.userEmail); // Debug log
+        const decoded = jwt.verify(token, SECRET_KEY);
+        req.userEmail = decoded.email;
         next();
     } catch (error) {
-        console.error('Error verifying token:', error);
-        if (error.message.includes('Token used too late') || error.message.includes('jwt expired')) {
-            return res.status(401).json({ error: 'Token has expired. Please sign in again.' });
-        }
-        return res.status(401).json({ error: 'Invalid token. Please sign in again.' });
+        console.error('Error verifying session token:', error);
+        return res.status(401).json({ error: 'Invalid session token. Please sign in again.' });
     }
 };
 
-// Modified: Improved error handling in the verify-token endpoint
+// Update /api/verify-token to issue a session token
 app.post('/api/verify-token', async (req, res) => {
+    const { idToken } = req.body;
     try {
-        const { idToken } = req.body;
-        if (!idToken) {
-            return res.status(400).json({ error: 'ID token is required' });
-        }
         const ticket = await oAuth2Client.verifyIdToken({
             idToken,
             audience: '848204323516-p15s9a090fqjtrfclco6rbocp9sov0t5.apps.googleusercontent.com',
@@ -88,40 +73,37 @@ app.post('/api/verify-token', async (req, res) => {
         const payload = ticket.getPayload();
         const email = payload['email'];
         if (!email) {
-            return res.status(400).json({ error: 'No email found in token' });
+            throw new Error('No email in token payload');
         }
-        res.json({ email });
+        // Issue a custom session token (valid for 7 days)
+        const sessionToken = jwt.sign({ email }, SECRET_KEY, { expiresIn: '7d' });
+        res.json({ email, sessionToken }); // Modified: Return sessionToken
     } catch (error) {
         console.error('Error verifying token:', error);
-        // Modified: Provide a more specific error message for token expiration
-        if (error.message.includes('Token used too late') || error.message.includes('jwt expired')) {
-            return res.status(401).json({ error: 'Token has expired. Please sign in again.' });
-        }
-        return res.status(401).json({ error: 'Invalid token. Please sign in again.' });
+        res.status(401).json({ error: 'Invalid token' });
     }
 });
+
+// Update endpoints to use verifySessionToken instead of verifyToken
+app.get('/api/get-clients', verifySessionToken, async (req, res) => {
+    const { userEmail } = req;
+    const gmailid = req.headers.gmailid;
+    if (userEmail !== gmailid) {
+        return res.status(403).json({ error: 'Unauthorized access' });
+    }
+    // ... rest of the endpoint logic
+});
+
+// Apply verifySessionToken to other endpoints (get-payments, save-payments, add-client, delete-client, etc.)
 
 // Get clients from Clients worksheet (filtered by GmailID)
 app.get('/api/get-clients', verifyToken, async (req, res) => {
     try {
-        const sheets = await getSheetsClient();
-        const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
-        const response = await sheets.spreadsheets.values.get({
-            spreadsheetId,
-            range: 'Clients!A2:E',
-        });
-        const rows = response.data.values || [];
-        const clients = rows.map(row => ({
-            GmailID: row[0] || '',
-            Client_Name: row[1] || '',
-            Email: row[2] || '',
-            Type: row[3] || '',
-            monthly_payment: row[4] || '',
-        }));
-        const gmailid = req.headers.gmailid || '';
-        if (gmailid !== req.userEmail) {
-            return res.status(403).json({ error: 'Unauthorized access' });
-        }
+        const { userEmail } = req;
+    const gmailid = req.headers.gmailid;
+    if (userEmail !== gmailid) {
+        return res.status(403).json({ error: 'Unauthorized access' });
+    }
         const userClients = clients.filter(client => client.GmailID === gmailid);
         res.json(userClients);
     } catch (error) {

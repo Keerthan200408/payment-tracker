@@ -519,7 +519,8 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
   <script>
-    let idToken = null;
+  let idToken = null;
+  let sessionToken = null; // Added: Store the custom session token issued by the backend
   const addClientBtn = document.getElementById('addClientBtn');
   const tableBody = document.getElementById('tableBody');
   const searchInput = document.getElementById('searchInput');
@@ -567,46 +568,67 @@
   function persistUserSession() {
     localStorage.setItem('currentGmailID', currentGmailID);
     localStorage.setItem('idToken', idToken);
-  }
+    localStorage.setItem('sessionToken', sessionToken); // Added: Save the session token to localStorage
+}
 
-  function clearUserSession() {
+function clearUserSession() {
     localStorage.removeItem('currentGmailID');
-    localStorage.removeItem('idToken'); // Modified: Clear idToken as well
-  }
+    localStorage.removeItem('idToken');
+    localStorage.removeItem('sessionToken'); // Added: Clear the session token as well
+    currentGmailID = null;
+    idToken = null;
+    sessionToken = null; // Added: Reset the session token variable
+}
   // changed 
+  // function loadUserSession() {
+  //   currentGmailID = localStorage.getItem('currentGmailID');
+  //   idToken = localStorage.getItem('idToken');
+  //   sessionToken = localStorage.getItem('sessionToken'); // Added: Load the session token
+  //   console.log('Loaded session from localStorage:', { idToken, sessionToken, currentGmailID }); // Added: Debug log
+  //   if (currentGmailID && idToken) {
+  //     //  the token before proceeding
+  //     fetch('https://payment-tracker-aswa.onrender.com/api/verify-token', {
+  //       method: 'POST',
+  //       headers: {
+  //         'Content-Type': 'application/json'
+  //       },
+  //       body: JSON.stringify({ idToken })
+  //     })
+  //       .then(res => {
+  //         if (!res.ok) throw new Error('Token verification failed');
+  //         return res.json();
+  //       })
+  //       .then(data => {
+  //         if (data.email !== currentGmailID) {
+  //           throw new Error('Token email mismatch');
+  //         }
+  //         fetchClients();
+  //         fetchPayments();
+  //         showHomePage();
+  //       })
+  //       .catch(error => {
+  //         console.error('Error verifying token on load:', error);
+  //         clearUserSession();
+  //         showSignInPage();
+  //       });
+  //   } else {
+  //     showSignInPage();
+  //   }
+  // }
   function loadUserSession() {
     currentGmailID = localStorage.getItem('currentGmailID');
     idToken = localStorage.getItem('idToken');
-    if (currentGmailID && idToken) {
-      // Verify the token before proceeding
-      fetch('https://payment-tracker-aswa.onrender.com/api/verify-token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ idToken })
-      })
-        .then(res => {
-          if (!res.ok) throw new Error('Token verification failed');
-          return res.json();
-        })
-        .then(data => {
-          if (data.email !== currentGmailID) {
-            throw new Error('Token email mismatch');
-          }
-          fetchClients();
-          fetchPayments();
-          showHomePage();
-        })
-        .catch(error => {
-          console.error('Error verifying token on load:', error);
-          clearUserSession();
-          showSignInPage();
-        });
+    sessionToken = localStorage.getItem('sessionToken'); // Added: Load the session token
+    console.log('Loaded session from localStorage:', { idToken, sessionToken, currentGmailID }); // Added: Debug log
+    if (currentGmailID && sessionToken) {
+        // Modified: Use sessionToken for API calls; backend will verify it
+        fetchClients();
+        fetchPayments();
+        showHomePage();
     } else {
-      showSignInPage();
+        showSignInPage();
     }
-  }
+}
 
   function showSignInPage() {
     signInPage.style.display = 'block';
@@ -666,36 +688,57 @@
     menuToggle.style.display = 'flex';
     fetchPaymentsForDisplay();
   }
-  // Modified Google Sign-In callback function to handle errors better
-  window.handleCredentialResponse = function(response) {
+
+  function scheduleSilentReauth() {
+    setTimeout(() => {
+        console.log('Attempting silent re-authentication...');
+        google.accounts.id.prompt((notification) => {
+            if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+                console.warn('Silent re-auth prompt not displayed:', notification.getNotDisplayedReason());
+                // Fallback to explicit sign-in if silent re-auth fails
+                alert('Session expired. Please sign in again to continue.');
+                clearUserSession();
+                showSignInPage();
+            } else {
+                console.log('Silent re-auth prompt displayed successfully');
+            }
+        });
+    }, 50 * 60 * 1000); // 50 minutes
+}
+
+// Added: Call scheduleSilentReauth after successful login
+window.handleCredentialResponse = function(response) {
     if (!response.credential) {
-      console.error('Google Sign-In failed: No credential received', response);
-      alert('Failed to sign in with Google. Please check your configuration or try again.');
-      showSignInPage();
-      return;
+        console.error('Google Sign-In failed: No credential received', response);
+        alert('Failed to sign in with Google. Please check your configuration or try again.');
+        showSignInPage();
+        return;
     }
     idToken = response.credential;
     console.log('Set idToken:', idToken);
     fetch('https://payment-tracker-aswa.onrender.com/api/verify-token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ idToken })
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ idToken })
     })
-      .then(res => {
+    .then(res => {
         if (!res.ok) throw new Error('Failed to verify token' + res.statusText);
         return res.json();
-      })
-      .then(data => {
+    })
+    .then(data => {
         currentGmailID = data.email;
-        console.log('Set currentGmailID:', currentGmailID); // Debug log
+        sessionToken = data.sessionToken; // Added: Store the session token returned by the backend
+        console.log('Set currentGmailID:', currentGmailID);
+        console.log('Set sessionToken:', sessionToken);
         persistUserSession();
         fetchClients();
         fetchPayments();
+        scheduleSilentReauth(); // Added: Schedule silent re-authentication
         showHomePage();
-      })
-      .catch(error => {
+    })
+    .catch(error => {
         console.error('Error verifying token:', error);
         if (error.message.includes('401')) {
             alert('Session expired or invalid. Please sign in again.');
@@ -706,7 +749,49 @@
             showSignInPage();
         }
     });
-  };
+};
+
+  // // Modified Google Sign-In callback function to handle errors better
+  // window.handleCredentialResponse = function(response) {
+  //   if (!response.credential) {
+  //     console.error('Google Sign-In failed: No credential received', response);
+  //     alert('Failed to sign in with Google. Please check your configuration or try again.');
+  //     showSignInPage();
+  //     return;
+  //   }
+  //   idToken = response.credential;
+  //   console.log('Set idToken:', idToken);
+  //   fetch('https://payment-tracker-aswa.onrender.com/api/verify-token', {
+  //     method: 'POST',
+  //     headers: {
+  //       'Content-Type': 'application/json'
+  //     },
+  //     body: JSON.stringify({ idToken })
+  //   })
+  //     .then(res => {
+  //       if (!res.ok) throw new Error('Failed to verify token' + res.statusText);
+  //       return res.json();
+  //     })
+  //     .then(data => {
+  //       currentGmailID = data.email;
+  //       console.log('Set currentGmailID:', currentGmailID); // Debug log
+  //       persistUserSession();
+  //       fetchClients();
+  //       fetchPayments();
+  //       showHomePage();
+  //     })
+  //     .catch(error => {
+  //       console.error('Error verifying token:', error);
+  //       if (error.message.includes('401')) {
+  //           alert('Session expired or invalid. Please sign in again.');
+  //           clearUserSession();
+  //           showSignInPage();
+  //       } else {
+  //           alert('Failed to sign in with Google. Please try again.');
+  //           showSignInPage();
+  //       }
+  //   });
+  // };
 
   // Added: Function to manually trigger Google Sign-In with account selection
   function triggerGoogleSignIn() {
@@ -921,8 +1006,8 @@
     });
 
     // Modified: Check if idToken exists before making the request
-    if (!idToken) {
-      console.error('No idToken available. Redirecting to sign-in page.');
+    if (!sessionToken) {
+      console.error('No sessionToken available. Redirecting to sign-in page.');
       showSignInPage();
       return;
     }
@@ -931,14 +1016,25 @@
       method: 'POST',
       headers: {
         'gmailid': currentGmailID,
-        'Authorization': `Bearer ${idToken}`, // Modified: Add Authorization header
+        'Authorization': `Bearer ${sessionToken}`, // Modified: Add Authorization header
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(data)
     })
       .then(response => {
-        if (!response.ok) throw new Error('Failed to save to Google Sheets');
-      })
+        if (!response.ok) {
+            if (response.status === 401) {
+                return response.json().then(data => {
+                    console.error('saveToGoogleSheets 401 error:', data);
+                    console.error('Session token invalid. Redirecting to sign-in page.');
+                    clearUserSession();
+                    showSignInPage();
+                    return;
+                });
+            }
+            throw new Error('Failed to save to Google Sheets');
+        }
+    })
       .catch(error => {
         console.error('Error saving to Google Sheets:', error);
       });
@@ -1027,7 +1123,7 @@
   // Added function to fetch payment data for a specific client-type combination
   function fetchPaymentForClient(clientName, type, row) {
     // Modified: Check if idToken exists before making the request
-    if (!idToken) {
+    if (!sessionToken) {
       console.error('No idToken available. Redirecting to sign-in page.');
       showSignInPage();
       return;
@@ -1036,13 +1132,24 @@
     fetch('https://payment-tracker-aswa.onrender.com/api/get-payments', {
       headers: {
         'gmailid': currentGmailID, // Changed header from 'user' to 'gmailid'
-        'Authorization': `Bearer ${idToken}`
+        'Authorization': `Bearer ${sessionToken}`
       }
     })
       .then(response => {
-        if (!response.ok) throw new Error('Failed to fetch payments');
+        if (!response.ok) {
+            if (response.status === 401) {
+                return response.json().then(data => {
+                    console.error('fetchPaymentForClient 401 error:', data);
+                    console.error('Session token invalid. Redirecting to sign-in page.');
+                    clearUserSession();
+                    showSignInPage();
+                    return;
+                });
+            }
+            throw new Error('Failed to fetch payments');
+        }
         return response.json();
-      })
+    })
       .then(data => {
         const payment = data.find(p => p.Client_Name === clientName && p.Type === type);
         if (payment) {
@@ -1329,24 +1436,34 @@
     });
     
     // Modified: Check if idToken exists before making the request
-    if (!idToken) {
+    if (!sessionToken) {
       console.error('No idToken available. Redirecting to sign-in page.');
       showSignInPage();
       return;
     }
-
     fetch('https://payment-tracker-aswa.onrender.com/api/save-payments', {
       method: 'POST',
       headers: {
-        'gmailid': currentGmailID, // Changed header from 'user' to 'gmailid'
-        'Authorization': `Bearer ${idToken}`, // Modified: Add Authorization header
+        'gmailid': currentGmailID,
+        'Authorization': `Bearer ${sessionToken}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(data)
     })
       .then(response => {
-        if (!response.ok) throw new Error('Failed to save to Google Sheets');
-      })
+        if (!response.ok) {
+            if (response.status === 401) {
+                return response.json().then(data => {
+                    console.error('saveDataToDB 401 error:', data);
+                    console.error('Session token invalid. Redirecting to sign-in page.');
+                    clearUserSession();
+                    showSignInPage();
+                    return;
+                });
+            }
+            throw new Error('Failed to save to Google Sheets');
+        }
+    })
       .then(result => {
         alert('Data saved successfully!');
       })
@@ -1358,35 +1475,35 @@
 
   function fetchClients() {
     // Modified: Check if idToken exists before making the request
-    if (!idToken) {
+    if (!sessionToken) {
       console.error('No idToken available. Redirecting to sign-in page.');
       showSignInPage();
       return;
     }
-    console.log('Sending fetchClients with idToken:', idToken); // Debug log
+    console.log('Sending fetchClients with sessionToken:', sessionToken); // Debug log
     fetch('https://payment-tracker-aswa.onrender.com/api/get-clients', {
       headers: {
         'gmailid': currentGmailID, // Added user header to match backend expectation
-        'Authorization': `Bearer ${idToken}`
+        'Authorization': `Bearer ${sessionToken}`
       }
     })
       .then(response => {
-        console.log('fetchClients response status:', response.status); // Debug log
+        console.log('fetchClients response status:', response.status);
         if (!response.ok) {
-          if (response.status === 401) {
-            return response.json().then(data => {
-              if (data.error.includes('expired')) {
-                console.error('Token expired. Redirecting to sign-in page.');
-                showSignInPage();
-                return;
-              }
-              throw new Error('Failed to fetch clients');
-            });
-          }
-          throw new Error('Failed to fetch clients');
+            if (response.status === 401) {
+                return response.json().then(data => {
+                    console.error('fetchClients 401 error:', data);
+                    // Modified: Handle session token expiration
+                    console.error('Session token invalid. Redirecting to sign-in page.');
+                    clearUserSession();
+                    showSignInPage();
+                    return;
+                });
+            }
+            throw new Error('Failed to fetch clients');
         }
         return response.json();
-      })
+    })
       .then(data => {
         console.log('fetchClients response data:', data); // Debug log
         clientsData = data;
@@ -1452,8 +1569,8 @@
 
   function fetchPayments() {
     // Modified: Check if idToken exists before making the request
-    if (!idToken) {
-      console.error('No idToken available. Redirecting to sign-in page.');
+    if (!sessionToken) {
+      console.error('No sessionidToken available. Redirecting to sign-in page.');
       showSignInPage();
       return;
     }
@@ -1461,25 +1578,24 @@
     fetch('https://payment-tracker-aswa.onrender.com/api/get-payments', {
       headers: {
         'gmailid': currentGmailID, // Added user header
-        'Authorization': `Bearer ${idToken}`
+        'Authorization': `Bearer ${sessionToken}`
       }
     })
       .then(response => {
-        if (!response.ok) {
-          if (response.status === 401) {
-            return response.json().then(data => {
-              if (data.error.includes('expired')) {
-                console.error('Token expired. Redirecting to sign-in page.');
-                showSignInPage();
-                return;
-              }
-              throw new Error('Failed to fetch payments');
-            });
-          }
-          throw new Error('Failed to fetch payments');
-        }
-        return response.json();
-      })
+     if (!response.ok) {
+         if (response.status === 401) {
+             return response.json().then(data => {
+                 console.error('fetchPayments 401 error:', data);
+                 console.error('Session token invalid. Redirecting to sign-in page.');
+                 clearUserSession();
+                 showSignInPage();
+                 return;
+             });
+         }
+         throw new Error('Failed to fetch payments');
+     }
+     return response.json();
+ })
       .then(data => {
         const UserPayments = data.filter(payment => payment.GmailID === currentGmailID);
         if (UserPayments.length > 0) {
@@ -1496,7 +1612,7 @@
   // Added: Function to fetch and display clients on the Clients page
   function fetchClientsForDisplay() {
     // Modified: Check if idToken exists before making the request
-    if (!idToken) {
+    if (!sessionToken) {
       console.error('No idToken available. Redirecting to sign-in page.');
       showSignInPage();
       return;
@@ -1505,25 +1621,24 @@
     fetch('https://payment-tracker-aswa.onrender.com/api/get-clients', {
       headers: {
         'gmailid': currentGmailID,
-        'Authorization': `Bearer ${idToken}`
+        'Authorization': `Bearer ${sessionToken}`
       }
     })
       .then(response => {
         if (!response.ok) {
-          if (response.status === 401) {
-            return response.json().then(data => {
-              if (data.error.includes('expired')) {
-                console.error('Token expired. Redirecting to sign-in page.');
-                showSignInPage();
-                return;
-              }
-              throw new Error('Failed to fetch clients');
-            });
-          }
-          throw new Error('Failed to fetch clients');
+            if (response.status === 401) {
+                return response.json().then(data => {
+                    console.error('fetchClientsForDisplay 401 error:', data);
+                    console.error('Session token invalid. Redirecting to sign-in page.');
+                    clearUserSession();
+                    showSignInPage();
+                    return;
+                });
+            }
+            throw new Error('Failed to fetch clients');
         }
         return response.json();
-      })
+    })
       .then(data => {
         const clientsTableBody = document.getElementById('clientsTableBody');
         clientsTableBody.innerHTML = '';
@@ -1579,7 +1694,7 @@
   // Added: Function to fetch and display payments on the Payments page
   function fetchPaymentsForDisplay() {
     // Modified: Check if idToken exists before making the request
-    if (!idToken) {
+    if (!sessionToken) {
       console.error('No idToken available. Redirecting to sign-in page.');
       showSignInPage();
       return;
@@ -1588,25 +1703,24 @@
     fetch('https://payment-tracker-aswa.onrender.com/api/get-payments', {
       headers: {
         'gmailid': currentGmailID,
-        'Authorization': `Bearer ${idToken}`
+        'Authorization': `Bearer ${sessionToken}`
       }
     })
       .then(response => {
         if (!response.ok) {
-          if (response.status === 401) {
-            return response.json().then(data => {
-              if (data.error.includes('expired')) {
-                console.error('Token expired. Redirecting to sign-in page.');
-                showSignInPage();
-                return;
-              }
-              throw new Error('Failed to fetch payments');
-            });
-          }
-          throw new Error('Failed to fetch payments');
+            if (response.status === 401) {
+                return response.json().then(data => {
+                    console.error('fetchPaymentsForDisplay 401 error:', data);
+                    console.error('Session token invalid. Redirecting to sign-in page.');
+                    clearUserSession();
+                    showSignInPage();
+                    return;
+                });
+            }
+            throw new Error('Failed to fetch payments');
         }
         return response.json();
-      })
+    })
       .then(data => {
         const paymentsTableBody = document.getElementById('paymentsTableBody');
         paymentsTableBody.innerHTML = '';
@@ -1685,7 +1799,7 @@
     }
 
     // Modified: Check if idToken exists before making the request
-    if (!idToken) {
+    if (!sessionToken) {
       console.error('No idToken available. Redirecting to sign-in page.');
       showSignInPage();
       return;
@@ -1695,26 +1809,25 @@
         method: method,
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${idToken}`
+            'Authorization': `Bearer ${sessionToken}`
         },
         body: JSON.stringify(newClient)
     })
         .then(response => {
         if (!response.ok) {
-          if (response.status === 401) {
-            return response.json().then(data => {
-              if (data.error.includes('expired')) {
-                console.error('Token expired. Redirecting to sign-in page.');
-                showSignInPage();
-                return;
-              }
-              throw new Error(`Failed to ${isUpdate ? 'update' : 'add'} client`);
-            });
-          }
-          throw new Error(`Failed to ${isUpdate ? 'update' : 'add'} client`);
+            if (response.status === 401) {
+                return response.json().then(data => {
+                    console.error('addNewClient 401 error:', data);
+                    console.error('Session token invalid. Redirecting to sign-in page.');
+                    clearUserSession();
+                    showSignInPage();
+                    return;
+                });
+            }
+            throw new Error(`Failed to ${isUpdate ? 'update' : 'add'} client`);
         }
         return response.json();
-      })
+    })
         .then(data => {
             alert(`Client ${isUpdate ? 'updated' : 'added'} successfully!`);
             resetAddClientForm();
@@ -1733,7 +1846,7 @@
   // Added: Function to delete a client
   function deleteClient(clientName, type) {
     // Modified: Check if idToken exists before making the request
-    if (!idToken) {
+    if (!sessionToken) {
       console.error('No idToken available. Redirecting to sign-in page.');
       showSignInPage();
       return;
@@ -1742,26 +1855,25 @@
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${idToken}`
+        'Authorization': `Bearer ${sessionToken}`
       },
       body: JSON.stringify({ GmailID: currentGmailID, Client_Name: clientName, Type: type })
     })
       .then(response => {
         if (!response.ok) {
-          if (response.status === 401) {
-            return response.json().then(data => {
-              if (data.error.includes('expired')) {
-                console.error('Token expired. Redirecting to sign-in page.');
-                showSignInPage();
-                return;
-              }
-              throw new Error('Failed to delete client');
-            });
-          }
-          throw new Error('Failed to delete client');
+            if (response.status === 401) {
+                return response.json().then(data => {
+                    console.error('deleteClient 401 error:', data);
+                    console.error('Session token invalid. Redirecting to sign-in page.');
+                    clearUserSession();
+                    showSignInPage();
+                    return;
+                });
+            }
+            throw new Error('Failed to delete client');
         }
         return response.json();
-      })
+    })
       .then(data => {
         alert('Client deleted successfully!');
         fetchClientsForDisplay();
