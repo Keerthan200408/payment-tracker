@@ -333,7 +333,10 @@
     <div id="g_id_onload"
          data-client_id="848204323516-p15s9a090fqjtrfclco6rbocp9sov0t5.apps.googleusercontent.com"
          data-callback="handleCredentialResponse"
-         data-auto_prompt="false">
+         data-auto_prompt="false"
+         data-auto_select="false" <!-- Disable automatic account selection -->
+         // data-login_uri="" <!-- Explicitly set to empty to ensure no redirect_uri is used -->
+         data-itp_support="true"> <!-- Added to support modern browser requirements -->
     </div>
     <div class="g_id_signin"
          data-type="standard"
@@ -343,6 +346,8 @@
          data-shape="rectangular"
          data-logo_alignment="left">
     </div>
+    <!-- Added a custom button to trigger the account selection prompt -->
+    <button id="googleSignInButton" class="btn btn-primary d-block mx-auto">Sign in with Google</button>
   </div>
 
   <div class="header-section" id="headerSection" role="banner" aria-label="Page header">
@@ -559,17 +564,47 @@
   // const Users = { ... }; // Removed
 
   function persistUserSession() {
-    if (currentGmailID) {
-      localStorage.setItem('currentGmailID', currentGmailID);
-    }
+    localStorage.setItem('currentGmailID', currentGmailID);
+    localStorage.setItem('idToken', idToken);
   }
 
   function clearUserSession() {
     localStorage.removeItem('currentGmailID');
+    localStorage.removeItem('idToken'); // Modified: Clear idToken as well
   }
-
+  // changed 
   function loadUserSession() {
-    return localStorage.getItem('currentGmailID');
+    currentGmailID = localStorage.getItem('currentGmailID');
+    idToken = localStorage.getItem('idToken');
+    if (currentGmailID && idToken) {
+      // Verify the token before proceeding
+      fetch('https://payment-tracker-aswa.onrender.com/api/verify-token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ idToken })
+      })
+        .then(res => {
+          if (!res.ok) throw new Error('Token verification failed');
+          return res.json();
+        })
+        .then(data => {
+          if (data.email !== currentGmailID) {
+            throw new Error('Token email mismatch');
+          }
+          fetchClients();
+          fetchPayments();
+          showHomePage();
+        })
+        .catch(error => {
+          console.error('Error verifying token on load:', error);
+          clearUserSession();
+          showSignInPage();
+        });
+    } else {
+      showSignInPage();
+    }
   }
 
   function showSignInPage() {
@@ -630,11 +665,16 @@
     menuToggle.style.display = 'flex';
     fetchPaymentsForDisplay();
   }
-
-  // Added Google Sign-In callback function
+  // Modified Google Sign-In callback function to handle errors better
   window.handleCredentialResponse = function(response) {
-    const idToken = response.credential;
-    // Send the ID token to the backend for verification
+    if (!response.credential) {
+      console.error('Google Sign-In failed: No credential received', response);
+      alert('Failed to sign in with Google. Please check your configuration or try again.');
+      showSignInPage();
+      return;
+    }
+    idToken = response.credential;
+    console.log('Google ID Token:', idToken);
     fetch('https://payment-tracker-aswa.onrender.com/api/verify-token', {
       method: 'POST',
       headers: {
@@ -656,30 +696,48 @@
       .catch(error => {
         console.error('Error verifying token:', error);
         alert('Failed to sign in with Google. Please try again.');
+        showSignInPage();
       });
   };
+
+  // Added: Function to manually trigger Google Sign-In with account selection
+  function triggerGoogleSignIn() {
+    google.accounts.id.prompt((notification) => {
+      if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+        console.warn('Google Sign-In prompt not displayed:', notification.getNotDisplayedReason());
+        alert('Unable to display Google Sign-In prompt. Please ensure you are not in incognito mode and try again.');
+      }
+    });
+  }
+
+  // Added: Event listener for the custom Google Sign-In button
+  googleSignInButton.addEventListener('click', () => {
+    triggerGoogleSignIn();
+  });
   
   // Updated logout to clear currentGmailID
   logoutLink.addEventListener('click', (e) => {
     e.preventDefault();
     google.accounts.id.disableAutoSelect();
     currentGmailID = null;
+    idToken = null;
     clearUserSession();
     clientsData = [];
     tableBody.innerHTML = '';
     showSignInPage();
   });
 
-  // Updated session loading to use currentGmailID
   document.addEventListener('DOMContentLoaded', () => {
-    currentGmailID = loadUserSession();
-    if (currentGmailID) {
-      fetchClients();
-      fetchPayments();
-      showHomePage();
-    } else {
-      showSignInPage();
-    }
+    loadUserSession(); // Modified: Now loads both currentGmailID and idToken
+  });
+
+  // Added: Initialize Google Sign-In with UX mode to force account selection
+  google.accounts.id.initialize({
+    client_id: '848204323516-p15s9a090fqjtrfclco6rbocp9sov0t5.apps.googleusercontent.com',
+    callback: handleCredentialResponse,
+    auto_select: false, // Disable automatic account selection
+    ux_mode: 'popup', // Use popup mode for better UX
+    prompt: 'select_account' // Force account selection prompt
   });
 
   function updateSerialNumbers() {
@@ -854,10 +912,18 @@
       };
     });
 
+    // Modified: Check if idToken exists before making the request
+    if (!idToken) {
+      console.error('No idToken available. Redirecting to sign-in page.');
+      showSignInPage();
+      return;
+    }
+
     fetch('https://payment-tracker-aswa.onrender.com/api/save-payments', {
       method: 'POST',
       headers: {
         'gmailid': currentGmailID,
+        'Authorization': `Bearer ${idToken}`, // Modified: Add Authorization header
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(data)
@@ -952,9 +1018,17 @@
 
   // Added function to fetch payment data for a specific client-type combination
   function fetchPaymentForClient(clientName, type, row) {
+    // Modified: Check if idToken exists before making the request
+    if (!idToken) {
+      console.error('No idToken available. Redirecting to sign-in page.');
+      showSignInPage();
+      return;
+    }
+
     fetch('https://payment-tracker-aswa.onrender.com/api/get-payments', {
       headers: {
-        'gmailid': currentGmailID // Changed header from 'user' to 'gmailid'
+        'gmailid': currentGmailID, // Changed header from 'user' to 'gmailid'
+        'Authorization': `Bearer ${idToken}`
       }
     })
       .then(response => {
@@ -1245,18 +1319,25 @@
         Due_Payment: inputs[15].value
       };
     });
+    
+    // Modified: Check if idToken exists before making the request
+    if (!idToken) {
+      console.error('No idToken available. Redirecting to sign-in page.');
+      showSignInPage();
+      return;
+    }
 
     fetch('https://payment-tracker-aswa.onrender.com/api/save-payments', {
       method: 'POST',
       headers: {
         'gmailid': currentGmailID, // Changed header from 'user' to 'gmailid'
+        'Authorization': `Bearer ${idToken}`, // Modified: Add Authorization header
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(data)
     })
       .then(response => {
         if (!response.ok) throw new Error('Failed to save to Google Sheets');
-        return response.json();
       })
       .then(result => {
         alert('Data saved successfully!');
@@ -1268,13 +1349,33 @@
   }
 
   function fetchClients() {
+    // Modified: Check if idToken exists before making the request
+    if (!idToken) {
+      console.error('No idToken available. Redirecting to sign-in page.');
+      showSignInPage();
+      return;
+    }
+
     fetch('https://payment-tracker-aswa.onrender.com/api/get-clients', {
       headers: {
-        'gmailid': currentGmailID // Added user header to match backend expectation
+        'gmailid': currentGmailID, // Added user header to match backend expectation
+        'Authorization': `Bearer ${idToken}`
       }
     })
       .then(response => {
-        if (!response.ok) throw new Error('Failed to fetch clients');
+        if (!response.ok) {
+          if (response.status === 401) {
+            return response.json().then(data => {
+              if (data.error.includes('expired')) {
+                console.error('Token expired. Redirecting to sign-in page.');
+                showSignInPage();
+                return;
+              }
+              throw new Error('Failed to fetch clients');
+            });
+          }
+          throw new Error('Failed to fetch clients');
+        }
         return response.json();
       })
       .then(data => {
@@ -1340,13 +1441,33 @@
   }
 
   function fetchPayments() {
+    // Modified: Check if idToken exists before making the request
+    if (!idToken) {
+      console.error('No idToken available. Redirecting to sign-in page.');
+      showSignInPage();
+      return;
+    }
+
     fetch('https://payment-tracker-aswa.onrender.com/api/get-payments', {
       headers: {
-        'user': currentGmailID // Added user header
+        'gmailid': currentGmailID, // Added user header
+        'Authorization': `Bearer ${idToken}`
       }
     })
       .then(response => {
-        if (!response.ok) throw new Error('Failed to fetch payments');
+        if (!response.ok) {
+          if (response.status === 401) {
+            return response.json().then(data => {
+              if (data.error.includes('expired')) {
+                console.error('Token expired. Redirecting to sign-in page.');
+                showSignInPage();
+                return;
+              }
+              throw new Error('Failed to fetch payments');
+            });
+          }
+          throw new Error('Failed to fetch payments');
+        }
         return response.json();
       })
       .then(data => {
@@ -1364,13 +1485,33 @@
   }
   // Added: Function to fetch and display clients on the Clients page
   function fetchClientsForDisplay() {
+    // Modified: Check if idToken exists before making the request
+    if (!idToken) {
+      console.error('No idToken available. Redirecting to sign-in page.');
+      showSignInPage();
+      return;
+    }
+
     fetch('https://payment-tracker-aswa.onrender.com/api/get-clients', {
       headers: {
-        'gmailid': currentGmailID
+        'gmailid': currentGmailID,
+        'Authorization': `Bearer ${idToken}`
       }
     })
       .then(response => {
-        if (!response.ok) throw new Error('Failed to fetch clients');
+        if (!response.ok) {
+          if (response.status === 401) {
+            return response.json().then(data => {
+              if (data.error.includes('expired')) {
+                console.error('Token expired. Redirecting to sign-in page.');
+                showSignInPage();
+                return;
+              }
+              throw new Error('Failed to fetch clients');
+            });
+          }
+          throw new Error('Failed to fetch clients');
+        }
         return response.json();
       })
       .then(data => {
@@ -1427,13 +1568,33 @@
 
   // Added: Function to fetch and display payments on the Payments page
   function fetchPaymentsForDisplay() {
+    // Modified: Check if idToken exists before making the request
+    if (!idToken) {
+      console.error('No idToken available. Redirecting to sign-in page.');
+      showSignInPage();
+      return;
+    }
+
     fetch('https://payment-tracker-aswa.onrender.com/api/get-payments', {
       headers: {
-        'gmailid': currentGmailID
+        'gmailid': currentGmailID,
+        'Authorization': `Bearer ${idToken}`
       }
     })
       .then(response => {
-        if (!response.ok) throw new Error('Failed to fetch payments');
+        if (!response.ok) {
+          if (response.status === 401) {
+            return response.json().then(data => {
+              if (data.error.includes('expired')) {
+                console.error('Token expired. Redirecting to sign-in page.');
+                showSignInPage();
+                return;
+              }
+              throw new Error('Failed to fetch payments');
+            });
+          }
+          throw new Error('Failed to fetch payments');
+        }
         return response.json();
       })
       .then(data => {
@@ -1513,17 +1674,37 @@
         newClient.Old_Type = saveClientBtn.dataset.type;
     }
 
+    // Modified: Check if idToken exists before making the request
+    if (!idToken) {
+      console.error('No idToken available. Redirecting to sign-in page.');
+      showSignInPage();
+      return;
+    }
+
     fetch(`https://payment-tracker-aswa.onrender.com${endpoint}`, {
         method: method,
         headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
         },
         body: JSON.stringify(newClient)
     })
         .then(response => {
-            if (!response.ok) throw new Error(`Failed to ${isUpdate ? 'update' : 'add'} client`);
-            return response.json();
-        })
+        if (!response.ok) {
+          if (response.status === 401) {
+            return response.json().then(data => {
+              if (data.error.includes('expired')) {
+                console.error('Token expired. Redirecting to sign-in page.');
+                showSignInPage();
+                return;
+              }
+              throw new Error(`Failed to ${isUpdate ? 'update' : 'add'} client`);
+            });
+          }
+          throw new Error(`Failed to ${isUpdate ? 'update' : 'add'} client`);
+        }
+        return response.json();
+      })
         .then(data => {
             alert(`Client ${isUpdate ? 'updated' : 'added'} successfully!`);
             resetAddClientForm();
@@ -1541,15 +1722,34 @@
 
   // Added: Function to delete a client
   function deleteClient(clientName, type) {
+    // Modified: Check if idToken exists before making the request
+    if (!idToken) {
+      console.error('No idToken available. Redirecting to sign-in page.');
+      showSignInPage();
+      return;
+    }
     fetch('https://payment-tracker-aswa.onrender.com/api/delete-client', {
       method: 'DELETE',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${idToken}`
       },
       body: JSON.stringify({ GmailID: currentGmailID, Client_Name: clientName, Type: type })
     })
       .then(response => {
-        if (!response.ok) throw new Error('Failed to delete client');
+        if (!response.ok) {
+          if (response.status === 401) {
+            return response.json().then(data => {
+              if (data.error.includes('expired')) {
+                console.error('Token expired. Redirecting to sign-in page.');
+                showSignInPage();
+                return;
+              }
+              throw new Error('Failed to delete client');
+            });
+          }
+          throw new Error('Failed to delete client');
+        }
         return response.json();
       })
       .then(data => {
