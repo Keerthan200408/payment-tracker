@@ -334,8 +334,8 @@
          data-client_id="848204323516-p15s9a090fqjtrfclco6rbocp9sov0t5.apps.googleusercontent.com"
          data-callback="handleCredentialResponse"
          data-auto_prompt="false"
-         data-auto_select="false" <!-- Disable automatic account selection -->
-         // data-login_uri="" <!-- Explicitly set to empty to ensure no redirect_uri is used -->
+         data-auto_select="false"
+         
          data-itp_support="true"> <!-- Added to support modern browser requirements -->
     </div>
     <div class="g_id_signin"
@@ -347,7 +347,7 @@
          data-logo_alignment="left">
     </div>
     <!-- Added a custom button to trigger the account selection prompt -->
-    <button id="googleSignInButton" class="btn btn-primary d-block mx-auto">Sign in with Google</button>
+    <button id="googleSignInButton" class="btn btn-primary d-block mx-auto mt-3">Sign in with Google</button>
   </div>
 
   <div class="header-section" id="headerSection" role="banner" aria-label="Page header">
@@ -519,6 +519,7 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
   <script>
+    let idToken = null;
   const addClientBtn = document.getElementById('addClientBtn');
   const tableBody = document.getElementById('tableBody');
   const searchInput = document.getElementById('searchInput');
@@ -1427,7 +1428,7 @@
       .catch(error => {
         console.error('Error fetching clients:', error);
         alert('Failed to load client data from Google Sheets.');
-        clientsData = [{ User: currentUser, Client_Name: 'Test Client', Type: 'Test Type', monthly_payment: '100' }];
+        clientsData = [{ GmailID: currentGmailID, Client_Name: 'Test Client', Type: 'Test Type', monthly_payment: '100' }];
         const rows = tableBody.querySelectorAll('tr');
         rows.forEach(row => {
           const clientSelect = row.querySelector('.client-name-input');

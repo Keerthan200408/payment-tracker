@@ -44,6 +44,8 @@ const oAuth2Client = new OAuth2Client('848204323516-p15s9a090fqjtrfclco6rbocp9so
 
 const verifyToken = async (req, res, next) => {
     const authHeader = req.headers.authorization;
+    console.log('Received Authorization header:', authHeader); // Debug log
+    console.log('Received gmailid header:', req.headers.gmailid); // Debug log
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return res.status(401).json({ error: 'No token provided' });
     }
@@ -61,10 +63,10 @@ const verifyToken = async (req, res, next) => {
         if (!req.userEmail) {
             throw new Error('No email found in token');
         }
+        console.log('Verified user email:', req.userEmail); // Debug log
         next();
     } catch (error) {
         console.error('Error verifying token:', error);
-        // Modified: Provide a more specific error message for token expiration
         if (error.message.includes('Token used too late') || error.message.includes('jwt expired')) {
             return res.status(401).json({ error: 'Token has expired. Please sign in again.' });
         }
