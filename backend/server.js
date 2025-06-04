@@ -12,7 +12,10 @@ const { GoogleAuth } = require('google-auth-library');
 
 const app = express();
 // Enable CORS to allow cross-origin requests from the frontend
-const allowedOrigins = ['https://payment-tracker-aswa.onrender.com', 'http://localhost:8080'];
+const allowedOrigins = [
+  'https://reliable-eclair-abf03c.netlify.app',
+  'http://localhost:8080', // Adjust to your local dev port
+];
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) {
@@ -169,6 +172,10 @@ app.post('/api/login', async (req, res) => {
     console.error('Error logging in:', error);
     res.status(500).json({ error: 'Failed to login' });
   }
+});
+
+app.get('/', (req, res) => {
+  res.json({ message: 'Payment Tracker Backend is running!' });
 });
 
 // CHANGE: Updated get-clients endpoint to filter by authenticated user and require session token
