@@ -675,7 +675,7 @@
       return;
     }
     idToken = response.credential;
-    console.log('Google ID Token:', idToken);
+    console.log('Set idToken:', idToken);
     fetch('https://payment-tracker-aswa.onrender.com/api/verify-token', {
       method: 'POST',
       headers: {
@@ -684,11 +684,12 @@
       body: JSON.stringify({ idToken })
     })
       .then(res => {
-        if (!res.ok) throw new Error('Failed to verify token');
+        if (!res.ok) throw new Error('Failed to verify token' + res.statusText);
         return res.json();
       })
       .then(data => {
         currentGmailID = data.email;
+        console.log('Set currentGmailID:', currentGmailID); // Debug log
         persistUserSession();
         fetchClients();
         fetchPayments();
@@ -696,9 +697,15 @@
       })
       .catch(error => {
         console.error('Error verifying token:', error);
-        alert('Failed to sign in with Google. Please try again.');
-        showSignInPage();
-      });
+        if (error.message.includes('401')) {
+            alert('Session expired or invalid. Please sign in again.');
+            clearUserSession();
+            showSignInPage();
+        } else {
+            alert('Failed to sign in with Google. Please try again.');
+            showSignInPage();
+        }
+    });
   };
 
   // Added: Function to manually trigger Google Sign-In with account selection
@@ -734,7 +741,7 @@
 
   // Added: Initialize Google Sign-In with UX mode to force account selection
   google.accounts.id.initialize({
-    client_id: '848204323516-p15s9a090fqjtrfclco6rbocp9sov0t5.apps.googleusercontent.com',
+    client_id: '848204323516-p15s9a090fqjtrfclco6rbocp9sov0t5.apps.',
     callback: handleCredentialResponse,
     auto_select: false, // Disable automatic account selection
     ux_mode: 'popup', // Use popup mode for better UX
@@ -1356,7 +1363,7 @@
       showSignInPage();
       return;
     }
-
+    console.log('Sending fetchClients with idToken:', idToken); // Debug log
     fetch('https://payment-tracker-aswa.onrender.com/api/get-clients', {
       headers: {
         'gmailid': currentGmailID, // Added user header to match backend expectation
@@ -1364,6 +1371,7 @@
       }
     })
       .then(response => {
+        console.log('fetchClients response status:', response.status); // Debug log
         if (!response.ok) {
           if (response.status === 401) {
             return response.json().then(data => {
@@ -1380,6 +1388,7 @@
         return response.json();
       })
       .then(data => {
+        console.log('fetchClients response data:', data); // Debug log
         clientsData = data;
         const rows = tableBody.querySelectorAll('tr');
         rows.forEach(row => {
