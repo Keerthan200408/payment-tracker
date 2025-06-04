@@ -280,7 +280,6 @@ app.post('/api/save-payments', verifySessionToken, async (req, res) => {
   }
 });
 
-// NEW: Endpoint to save to TempPayments sheet for refresh handling
 app.post('/api/save-temp-payments', verifySessionToken, async (req, res) => {
   try {
     const sheets = await getSheetsClient();
@@ -377,7 +376,6 @@ app.post('/api/add-client', verifySessionToken, async (req, res) => {
       requestBody: { values: clientValues },
     });
 
-    // NEW: Also append to Payments sheet
     const paymentValues = [[
       User,
       Client_Name,
@@ -541,7 +539,6 @@ app.delete('/api/delete-client', verifySessionToken, async (req, res) => {
   }
 });
 
-// NEW: Endpoint to handle CSV import
 app.post('/api/import-csv', verifySessionToken, async (req, res) => {
   try {
     const sheets = await getSheetsClient();

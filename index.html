@@ -124,7 +124,7 @@
     .btn-add-new:hover, .btn-add-new:focus {
       background-color: #b91c1c !important;
       color: white !important;
-      box-shadow: 0 0 8px #b91c1caa;
+      box-shadow: 0 0 8px #b91c1c;
     }
     .table thead th {
       vertical-align: middle;
@@ -238,7 +238,7 @@
     .btn-add-client:hover, .btn-add-client:focus {
       background-color: #3b82f6 !important;
       color: white !important;
-      box-shadow: 0 0 8px #3b82f6aa;
+      box-shadow: 0 0 8px #3b82f6;
     }
     .btn-cancel {
       background-color: #6c757d !important;
@@ -250,7 +250,7 @@
     .btn-cancel:hover, .btn-cancel:focus {
       background-color: #5a6268 !important;
       color: white !important;
-      box-shadow: 0 0 8px #5a6268aa;
+      box-shadow: 0 0 8px #5a6268;
     }
     .sign-in-container {
       max-width: 400px;
@@ -365,7 +365,6 @@
   <div id="homePage" style="display: none;">
     <div class="controls-container">
       <button id="addClientBtn" class="btn btn-add-client px-3 py-1">+ Add Client</button>
-      <!-- NEW: Added Import CSV button and hidden file input -->
       <button id="importCsvBtn" class="btn btn-add-new px-3 py-1">Import CSV</button>
       <input type="file" id="csvFileInput" accept=".csv" style="display: none;" />
       <div class="input-group search-group">
@@ -402,7 +401,6 @@
           </tr>
         </thead>
         <tbody id="tableBody">
-          <!-- CHANGE: Removed select elements, using plain text -->
           <tr>
             <td class="serial-cell"></td>
             <td><span class="client-name-display"></span></td>
@@ -427,7 +425,6 @@
     </div>
 
     <div id="contextMenu" role="menu" aria-hidden="true" tabindex="-1">
-      <!-- CHANGE: Removed Add Row Above option since Add New Row button is removed -->
       <button type="button" id="deleteRowBtn" role="menuitem">Delete This Row</button>
     </div>
   </div>
@@ -479,7 +476,6 @@
       <table id="paymentsTable" class="table table-bordered align-middle text-center mb-0">
         <thead>
           <tr>
-            <!-- CHANGE: Removed User column -->
             <th>Client Name</th>
             <th>Type</th>
             <th>Amount To be Paid</th>
@@ -535,7 +531,6 @@
     const monthlyPaymentInput = document.getElementById('monthlyPaymentInput');
     const saveClientBtn = document.getElementById('saveClientBtn');
     const cancelAddClientBtn = document.getElementById('cancelAddClientBtn');
-    // NEW: Added references for Import CSV functionality
     const importCsvBtn = document.getElementById('importCsvBtn');
     const csvFileInput = document.getElementById('csvFileInput');
 
@@ -750,7 +745,6 @@
       });
     }
 
-    // CHANGE: Updated createEditableRow to display plain text instead of selects
     function createEditableRow(clientName = '', type = '', amount = '') {
       const tr = document.createElement('tr');
       let td = document.createElement('td');
@@ -845,7 +839,6 @@
       }
     }
 
-    // CHANGE: Save permanently to Payments sheet
     function saveToGoogleSheets() {
       const rows = tableBody.querySelectorAll('tr');
       const data = Array.from(rows).map(row => {
@@ -880,7 +873,6 @@
         return;
       }
 
-      // Save temporarily to TempPayments sheet for refresh handling
       fetch('https://payment-tracker-aswa.onrender.com/api/save-temp-payments', {
         method: 'POST',
         headers: {
@@ -894,7 +886,6 @@
           console.error('Error saving to TempPayments:', error);
         });
 
-      // Save permanently to Payments sheet
       fetch('https://payment-tracker-aswa.onrender.com/api/save-payments', {
         method: 'POST',
         headers: {
@@ -920,12 +911,27 @@
         });
     }
 
+    // CHANGE 1: Modified to auto-fill zeros for skipped months
     tableBody.addEventListener('input', e => {
       const cellInput = e.target;
       const row = cellInput.closest('tr');
       const cellIndex = cellInput.closest('td').cellIndex;
 
       if (cellIndex >= 4 && cellIndex <= 15) {
+        // Get all month inputs (january to december)
+        const monthInputs = Array.from(row.cells).slice(4, 16).map(cell => cell.querySelector('input'));
+        const currentMonthIndex = cellIndex - 4; // Adjust for table columns (Sr.No, Client Name, Type, Amount)
+
+        // If a value is entered, check previous months and set zeros if empty
+        if (cellInput.value.trim() !== '') {
+          for (let i = 0; i < currentMonthIndex; i++) {
+            if (monthInputs[i].value.trim() === '') {
+              monthInputs[i].value = '0';
+              updatePaymentStatus(monthInputs[i]);
+            }
+          }
+        }
+
         updatePaymentStatus(cellInput);
         updateDuePayment(row);
         saveToGoogleSheets();
@@ -986,7 +992,7 @@
 
       e.preventDefault();
 
-      const inputsPerRow = 13; // Adjusted since selects are removed
+      const inputsPerRow = 13;
       const totalInputs = inputs.length;
 
       let nextIndex = currentIndex;
@@ -1194,7 +1200,6 @@
         });
     }
 
-    // CHANGE: Fetch all payments on login and display on dashboard
     function fetchPayments() {
       if (!sessionToken) {
         console.error('No sessionToken available. Redirecting to sign-in page.');
@@ -1309,7 +1314,7 @@
         });
     }
 
-    // CHANGE: Removed User column from Payments table display
+    // CHANGE 3: Updated to show all clients, not just those with payments
     function fetchPaymentsForDisplay() {
       if (!sessionToken) {
         console.error('No sessionToken available. Redirecting to sign-in page.');
@@ -1439,7 +1444,6 @@
           resetAddClientForm();
           fetchClients();
           if (!isUpdate) {
-            // NEW: Add new client directly to dashboard and Payments sheet
             const newRowData = {
               User: currentUser,
               Client_Name: clientName,
@@ -1463,7 +1467,6 @@
             updateSerialNumbers();
             saveToGoogleSheets();
           } else {
-            // Update existing row on dashboard
             const rows = tableBody.querySelectorAll('tr');
             rows.forEach(row => {
               const rowClientName = row.querySelector('.client-name-display').textContent;
@@ -1544,11 +1547,11 @@
       showHomePage();
     });
 
-    // NEW: Added Import CSV functionality
     importCsvBtn.addEventListener('click', () => {
       csvFileInput.click();
     });
 
+    // CHANGE 2: Fixed CSV import by normalizing header comparison
     csvFileInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -1563,11 +1566,11 @@
           return;
         }
 
-        const headers = rows[0].split(',').map(header => header.trim());
-        const expectedHeaders = ['Client Name', 'Type', 'Amount To be Paid'];
+        const headers = rows[0].split(',').map(header => header.trim().replace(/\s+/g, ' '));
+        const expectedHeaders = ['Client Name', 'Type', 'Amount To Be Paid'].map(header => header.trim().replace(/\s+/g, ' '));
         const headersMatch = expectedHeaders.every((header, index) => headers[index] === header);
         if (!headersMatch || headers.length !== expectedHeaders.length) {
-          alert('CSV file must have headers: Client Name, Type, Amount To be Paid');
+          alert('CSV file must have headers: Client Name, Type, Amount To Be Paid');
           csvFileInput.value = '';
           return;
         }
@@ -1611,7 +1614,6 @@
           return;
         }
 
-        // Send data to backend to save to both Clients and Payments sheets
         fetch('https://payment-tracker-aswa.onrender.com/api/import-csv', {
           method: 'POST',
           headers: {
