@@ -365,14 +365,15 @@
 
   <div id="homePage" style="display: none;">
     <div class="controls-container">
-      <button id="addClientBtn" class="btn btn-add-client px-3 py-1">+ Add Client</button>
-      <div class="input-group search-group">
-        <input id="searchInput" type="text" class="form-control" placeholder="Search Client Name" aria-label="Search Client Name" />
-        <button id="searchBtn" class="btn btn-outline-primary" type="button">Search</button>
-        <button id="clearSearchBtn" class="btn btn-outline-secondary" type="button" title="Clear Search">×</button>
-      </div>
-      <button onclick="saveDataToDB()" class="btn btn-success">Save to DB</button>
-    </div>
+  <button id="addClientBtn" class="btn btn-add-client px-3 py-1">+ Add Client</button>
+  <button id="addNewRowBtn" class="btn btn-add-new px-3 py-1">Add New Row</button>
+  <div class="input-group search-group">
+    <input id="searchInput" type="text" class="form-control" placeholder="Search Client Name" aria-label="Search Client Name" />
+    <button id="searchBtn" class="btn btn-outline-primary" type="button">Search</button>
+    <button id="clearSearchBtn" class="btn btn-outline-secondary" type="button" title="Clear Search">×</button>
+  </div>
+  <button onclick="saveDataToDB()" class="btn btn-success">Save to DB</button>
+</div>
 
     <div class="table-responsive">
       <table id="mainTable" class="table table-bordered align-middle text-center mb-0">
@@ -551,6 +552,18 @@
     const monthlyPaymentInput = document.getElementById('monthlyPaymentInput');
     const saveClientBtn = document.getElementById('saveClientBtn');
     const cancelAddClientBtn = document.getElementById('cancelAddClientBtn');
+    const addNewRowBtn = document.getElementById('addNewRowBtn');
+
+addNewRowBtn.addEventListener('click', () => {
+  const newRow = createEditableRow();
+  tableBody.appendChild(newRow);
+  updateSerialNumbers();
+  saveToGoogleSheets();
+  const firstInput = newRow.querySelector('.form-control');
+  if (firstInput) {
+    firstInput.focus();
+  }
+});
     // CHANGE: Added references to new sign-in elements
     const loginForm = document.getElementById('loginForm');
     const signupForm = document.getElementById('signupForm');
@@ -990,6 +1003,17 @@
         typeSelect.innerHTML = '<option value="">Select Type</option>';
         amountSelect.innerHTML = '<option value="">Select Amount</option>';
         amountSelect.disabled = true;
+
+        // NEW: Clear payment data if client is deselected
+  if (!clientName) {
+    const monthInputs = Array.from(row.cells).slice(4, 16).map(cell => cell.querySelector('input'));
+    monthInputs.forEach(input => {
+      input.value = '';
+      input.classList.remove('payment-full', 'payment-partial', 'payment-none');
+    });
+    const duePaymentDisplay = row.querySelector('.due-payment-display');
+    duePaymentDisplay.value = '0.00';
+  }
 
         const clientTypes = [...new Set(userClients.filter(client => client.Client_Name === clientName).map(client => client.Type))];
         clientTypes.forEach(type => {
@@ -1725,8 +1749,20 @@
         .then(data => {
           alert(`Client ${isUpdate ? 'updated' : 'added'} successfully!`);
           resetAddClientForm();
-          fetchClients();
-          showHomePage();
+          fetchClients().then(() => {
+    // NEW: Add a new row to the dashboard with the new client pre-selected
+    if (!isUpdate) { // Only add a new row for new clients, not updates
+      const newRow = createEditableRow(clientName, type, paymentValue);
+      tableBody.appendChild(newRow);
+      updateSerialNumbers();
+      saveToGoogleSheets();
+      const firstInput = newRow.querySelector('.form-control');
+      if (firstInput) {
+        firstInput.focus();
+      }
+    }
+    showHomePage();
+  });
         })
         .catch(error => {
           console.error(`Error ${isUpdate ? 'updating' : 'adding'} client:`, error);
