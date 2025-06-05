@@ -167,76 +167,36 @@
       return (
         <div className="min-h-screen bg-gray-50">
           {page === 'signIn' && (
-            <SignInPage setSessionToken={setSessionToken} setCurrentUser={setCurrentUser} setPage={setPage} />
+            <>
+              <SignInPage setSessionToken={setSessionToken} setCurrentUser={setCurrentUser} setPage={setPage} />
+              <div className="text-center mt-4 text-red-500">Debug: SignInPage should be above</div>
+            </>
           )}
           {page !== 'signIn' && (
-            <div className="flex h-screen">
-              {/* Sidebar Navigation */}
-              <nav className="w-64 bg-indigo-800 text-white flex flex-col p-4">
-                <h1 className="text-2xl font-bold mb-8">Payment Tracker</h1>
-                <ul>
-                  <li>
-                    <button
-                      onClick={() => setPage('home')}
-                      className={`w-full text-left py-3 px-4 rounded-lg mb-2 flex items-center ${page === 'home' ? 'bg-indigo-600' : 'hover:bg-indigo-700'} transition duration-200`}
-                    >
-                      <i className="fas fa-home mr-3"></i> Dashboard
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      onClick={() => setPage('clients')}
-                      className={`w-full text-left py-3 px-4 rounded-lg mb-2 flex items-center ${page === 'clients' ? 'bg-indigo-600' : 'hover:bg-indigo-700'} transition duration-200`}
-                    >
-                      <i className="fas fa-users mr-3"></i> Clients
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      onClick={() => setPage('addClient')}
-                      className={`w-full text-left py-3 px-4 rounded-lg mb-2 flex items-center ${page === 'addClient' ? 'bg-indigo-600' : 'hover:bg-indigo-700'} transition duration-200`}
-                    >
-                      <i className="fas fa-user-plus mr-3"></i> Add Client
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      onClick={() => setPage('payments')}
-                      className={`w-full text-left py-3 px-4 rounded-lg mb-2 flex items-center ${page === 'payments' ? 'bg-indigo-600' : 'hover:bg-indigo-700'} transition duration-200`}
-                    >
-                      <i className="fas fa-money-bill-wave mr-3"></i> Payments
-                    </button>
-                  </li>
-                  <li>
-                    <label className="w-full text-left py-3 px-4 rounded-lg mb-2 flex items-center hover:bg-indigo-700 transition duration-200 cursor-pointer">
-                      <i className="fas fa-upload mr-3"></i> Import CSV
-                      <input
-                        type="file"
-                        accept=".csv"
-                        onChange={importCsv}
-                        ref={csvFileInputRef}
-                        className="hidden"
-                      />
-                    </label>
-                  </li>
-                  <li>
-                    <button
-                      onClick={logout}
-                      className="w-full text-left py-3 px-4 rounded-lg flex items-center hover:bg-indigo-700 transition duration-200"
-                    >
-                      <i className="fas fa-sign-out-alt mr-3"></i> Logout
-                    </button>
-                  </li>
-                </ul>
-              </nav>
-              {/* Main Content */}
-              <main className="flex-1 p-8 overflow-y-auto">
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-3xl font-semibold text-gray-800">
-                    {page === 'home' ? 'Dashboard' : page === 'clients' ? 'Clients' : page === 'addClient' ? 'Add Client' : 'Payments'}
-                  </h2>
-                  <div className="text-gray-600">Welcome, {currentUser}</div>
+            <div>
+              <nav className="bg-teal-600 text-white p-5 flex justify-between items-center shadow-md">
+                <div className="space-x-6">
+                  <button onClick={() => setPage('home')} className="text-lg hover:text-teal-100 transition duration-200">Home</button>
+                  <button onClick={() => setPage('clients')} className="text-lg hover:text-teal-100 transition duration-200">Clients</button>
+                  <button onClick={() => setPage('addClient')} className="text-lg hover:text-teal-100 transition duration-200">Add Client</button>
+                  <button onClick={() => setPage('payments')} className="text-lg hover:text-teal-100 transition duration-200">Payments</button>
+                  <label className="text-lg hover:text-teal-100 transition duration-200 cursor-pointer">
+                    Import CSV
+                    <input
+                      type="file"
+                      accept=".csv"
+                      onChange={importCsv}
+                      ref={csvFileInputRef}
+                      className="hidden"
+                    />
+                  </label>
                 </div>
+                <div className="space-x-6">
+                  <span className="text-lg">Welcome, {currentUser}</span>
+                  <button onClick={logout} className="text-lg hover:text-teal-100 transition duration-200">Logout</button>
+                </div>
+              </nav>
+              <div className="p-8">
                 {page === 'home' && (
                   <HomePage clientsData={clientsData} paymentsData={paymentsData} />
                 )}
@@ -265,9 +225,10 @@
                     handleSessionError={handleSessionError}
                   />
                 )}
-              </main>
+              </div>
             </div>
           )}
+          <div className="text-center mt-4">Debug: App rendered, current page: {page}</div>
         </div>
       );
     };
@@ -302,49 +263,38 @@
         }
       };
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-100 to-gray-200">
-          <div className="w-full max-w-md p-8 bg-white rounded-xl shadow-lg">
-            <h2 className="text-3xl font-bold text-center text-indigo-800 mb-6">
-              {isLogin ? 'Login' : 'Sign Up'}
-            </h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
-                  placeholder="Enter your username"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
-                  placeholder="Enter your password"
-                />
-              </div>
-              <button
-                onClick={isLogin ? handleLogin : handleSignup}
-                className="w-full py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition duration-200 font-semibold"
-              >
-                {isLogin ? 'Login' : 'Sign Up'}
-              </button>
-              <p className="text-center text-sm text-gray-600">
-                {isLogin ? "Don't have an account?" : 'Already have an account?'}
-                <button
-                  onClick={() => setIsLogin(!isLogin)}
-                  className="text-indigo-600 hover:underline ml-1"
-                >
-                  {isLogin ? 'Sign Up' : 'Login'}
-                </button>
-              </p>
-            </div>
-          </div>
+        <div className="max-w-md mx-auto mt-24 p-8 bg-white rounded-xl shadow-xl">
+          <div>Debug: SignInPage is rendering</div>
+          <h2 className="text-3xl font-bold mb-6 text-teal-600">{isLogin ? 'Login' : 'Sign Up'}</h2>
+          <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Username"
+            className="w-full p-3 mb-5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
+          />
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password"
+            className="w-full p-3 mb-5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
+          />
+          <button
+            onClick={isLogin ? handleLogin : handleSignup}
+            className="w-full p-3 bg-teal-500 text-white rounded-lg hover:bg-teal-600 transition duration-200 font-semibold"
+          >
+            {isLogin ? 'Login' : 'Sign Up'}
+          </button>
+          <p className="mt-5 text-center text-gray-600">
+            {isLogin ? "Don't have an account?" : 'Already have an account?'}
+            <button
+              onClick={() => setIsLogin(!isLogin)}
+              className="text-teal-500 hover:underline ml-1"
+            >
+              {isLogin ? 'Sign Up' : 'Login'}
+            </button>
+          </p>
         </div>
       );
     };
@@ -353,32 +303,16 @@
       const totalClients = clientsData.length;
       const totalPaymentsDue = paymentsData.reduce((sum, payment) => sum + (parseFloat(payment[16]) || 0), 0);
       return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <div className="p-6 bg-white rounded-xl shadow-md hover:shadow-lg transition">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-800">Total Clients</h3>
-                <p className="text-3xl font-bold text-indigo-600">{totalClients}</p>
-              </div>
-              <i className="fas fa-users text-4xl text-indigo-200"></i>
+        <div>
+          <h2 className="text-3xl font-bold mb-6 text-gray-800">Dashboard</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="p-6 bg-white rounded-xl shadow-xl">
+              <h3 className="text-xl font-semibold text-gray-700">Total Clients</h3>
+              <p className="text-3xl font-bold text-teal-600 mt-2">{totalClients}</p>
             </div>
-          </div>
-          <div className="p-6 bg-white rounded-xl shadow-md hover:shadow-lg transition">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-800">Payments Due</h3>
-                <p className="text-3xl font-bold text-red-600">₹{totalPaymentsDue.toFixed(2)}</p>
-              </div>
-              <i className="fas fa-money-bill-wave text-4xl text-red-200"></i>
-            </div>
-          </div>
-          <div className="p-6 bg-white rounded-xl shadow-md hover:shadow-lg transition">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-800">Active Subscriptions</h3>
-                <p className="text-3xl font-bold text-green-600">{clientsData.filter(c => c[3] === 'subscription').length}</p>
-              </div>
-              <i className="fas fa-check-circle text-4xl text-green-200"></i>
+            <div className="p-6 bg-white rounded-xl shadow-xl">
+              <h3 className="text-xl font-semibold text-gray-700">Total Payments Due</h3>
+              <p className="text-3xl font-bold text-red-500 mt-2">₹{totalPaymentsDue.toFixed(2)}</p>
             </div>
           </div>
         </div>
@@ -430,106 +364,88 @@
 
       return (
         <div>
-          <div className="overflow-x-auto bg-white rounded-xl shadow-md">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+          <h2 className="text-3xl font-bold mb-6 text-gray-800">Clients</h2>
+          <div className="overflow-x-auto">
+            <table className="min-w-full bg-white border border-gray-200 rounded-xl shadow-xl">
+              <thead className="bg-gray-100">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Monthly Payment</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  <th className="border-b border-gray-200 p-4 text-left text-gray-600 font-semibold">Client Name</th>
+                  <th className="border-b border-gray-200 p-4 text-left text-gray-600 font-semibold">Email</th>
+                  <th className="border-b border-gray-200 p-4 text-left text-gray-600 font-semibold">Type</th>
+                  <th className="border-b border-gray-200 p-4 text-left text-gray-600 font-semibold">Monthly Payment</th>
+                  <th className="border-b border-gray-200 p-4 text-left text-gray-600 font-semibold">Actions</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {clientsData.length === 0 ? (
-                  <tr>
-                    <td colSpan="5" className="px-6 py-4 text-center text-gray-500">No clients found.</td>
+              <tbody>
+                {clientsData.map((client, index) => (
+                  <tr key={index} className="hover:bg-gray-50 transition">
+                    <td className="border-b border-gray-200 p-4 text-gray-800">{client[1]}</td>
+                    <td className="border-b border-gray-200 p-4 text-gray-600">{client[2]}</td>
+                    <td className="border-b border-gray-200 p-4 text-gray-600">{client[3]}</td>
+                    <td className="border-b border-gray-200 p-4 text-gray-600">₹{client[4]}</td>
+                    <td className="border-b border-gray-200 p-4">
+                      <button
+                        onClick={() => handleEdit(client)}
+                        className="text-teal-500 hover:text-teal-700 transition duration-200 mr-3 font-semibold"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(client)}
+                        className="text-red-500 hover:text-red-700 transition duration-200 font-semibold"
+                      >
+                        Delete
+                      </button>
+                    </td>
                   </tr>
-                ) : (
-                  clientsData.map((client, index) => (
-                    <tr key={index} className="hover:bg-gray-50 transition">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{client[1]}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{client[2]}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{client[3]}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">₹{client[4]}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button
-                          onClick={() => handleEdit(client)}
-                          className="text-indigo-600 hover:text-indigo-900 mr-4"
-                        >
-                          <i className="fas fa-edit"></i>
-                        </button>
-                        <button
-                          onClick={() => handleDelete(client)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          <i className="fas fa-trash-alt"></i>
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
+                ))}
               </tbody>
             </table>
           </div>
           {editingClient && (
-            <div className="mt-6 p-6 bg-white rounded-xl shadow-md">
-              <h3 className="text-xl font-semibold text-gray-800 mb-4">Edit Client</h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Client Name</label>
-                  <input
-                    type="text"
-                    value={clientName}
-                    onChange={(e) => setClientName(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                  <input
-                    type="email"
-                    value={clientEmail}
-                    onChange={(e) => setClientEmail(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-                  <select
-                    value={clientType}
-                    onChange={(e) => setClientType(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="subscription">Subscription</option>
-                    <option value="one-time">One-Time</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Monthly Payment</label>
-                  <input
-                    type="number"
-                    value={monthlyPayment}
-                    onChange={(e) => setMonthlyPayment(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div className="flex space-x-4">
-                  <button
-                    onClick={handleUpdate}
-                    className="flex-1 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition duration-200 font-semibold"
-                  >
-                    Update Client
-                  </button>
-                  <button
-                    onClick={() => setEditingClient(null)}
-                    className="flex-1 py-3 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 transition duration-200 font-semibold"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
+            <div className="mt-8 p-6 bg-white rounded-xl shadow-xl">
+              <h3 className="text-xl font-semibold mb-5 text-gray-800">Edit Client</h3>
+              <input
+                type="text"
+                value={clientName}
+                onChange={(e) => setClientName(e.target.value)}
+                placeholder="Client Name"
+                className="w-full p-3 mb-5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
+              />
+              <input
+                type="email"
+                value={clientEmail}
+                onChange={(e) => setClientEmail(e.target.value)}
+                placeholder="Email"
+                className="w-full p-3 mb-5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
+              />
+              <select
+                value={clientType}
+                onChange={(e) => setClientType(e.target.value)}
+                className="w-full p-3 mb-5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
+              >
+                <option value="subscription">Subscription</option>
+                <option value="one-time">One-Time</option>
+              </select>
+              <input
+                type="number"
+                value={monthlyPayment}
+                onChange={(e) => setMonthlyPayment(e.target.value)}
+                placeholder="Monthly Payment"
+                className="w-full p-3 mb-5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
+              />
+              <button
+                onClick={handleUpdate}
+                className="w-full p-3 bg-teal-500 text-white rounded-lg hover:bg-teal-600 transition duration-200 font-semibold"
+              >
+                Update Client
+              </button>
+              <button
+                onClick={() => setEditingClient(null)}
+                className="w-full p-3 mt-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition duration-200 font-semibold"
+              >
+                Cancel
+              </button>
             </div>
           )}
         </div>
@@ -557,64 +473,50 @@
       };
 
       return (
-        <div className="p-6 bg-white rounded-xl shadow-md">
-          <h3 className="text-xl font-semibold text-gray-800 mb-4">Add New Client</h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Client Name</label>
-              <input
-                type="text"
-                value={clientName}
-                onChange={(e) => setClientName(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Enter client name"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-              <input
-                type="email"
-                value={clientEmail}
-                onChange={(e) => setClientEmail(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Enter client email"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-              <select
-                value={clientType}
-                onChange={(e) => setClientType(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="subscription">Subscription</option>
-                <option value="one-time">One-Time</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Monthly Payment</label>
-              <input
-                type="number"
-                value={monthlyPayment}
-                onChange={(e) => setMonthlyPayment(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Enter monthly payment"
-              />
-            </div>
-            <div className="flex space-x-4">
-              <button
-                onClick={handleSubmit}
-                className="flex-1 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition duration-200 font-semibold"
-              >
-                Add Client
-              </button>
-              <button
-                onClick={() => setPage('clients')}
-                className="flex-1 py-3 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 transition duration-200 font-semibold"
-              >
-                Cancel
-              </button>
-            </div>
+        <div>
+          <h2 className="text-3xl font-bold mb-6 text-gray-800">Add Client</h2>
+          <div className="p-6 bg-white rounded-xl shadow-xl">
+            <input
+              type="text"
+              value={clientName}
+              onChange={(e) => setClientName(e.target.value)}
+              placeholder="Client Name"
+              className="w-full p-3 mb-5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
+            />
+            <input
+              type="email"
+              value={clientEmail}
+              onChange={(e) => setClientEmail(e.target.value)}
+              placeholder="Email"
+              className="w-full p-3 mb-5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
+            />
+            <select
+              value={clientType}
+              onChange={(e) => setClientType(e.target.value)}
+              className="w-full p-3 mb-5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
+            >
+              <option value="subscription">Subscription</option>
+              <option value="one-time">One-Time</option>
+            </select>
+            <input
+              type="number"
+              value={monthlyPayment}
+              onChange={(e) => setMonthlyPayment(e.target.value)}
+              placeholder="Monthly Payment"
+              className="w-full p-3 mb-5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
+            />
+            <button
+              onClick={handleSubmit}
+              className="w-full p-3 bg-teal-500 text-white rounded-lg hover:bg-teal-600 transition duration-200 font-semibold"
+            >
+              Add Client
+            </button>
+            <button
+              onClick={() => setPage('clients')}
+              className="w-full p-3 mt-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition duration-200 font-semibold"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       );
@@ -656,59 +558,52 @@
 
       return (
         <div>
-          <div className="overflow-x-auto bg-white rounded-xl shadow-md">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+          <h2 className="text-3xl font-bold mb-6 text-gray-800">Payments</h2>
+          <div className="overflow-x-auto">
+            <table className="min-w-full bg-white border border-gray-200 rounded-xl shadow-xl">
+              <thead className="bg-gray-100">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                  <th className="border-b border-gray-200 p-4 text-left text-gray-600 font-semibold">Client Name</th>
+                  <th className="border-b border-gray-200 p-4 text-left text-gray-600 font-semibold">Type</th>
+                  <th className="border-b border-gray-200 p-4 text-left text-gray-600 font-semibold">Amount</th>
                   {months.map((month, idx) => (
-                    <th key={idx} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{month}</th>
+                    <th key={idx} className="border-b border-gray-200 p-4 text-left text-gray-600 font-semibold">{month}</th>
                   ))}
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Payment</th>
+                  <th className="border-b border-gray-200 p-4 text-left text-gray-600 font-semibold">Due Payment</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {paymentsData.length === 0 ? (
-                  <tr>
-                    <td colSpan="16" className="px-6 py-4 text-center text-gray-500">No payments found.</td>
+              <tbody>
+                {paymentsData.map((payment, index) => (
+                  <tr key={index} className="hover:bg-gray-50 transition">
+                    <td className="border-b border-gray-200 p-4 text-gray-800">{payment[1]}</td>
+                    <td className="border-b border-gray-200 p-4 text-gray-600">{payment[2]}</td>
+                    <td className="border-b border-gray-200 p-4 text-gray-600">₹{payment[3]}</td>
+                    {months.map((_, monthIndex) => (
+                      <td key={monthIndex} className="border-b border-gray-200 p-4">
+                        <input
+                          type="checkbox"
+                          checked={
+                            (monthPayments[index]?.[monthIndex] !== undefined
+                              ? monthPayments[index]?.[monthIndex]
+                              : payment[4 + monthIndex]) || false
+                          }
+                          onChange={(e) => handlePaymentChange(index, monthIndex, e.target.checked)}
+                          className="h-5 w-5 text-teal-500 rounded focus:ring-teal-500"
+                        />
+                      </td>
+                    ))}
+                    <td className="border-b border-gray-200 p-4 text-gray-600">₹{payment[16]}</td>
                   </tr>
-                ) : (
-                  paymentsData.map((payment, index) => (
-                    <tr key={index} className="hover:bg-gray-50 transition">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{payment[1]}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{payment[2]}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">₹{payment[3]}</td>
-                      {months.map((_, monthIndex) => (
-                        <td key={monthIndex} className="px-6 py-4 whitespace-nowrap text-sm">
-                          <input
-                            type="checkbox"
-                            checked={
-                              (monthPayments[index]?.[monthIndex] !== undefined
-                                ? monthPayments[index]?.[monthIndex]
-                                : payment[4 + monthIndex]) || false
-                            }
-                            onChange={(e) => handlePaymentChange(index, monthIndex, e.target.checked)}
-                            className="h-5 w-5 text-indigo-600 rounded focus:ring-indigo-500"
-                          />
-                        </td>
-                      ))}
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">₹{payment[16]}</td>
-                    </tr>
-                  ))
-                )}
+                ))}
               </tbody>
             </table>
           </div>
-          <div className="mt-6 flex justify-end">
-            <button
-              onClick={handleSavePayments}
-              className="py-3 px-6 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition duration-200 font-semibold"
-            >
-              Save Payments
-            </button>
-          </div>
+          <button
+            onClick={handleSavePayments}
+            className="mt-6 p-3 bg-teal-500 text-white rounded-lg hover:bg-teal-600 transition duration-200 font-semibold"
+          >
+            Save Payments
+          </button>
         </div>
       );
     };
