@@ -1,0 +1,13 @@
+{
+  "name": "payment-tracker-frontend",
+  "version": "1.0.0",
+  "description": "Frontend for Payment Tracking App",
+  "scripts": {
+    "build:css": "tailwindcss -i ./src/input.css -o ./src/output.css --minify",
+    "watch:css": "tailwindcss -i ./src/input.css -o ./src/output.css --watch"
+  },
+  "dependencies": {
+    "tailwindcss": "^3.4.3"
+  },
+  "license": "MIT"
+}

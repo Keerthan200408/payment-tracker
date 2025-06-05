@@ -12,6 +12,11 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Add root route for debugging
+app.get('/', (req, res) => {
+  res.send('Payment Tracker Backend is running!');
+});
+
 // Google Sheets setup
 const auth = new google.auth.GoogleAuth({
   credentials: JSON.parse(process.env.GOOGLE_CREDENTIALS),
