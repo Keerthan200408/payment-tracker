@@ -8,13 +8,12 @@
   <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.22.5/babel.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/axios@1.4.0/dist/axios.min.js"></script>
-  <link rel="stylesheet" href="./src/output.css" />
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
 </head>
-<body>
+<body className="bg-gray-50">
   <div id="root"></div>
   <script type="text/babel">
-    console.log('Starting React app...');
     const { useState, useEffect, useRef } = React;
 
     // Error Boundary Component
@@ -31,12 +30,12 @@
       render() {
         if (this.state.hasError) {
           return (
-            <div className="p-4 bg-red-100 text-red-700 rounded-xl m-4">
-              <h2 className="text-xl font-semibold">Something went wrong.</h2>
+            <div className="p-4 bg-red-100 text-red-700 rounded-lg m-4">
+              <h2 className="text-xl font-bold">Something went wrong.</h2>
               <p>{this.state.error?.toString()}</p>
               <button
                 onClick={() => window.location.reload()}
-                className="mt-2 bg-red-600 text-white px-4 py-2 rounded-xl hover:bg-red-700 transition duration-200"
+                className="mt-2 bg-red-600 text-white px-4 py-2 rounded-lg"
               >
                 Reload Page
               </button>
@@ -174,7 +173,6 @@
       };
 
       const importCsv = async (e) => {
-        console.log('App component rendering');
         const file = e.target.files[0];
         if (!file) return;
 
@@ -218,85 +216,107 @@
         <div className="min-h-screen bg-gray-50">
           {page === 'signIn' && <SignInPage setSessionToken={setSessionToken} setCurrentUser={setCurrentUser} setPage={setPage} />}
           {page !== 'signIn' && (
-            <div className="flex flex-col h-screen">
-              <header className="bg-gradient-to-r from-teal-600 to-teal-400 text-white text-xl font-semibold p-5 flex items-center justify-between shadow-xl">
-                <div className="flex items-center">
-                  <button onClick={toggleSidebar} className="mr-4 focus:outline-none">
+            <div className="flex h-screen">
+              <nav className={`bg-white w-64 p-4 fixed top-0 h-full transition-transform duration-300 border-r border-gray-200 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} z-50`}>
+                <div className="flex items-center mb-6">
+                  <i className="fas fa-money-bill-wave text-2xl mr-2"></i>
+                  <h1 className="text-xl font-semibold">Payment Tracker</h1>
+                </div>
+                <ul className="space-y-2">
+                  <li>
+                    <button onClick={() => { setPage('home'); setIsSidebarOpen(false); }} className="w-full text-left p-2 hover:bg-gray-100 rounded-lg flex items-center">
+                      <i className="fas fa-tachometer-alt mr-2"></i> Dashboard
+                    </button>
+                  </li>
+                  <li>
+                    <button onClick={() => { setPage('clients'); setIsSidebarOpen(false); }} className="w-full text-left p-2 hover:bg-gray-100 rounded-lg flex items-center">
+                      <i className="fas fa-users mr-2"></i> Clients
+                    </button>
+                  </li>
+                  <li>
+                    <button onClick={() => { setPage('payments'); setIsSidebarOpen(false); }} className="w-full text-left p-2 hover:bg-gray-100 rounded-lg flex items-center">
+                      <i className="fas fa-money-bill-wave mr-2"></i> Payments
+                    </button>
+                  </li>
+                  <li>
+                    <button onClick={() => { alert('Reports coming soon!'); setIsSidebarOpen(false); }} className="w-full text-left p-2 hover:bg-gray-100 rounded-lg flex items-center">
+                      <i className="fas fa-chart-line mr-2"></i> Reports
+                    </button>
+                  </li>
+                  <li>
+                    <button onClick={logout} className="w-full text-left p-2 hover:bg-gray-100 rounded-lg text-red-500 flex items-center">
+                      <i className="fas fa-sign-out-alt mr-2"></i> Logout
+                    </button>
+                  </li>
+                </ul>
+              </nav>
+              {isSidebarOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={toggleSidebar}></div>}
+
+              <main className="flex-1 p-6 overflow-y-auto">
+                <header className="flex items-center justify-between mb-6">
+                  <button onClick={toggleSidebar} className="focus:outline-none">
                     <i className={`fas fa-${isSidebarOpen ? 'times' : 'bars'} text-xl`}></i>
                   </button>
-                  <span>Payment Tracking App</span>
-                </div>
-              </header>
+                  <div className="flex items-center space-x-4">
+                    <i className="fas fa-bell"></i>
+                    <i className="fas fa-user-circle text-2xl"></i>
+                  </div>
+                </header>
 
-              <div className="flex flex-1 overflow-hidden">
-                <nav className={`bg-gray-900 text-gray-100 w-64 p-6 fixed top-0 h-full transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} z-50 shadow-xl`}>
-                  <ul className="space-y-3">
-                    <li><button onClick={() => { setPage('home'); setIsSidebarOpen(false); }} className="w-full text-left p-3 hover:bg-gray-700 rounded-xl transition duration-200"><i className="fas fa-tachometer-alt mr-3"></i> Dashboard</button></li>
-                    <li><button onClick={() => { setPage('clients'); setIsSidebarOpen(false); }} className="w-full text-left p-3 hover:bg-gray-700 rounded-xl transition duration-200"><i className="fas fa-users mr-3"></i> Clients</button></li>
-                    <li><button onClick={() => { setPage('payments'); setIsSidebarOpen(false); }} className="w-full text-left p-3 hover:bg-gray-700 rounded-xl transition duration-200"><i className="fas fa-money-bill-wave mr-3"></i> Payments</button></li>
-                    <li><button onClick={() => { alert('Reports coming soon!'); setIsSidebarOpen(false); }} className="w-full text-left p-3 hover:bg-gray-700 rounded-xl transition duration-200"><i className="fas fa-chart-line mr-3"></i> Reports</button></li>
-                    <li><button onClick={logout} className="w-full text-left p-3 hover:bg-gray-700 rounded-xl transition duration-200 text-red-400"><i className="fas fa-sign-out-alt mr-3"></i> Logout</button></li>
-                  </ul>
-                </nav>
-                {isSidebarOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={toggleSidebar}></div>}
-
-                <main className="flex-1 p-6 overflow-y-auto">
-                  {page === 'home' && (
-                    <HomePage
-                      paymentsData={paymentsData}
-                      setPaymentsData={setPaymentsData}
-                      searchQuery={searchQuery}
-                      setSearchQuery={setSearchQuery}
-                      monthFilter={monthFilter}
-                      setMonthFilter={setMonthFilter}
-                      statusFilter={statusFilter}
-                      setStatusFilter={setStatusFilter}
-                      filterOptionsVisible={filterOptionsVisible}
-                      setFilterOptionsVisible={setFilterOptionsVisible}
-                      updatePayment={updatePayment}
-                      handleContextMenu={handleContextMenu}
-                      contextTargetRow={contextTargetRow}
-                      hideContextMenu={hideContextMenu}
-                      deleteRow={deleteRow}
-                      setPage={setPage}
-                      csvFileInputRef={csvFileInputRef}
-                      importCsv={importCsv}
-                    />
-                  )}
-                  {page === 'addClient' && (
-                    <AddClientPage
-                      setPage={setPage}
-                      fetchClients={fetchClients}
-                      fetchPayments={fetchPayments}
-                      sessionToken={sessionToken}
-                      currentUser={currentUser}
-                      editClient={editClient}
-                      setEditClient={setEditClient}
-                    />
-                  )}
-                  {page === 'clients' && (
-                    <ClientsPage
-                      clientsData={clientsData}
-                      setPage={setPage}
-                      setEditClient={setEditClient}
-                      fetchClients={fetchClients}
-                      fetchPayments={fetchPayments}
-                      sessionToken={sessionToken}
-                    />
-                  )}
-                  {page === 'payments' && (
-                    <PaymentsPage
-                      paymentsData={paymentsData}
-                      fetchClients={fetchClients}
-                      fetchPayments={fetchPayments}
-                      sessionToken={sessionToken}
-                    />
-                  )}
-                </main>
-              </div>
+                {page === 'home' && (
+                  <HomePage
+                    paymentsData={paymentsData}
+                    setPaymentsData={setPaymentsData}
+                    searchQuery={searchQuery}
+                    setSearchQuery={setSearchQuery}
+                    monthFilter={monthFilter}
+                    setMonthFilter={setMonthFilter}
+                    statusFilter={statusFilter}
+                    setStatusFilter={setStatusFilter}
+                    filterOptionsVisible={filterOptionsVisible}
+                    setFilterOptionsVisible={setFilterOptionsVisible}
+                    updatePayment={updatePayment}
+                    handleContextMenu={handleContextMenu}
+                    contextTargetRow={contextTargetRow}
+                    hideContextMenu={hideContextMenu}
+                    deleteRow={deleteRow}
+                    setPage={setPage}
+                    csvFileInputRef={csvFileInputRef}
+                    importCsv={importCsv}
+                  />
+                )}
+                {page === 'addClient' && (
+                  <AddClientPage
+                    setPage={setPage}
+                    fetchClients={fetchClients}
+                    fetchPayments={fetchPayments}
+                    sessionToken={sessionToken}
+                    currentUser={currentUser}
+                    editClient={editClient}
+                    setEditClient={setEditClient}
+                  />
+                )}
+                {page === 'clients' && (
+                  <ClientsPage
+                    clientsData={clientsData}
+                    setPage={setPage}
+                    setEditClient={setEditClient}
+                    fetchClients={fetchClients}
+                    fetchPayments={fetchPayments}
+                    sessionToken={sessionToken}
+                  />
+                )}
+                {page === 'payments' && (
+                  <PaymentsPage
+                    paymentsData={paymentsData}
+                    fetchClients={fetchClients}
+                    fetchPayments={fetchPayments}
+                    sessionToken={sessionToken}
+                  />
+                )}
+              </main>
             </div>
           )}
-          <div className="text-center mt-4 text-gray-500">Debug: App rendered, current page: {page}</div>
         </div>
       );
     };
@@ -306,7 +326,7 @@
       const [username, setUsername] = useState('');
       const [password, setPassword] = useState('');
       const [gmailId, setGmailId] = useState('');
-      const BASE_URL = 'https://payment-tracker-aswa.onrender.com';
+      const BASE_URL = 'https://payment Tracker-aswa.onrender.com';
 
       const handleLogin = async () => {
         try {
@@ -335,47 +355,46 @@
       };
 
       return (
-        <div className="max-w-md mx-auto mt-24 p-8 bg-white rounded-xl shadow-xl">
-          <h2 className="text-3xl font-semibold text-center mb-6 text-teal-600">
-            <i className={`fas fa-${isSignup ? 'user-plus' : 'sign-in-alt'} mr-3`}></i>
+        <div className="max-w-md mx-auto mt-20 p-6 bg-white rounded-lg shadow-lg">
+          <h2 className="text-2xl font-semibold text-center mb-4">
             {isSignup ? 'Sign Up' : 'Sign In'}
           </h2>
           {isSignup ? (
             <div>
-              <div className="mb-5">
-                <label className="block mb-2 text-gray-700 font-medium"><i className="fas fa-user mr-2 text-teal-500"></i>Username</label>
-                <input type="text" className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none transition duration-200" value={username} onChange={e => setUsername(e.target.value)} placeholder="Enter username" />
+              <div className="mb-4">
+                <label className="block mb-1">Username</label>
+                <input type="text" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={username} onChange={e => setUsername(e.target.value)} placeholder="Enter username" />
               </div>
-              <div className="mb-5">
-                <label className="block mb-2 text-gray-700 font-medium"><i className="fas fa-lock mr-2 text-teal-500"></i>Password</label>
-                <input type="password" className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none transition duration-200" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter password" />
+              <div className="mb-4">
+                <label className="block mb-1">Password</label>
+                <input type="password" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter password" />
               </div>
-              <div className="mb-5">
-                <label className="block mb-2 text-gray-700 font-medium"><i className="fas fa-envelope mr-2 text-teal-500"></i>Gmail ID</label>
-                <input type="email" className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none transition duration-200" value={gmailId} onChange={e => setGmailId(e.target.value)} placeholder="Enter Gmail ID" />
+              <div className="mb-4">
+                <label className="block mb-1">Gmail ID</label>
+                <input type="email" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={gmailId} onChange={e => setGmailId(e.target.value)} placeholder="Enter Gmail ID" />
               </div>
-              <button onClick={handleSignup} className="w-full bg-teal-600 text-white p-3 rounded-xl hover:bg-teal-700 transition duration-200 flex items-center justify-center font-semibold">
-                <i className="fas fa-user-plus mr-2"></i> Sign Up
+              <button onClick={handleSignup} className="w-full bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition duration-200">
+                Sign Up
               </button>
-              <p className="text-center mt-4 text-gray-600">
-                Already have an account? <button onClick={() => setIsSignup(false)} className="text-teal-600 hover:underline">Login</button>
+              <p className="text-center mt-2">
+                Already have an account? <button onClick={() => setIsSignup(false)} className="text-blue-600 hover:underline">Login</button>
               </p>
             </div>
           ) : (
             <div>
-              <div className="mb-5">
-                <label className="block mb-2 text-gray-700 font-medium"><i className="fas fa-user mr-2 text-teal-500"></i>Username</label>
-                <input type="text" className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none transition duration-200" value={username} onChange={e => setUsername(e.target.value)} placeholder="Enter username" />
+              <div className="mb-4">
+                <label className="block mb-1">Username</label>
+                <input type="text" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={username} onChange={e => setUsername(e.target.value)} placeholder="Enter username" />
               </div>
-              <div className="mb-5">
-                <label className="block mb-2 text-gray-700 font-medium"><i className="fas fa-lock mr-2 text-teal-500"></i>Password</label>
-                <input type="password" className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none transition duration-200" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter password" />
+              <div className="mb-4">
+                <label className="block mb-1">Password</label>
+                <input type="password" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter password" />
               </div>
-              <button onClick={handleLogin} className="w-full bg-teal-600 text-white p-3 rounded-xl hover:bg-teal-700 transition duration-200 flex items-center justify-center font-semibold">
-                <i className="fas fa-sign-in-alt mr-2"></i> Login
+              <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition duration-200">
+                Login
               </button>
-              <p className="text-center mt-4 text-gray-600">
-                Don't have an account? <button onClick={() => setIsSignup(true)} className="text-teal-600 hover:underline">Sign Up</button>
+              <p className="text-center mt-2">
+                Don't have an account? <button onClick={() => setIsSignup(true)} className="text-blue-600 hover:underline">Sign Up</button>
               </p>
             </div>
           )}
@@ -388,6 +407,11 @@
       filterOptionsVisible, setFilterOptionsVisible, updatePayment, handleContextMenu, contextTargetRow, hideContextMenu, deleteRow,
       setPage, csvFileInputRef, importCsv
     }) => {
+      const [currentPage, setCurrentPage] = useState(1);
+      const entriesPerPage = 10;
+      const totalEntries = paymentsData.length;
+      const totalPages = Math.ceil(totalEntries / entriesPerPage);
+
       const filteredData = paymentsData.filter(row => {
         const clientName = row.Client_Name.toLowerCase();
         const nameMatches = clientName.includes(searchQuery.toLowerCase());
@@ -408,117 +432,75 @@
         return nameMatches && filterMatches;
       });
 
+      const paginatedData = filteredData.slice((currentPage - 1) * entriesPerPage, currentPage * entriesPerPage);
+
       return (
         <div>
-          <div className="bg-white p-6 rounded-xl shadow-xl mb-6 flex flex-wrap items-center gap-6">
-            <div className="flex gap-3">
-              <button onClick={() => setPage('addClient')} className="bg-teal-600 text-white px-5 py-2 rounded-xl hover:bg-teal-700 flex items-center transition duration-200 font-semibold">
+          <h1 className="text-2xl font-semibold mb-4">Client Payment Tracker</h1>
+          <div className="flex justify-between items-center mb-4">
+            <div className="flex space-x-2">
+              <button onClick={() => setPage('addClient')} className="bg-blue-900 text-white px-4 py-2 rounded-lg hover:bg-blue-800 flex items-center">
                 <i className="fas fa-user-plus mr-2"></i> Add Client
               </button>
-              <button onClick={() => csvFileInputRef.current.click()} className="bg-red-600 text-white px-5 py-2 rounded-xl hover:bg-red-700 flex items-center transition duration-200 font-semibold">
-                <i className="fas fa-file-import mr-2"></i> Import CSV
+              <button onClick={() => csvFileInputRef.current.click()} className="bg-blue-900 text-white px-4 py-2 rounded-lg hover:bg-blue-800 flex items-center">
+                <i className="fas fa-file-export mr-2"></i> Export
               </button>
               <input type="file" ref={csvFileInputRef} accept=".csv" className="hidden" onChange={importCsv} />
             </div>
-            <div className="ml-auto flex items-center gap-3">
-              <div className="relative">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  placeholder="Search Client Name"
-                  className="p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none transition duration-200"
-                />
-                <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700">
-                  <i className="fas fa-times"></i>
-                </button>
-              </div>
-              <div className="relative">
-                <button onClick={() => setFilterOptionsVisible(!filterOptionsVisible)} className="bg-teal-600 text-white px-5 py-2 rounded-xl hover:bg-teal-700 flex items-center transition duration-200 font-semibold">
-                  <i className="fas fa-filter mr-2"></i> Filter
-                </button>
-                {filterOptionsVisible && (
-                  <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-xl p-5 z-50">
-                    <div className="mb-4">
-                      <label className="block mb-2 text-gray-700 font-medium">Month</label>
-                      <select value={monthFilter} onChange={e => setMonthFilter(e.target.value)} className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none transition duration-200">
-                        <option value="">Select Month</option>
-                        {['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].map(month => (
-                          <option key={month} value={month}>{month.charAt(0).toUpperCase() + month.slice(1)}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="mb-4">
-                      <label className="block mb-2 text-gray-700 font-medium">Payment Status</label>
-                      <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none transition duration-200">
-                        <option value="">Select Status</option>
-                        <option value="paid">Paid</option>
-                        <option value="unpaid">Unpaid</option>
-                        <option value="partially-paid">Partially Paid</option>
-                      </select>
-                    </div>
-                    <div className="flex justify-end gap-3">
-                      <button onClick={() => { setMonthFilter(''); setStatusFilter(''); setFilterOptionsVisible(false); }} className="bg-gray-500 text-white px-4 py-2 rounded-xl hover:bg-gray-600 transition duration-200 font-semibold">Clear</button>
-                      <button onClick={() => setFilterOptionsVisible(false)} className="bg-teal-600 text-white px-4 py-2 rounded-xl hover:bg-teal-700 transition duration-200 font-semibold">Apply</button>
-                    </div>
-                  </div>
-                )}
-              </div>
+            <div className="flex space-x-2">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search clients..."
+                className="p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+              <select value={monthFilter} onChange={e => setMonthFilter(e.target.value)} className="p-2 border rounded-lg">
+                <option value="">All Months</option>
+                {['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].map(month => (
+                  <option key={month} value={month}>{month.charAt(0).toUpperCase() + month.slice(1)}</option>
+                ))}
+              </select>
+              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="p-2 border rounded-lg">
+                <option value="">Payment Status</option>
+                <option value="paid">Paid</option>
+                <option value="pending">Pending</option>
+              </select>
             </div>
           </div>
 
-          <div className="overflow-x-auto h-[calc(100vh-200px)]">
-            <table className="w-full bg-white rounded-xl shadow-xl">
+          <div className="bg-white rounded-lg shadow">
+            <table className="w-full">
               <thead>
-                <tr className="bg-gradient-to-r from-teal-600 to-teal-400 text-white text-center">
-                  <th className="p-3 sticky top-0 z-10">Sr.No</th>
-                  <th className="p-3 sticky top-0 z-10">Client Name</th>
-                  <th className="p-3 sticky top-0 z-10">Type</th>
-                  <th className="p-3 sticky top-0 z-10">Amount To be Paid</th>
-                  <th colSpan="12" className="p-3 sticky top-0 z-10">Jan - Dec</th>
-                  <th className="p-3 sticky top-0 z-10">Due Payment</th>
-                </tr>
-                <tr className="bg-gray-100 text-center text-gray-700 font-semibold">
-                  <th className="p-3 sticky top-[56px] z-10"></th>
-                  <th className="p-3 sticky top-[56px] z-10"></th>
-                  <th className="p-3 sticky top-[56px] z-10"></th>
-                  <th className="p-3 sticky top-[56px] z-10"></th>
-                  {['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].map(month => (
-                    <th key={month} className={`p-3 sticky top-[56px] z-10 ${month <= 'june' ? 'bg-teal-50' : 'bg-gray-100'}`}>
-                      {month.charAt(0).toUpperCase() + month.slice(1)}
-                    </th>
-                  ))}
-                  <th className="p-3 sticky top-[56px] z-10"></th>
+                <tr className="bg-gray-100 text-left">
+                  <th className="p-2">Client</th>
+                  <th className="p-2">Fixed Amount</th>
+                  <th className="p-2">Jan 2025</th>
+                  <th className="p-2">Feb 2025</th>
+                  <th className="p-2">Mar 2025</th>
+                  <th className="p-2">Total Due</th>
+                  <th className="p-2">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredData.map((row, index) => (
-                  <tr key={index} onContextMenu={e => handleContextMenu(e, index)} className="hover:bg-gray-50 transition duration-200">
-                    <td className="p-3 text-center">{index + 1}</td>
-                    <td className="p-3 text-center">{row.Client_Name}</td>
-                    <td className="p-3 text-center">{row.Type}</td>
-                    <td className="p-3 text-center">₹{row.Amount_To_Be_Paid}</td>
-                    {['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].map(month => {
-                      const amountToBePaid = parseFloat(row.Amount_To_Be_Paid) || 0;
-                      const paymentValue = parseFloat(row[month]) || 0;
-                      let cellClass = '';
-                      if (!row[month] || paymentValue === 0) cellClass = 'bg-red-100';
-                      else if (paymentValue >= amountToBePaid) cellClass = 'bg-green-100';
-                      else if (paymentValue > 0) cellClass = 'bg-orange-100';
-                      return (
-                        <td key={month} className={`p-3 text-center ${month <= 'june' ? 'bg-teal-50' : ''} ${cellClass}`}>
-                          <input
-                            type="text"
-                            value={row[month] || ''}
-                            onChange={e => updatePayment(index, month, e.target.value)}
-                            className="w-full p-2 border border-gray-200 rounded-lg text-center focus:ring-2 focus:ring-teal-500 focus:outline-none transition duration-200"
-                            placeholder={month.charAt(0).toUpperCase() + month.slice(1)}
-                          />
-                        </td>
-                      );
-                    })}
-                    <td className="p-3 text-center">
-                      <input type="text" value={`₹${row.Due_Payment}`} readOnly className="w-full p-2 border border-gray-200 rounded-lg text-center bg-gray-100" />
+                {paginatedData.map((row, index) => (
+                  <tr key={index} onContextMenu={e => handleContextMenu(e, index)} className="border-t">
+                    <td className="p-2 flex items-center">
+                      <i className="fas fa-user-circle mr-2"></i>
+                      {row.Client_Name}
+                    </td>
+                    <td className="p-2">${row.Amount_To_Be_Paid}</td>
+                    <td className="p-2">{row.january ? 'Paid' : '—'}</td>
+                    <td className="p-2">{row.february ? 'Pending' : '—'}</td>
+                    <td className="p-2">{row.march || '—'}</td>
+                    <td className="p-2">${row.Due_Payment}</td>
+                    <td className="p-2">
+                      <button onClick={() => { setEditClient(row); setPage('addClient'); }} className="text-gray-500 hover:text-gray-700 mr-2">
+                        <i className="fas fa-edit"></i>
+                      </button>
+                      <button onClick={deleteRow} className="text-gray-500 hover:text-gray-700">
+                        <i className="fas fa-trash-alt"></i>
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -526,12 +508,41 @@
             </table>
           </div>
 
+          <div className="flex justify-between items-center mt-4">
+            <p>Showing {(currentPage - 1) * entriesPerPage + 1} to {Math.min(currentPage * entriesPerPage, totalEntries)} of {totalEntries} entries</p>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="px-4 py-2 border rounded-lg"
+              >
+                Previous
+              </button>
+              {[...Array(totalPages)].map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setCurrentPage(i + 1)}
+                  className={`px-4 py-2 border rounded-lg ${currentPage === i + 1 ? 'bg-blue-900 text-white' : ''}`}
+                >
+                  {i + 1}
+                </button>
+              ))}
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="px-4 py-2 border rounded-lg"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+
           {contextTargetRow && (
             <div
-              className="absolute bg-white border border-gray-200 rounded-xl shadow-xl z-50"
+              className="absolute bg-white border rounded-lg shadow-lg z-50"
               style={{ left: contextTargetRow.x, top: contextTargetRow.y }}
             >
-              <button onClick={deleteRow} className="w-full text-left p-3 hover:bg-gray-100 text-red-600 font-semibold transition duration-200">Delete This Row</button>
+              <button onClick={deleteRow} className="w-full text-left p-2 hover:bg-gray-200">Delete This Row</button>
             </div>
           )}
         </div>
@@ -591,32 +602,26 @@
       };
 
       return (
-        <div className="max-w-md mx-auto p-8 bg-white rounded-xl shadow-xl">
-          <h2 className="text-3xl font-semibold text-center mb-6 text-teal-600">
-            <i className="fas fa-user-plus mr-3"></i>{editClient ? 'Edit Client' : 'Add New Client'}
-          </h2>
-          <div className="mb-5">
-            <label className="block mb-2 text-gray-700 font-medium"><i className="fas fa-user mr-2 text-teal-500"></i>Client Name</label>
-            <input type="text" value={clientName} onChange={e => setClientName(e.target.value)} className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none transition duration-200" placeholder="Enter client name" />
+        <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-lg">
+          <h2 className="text-xl font-semibold mb-4">{editClient ? 'Edit Client' : 'Add New Client'}</h2>
+          <div className="mb-4">
+            <label className="block mb-1">Client Name</label>
+            <input type="text" value={clientName} onChange={e => setClientName(e.target.value)} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Enter client name" />
           </div>
-          <div className="mb-5">
-            <label className="block mb-2 text-gray-700 font-medium"><i className="fas fa-envelope mr-2 text-teal-500"></i>Client Email</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none transition duration-200" placeholder="Enter client email" />
+          <div className="mb-4">
+            <label className="block mb-1">Phone Number</label>
+            <input type="text" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="+1 (123) 456-7890" />
           </div>
-          <div className="mb-5">
-            <label className="block mb-2 text-gray-700 font-medium"><i className="fas fa-tag mr-2 text-teal-500"></i>Type</label>
-            <input type="text" value={type} onChange={e => setType(e.target.value)} className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none transition duration-200" placeholder="Enter type" />
+          <div className="mb-4">
+            <label className="block mb-1">Monthly Payment Amount</label>
+            <input type="text" value={monthlyPayment} onChange={e => setMonthlyPayment(e.target.value)} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Enter amount" />
           </div>
-          <div className="mb-5">
-            <label className="block mb-2 text-gray-700 font-medium"><i className="fas fa-dollar-sign mr-2 text-teal-500"></i>Monthly Payment Amount</label>
-            <input type="text" value={monthlyPayment} onChange={e => setMonthlyPayment(e.target.value)} className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none transition duration-200" placeholder="Enter amount" />
-          </div>
-          <div className="flex justify-end gap-3">
-            <button onClick={() => { setEditClient(null); setPage('home'); }} className="bg-gray-500 text-white px-5 py-2 rounded-xl hover:bg-gray-600 flex items-center transition duration-200 font-semibold">
-              <i className="fas fa-times mr-2"></i> Cancel
+          <div className="flex justify-end gap-2">
+            <button onClick={() => { setEditClient(null); setPage('home'); }} className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600">
+              Cancel
             </button>
-            <button onClick={saveClient} className="bg-teal-600 text-white px-5 py-2 rounded-xl hover:bg-teal-700 flex items-center transition duration-200 font-semibold">
-              <i className="fas fa-save mr-2"></i> {editClient ? 'Update Client' : 'Add Client'}
+            <button onClick={saveClient} className="bg-blue-900 text-white px-4 py-2 rounded-lg hover:bg-blue-800">
+              {editClient ? 'Update Client' : 'Add Client'}
             </button>
           </div>
         </div>
@@ -624,6 +629,13 @@
     };
 
     const ClientsPage = ({ clientsData, setPage, setEditClient, fetchClients, fetchPayments, sessionToken }) => {
+      const [currentPage, setCurrentPage] = useState(1);
+      const entriesPerPage = 10;
+      const totalEntries = clientsData.length;
+      const totalPages = Math.ceil(totalEntries / entriesPerPage);
+
+      const paginatedData = clientsData.slice((currentPage - 1) * entriesPerPage, currentPage * entriesPerPage);
+
       const BASE_URL = 'https://payment-tracker-aswa.onrender.com';
 
       const deleteClient = async (client) => {
@@ -643,30 +655,60 @@
       };
 
       return (
-        <div className="bg-white p-6 rounded-xl shadow-xl">
-          <h2 className="text-3xl font-semibold mb-6 text-teal-600"><i className="fas fa-users mr-3"></i>Clients</h2>
-          <div className="overflow-x-auto h-[calc(100vh-150px)]">
+        <div>
+          <h1 className="text-2xl font-semibold mb-4">Clients</h1>
+          <div className="flex justify-between items-center mb-4">
+            <div className="flex space-x-2">
+              <button onClick={() => setPage('addClient')} className="bg-blue-900 text-white px-4 py-2 rounded-lg hover:bg-blue-800 flex items-center">
+                <i className="fas fa-user-plus mr-2"></i> Add Client
+              </button>
+              <button className="bg-blue-900 text-white px-4 py-2 rounded-lg hover:bg-blue-800 flex items-center">
+                <i className="fas fa-file-export mr-2"></i> Bulk Import
+              </button>
+            </div>
+            <div className="flex space-x-2">
+              <input type="text" placeholder="Search clients..." className="p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" />
+              <button className="bg-blue-900 text-white px-4 py-2 rounded-lg hover:bg-blue-800 flex items-center">
+                <i className="fas fa-filter mr-2"></i> Filters
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow">
             <table className="w-full">
               <thead>
-                <tr className="bg-gradient-to-r from-teal-600 to-teal-400 text-white text-center">
-                  <th className="p-3 sticky top-0 z-10">Client Name</th>
-                  <th className="p-3 sticky top-0 z-10">Email</th>
-                  <th className="p-3 sticky top-0 z-10">Monthly Amount</th>
-                  <th className="p-3 sticky top-0 z-10">Actions</th>
+                <tr className="bg-gray-100 text-left">
+                  <th className="p-2">
+                    <input type="checkbox" />
+                  </th>
+                  <th className="p-2">Client</th>
+                  <th className="p-2">Email</th>
+                  <th className="p-2">Monthly Amount</th>
+                  <th className="p-2">Status</th>
+                  <th className="p-2">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {clientsData.map((client, index) => (
-                  <tr key={index} className="hover:bg-gray-50 transition duration-200">
-                    <td className="p-3 text-center text-gray-800">{client.Client_Name}</td>
-                    <td className="p-3 text-center text-gray-600">{client.Email || 'N/A'}</td>
-                    <td className="p-3 text-center text-gray-600">₹{client.monthly_payment}</td>
-                    <td className="p-3 text-center">
-                      <button onClick={() => { setEditClient(client); setPage('addClient'); }} className="bg-teal-600 text-white px-3 py-1 rounded-xl hover:bg-teal-700 mr-3 transition duration-200 font-semibold">
-                        <i className="fas fa-edit mr-1"></i> Edit
+                {paginatedData.map((client, index) => (
+                  <tr key={index} className="border-t">
+                    <td className="p-2">
+                      <input type="checkbox" />
+                    </td>
+                    <td className="p-2 flex items-center">
+                      <i className="fas fa-user-circle mr-2"></i>
+                      {client.Client_Name}
+                      <br />
+                      <span className="text-sm text-gray-500">Client ID: #{client.Client_Name.slice(-4)}</span>
+                    </td>
+                    <td className="p-2">{client.Email || 'N/A'}</td>
+                    <td className="p-2">${client.monthly_payment}</td>
+                    <td className="p-2">Active</td>
+                    <td className="p-2">
+                      <button onClick={() => { setEditClient(client); setPage('addClient'); }} className="text-gray-500 hover:text-gray-700 mr-2">
+                        <i className="fas fa-edit"></i>
                       </button>
-                      <button onClick={() => deleteClient(client)} className="bg-red-600 text-white px-3 py-1 rounded-xl hover:bg-red-700 transition duration-200 font-semibold">
-                        <i className="fas fa-trash-alt mr-1"></i> Delete
+                      <button onClick={() => deleteClient(client)} className="text-gray-500 hover:text-gray-700">
+                        <i className="fas fa-trash-alt"></i>
                       </button>
                     </td>
                   </tr>
@@ -674,41 +716,107 @@
               </tbody>
             </table>
           </div>
+
+          <div className="flex justify-between items-center mt-4">
+            <p>Showing {(currentPage - 1) * entriesPerPage + 1} to {Math.min(currentPage * entriesPerPage, totalEntries)} of {totalEntries} entries</p>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="px-4 py-2 border rounded-lg"
+              >
+                Previous
+              </button>
+              {[...Array(totalPages)].map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setCurrentPage(i + 1)}
+                  className={`px-4 py-2 border rounded-lg ${currentPage === i + 1 ? 'bg-blue-900 text-white' : ''}`}
+                >
+                  {i + 1}
+                </button>
+              ))}
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="px-4 py-2 border rounded-lg"
+              >
+                Next
+              </button>
+            </div>
+          </div>
         </div>
       );
     };
 
     const PaymentsPage = ({ paymentsData, fetchClients, fetchPayments, sessionToken }) => {
+      const [currentPage, setCurrentPage] = useState(1);
+      const entriesPerPage = 10;
+      const totalEntries = paymentsData.length;
+      const totalPages = Math.ceil(totalEntries / entriesPerPage);
+
+      const paginatedData = paymentsData.slice((currentPage - 1) * entriesPerPage, currentPage * entriesPerPage);
+
       return (
-        <div className="bg-white p-6 rounded-xl shadow-xl">
-          <h2 className="text-3xl font-semibold mb-6 text-teal-600"><i className="fas fa-money-bill-wave mr-3"></i>Payments</h2>
-          <div className="overflow-x-auto h-[calc(100vh-150px)]">
+        <div>
+          <h1 className="text-2xl font-semibold mb-4">Payments</h1>
+          <div className="bg-white rounded-lg shadow">
             <table className="w-full">
               <thead>
-                <tr className="bg-gradient-to-r from-teal-600 to-teal-400 text-white text-center">
-                  <th className="p-3 sticky top-0 z-10">Client Name</th>
-                  <th className="p-3 sticky top-0 z-10">Type</th>
-                  <th className="p-3 sticky top-0 z-10">Amount To be Paid</th>
-                  {['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].map(month => (
-                    <th key={month} className="p-3 sticky top-0 z-10">{month.charAt(0).toUpperCase() + month.slice(1)}</th>
-                  ))}
-                  <th className="p-3 sticky top-0 z-10">Due Payment</th>
+                <tr className="bg-gray-100 text-left">
+                  <th className="p-2">Client</th>
+                  <th className="p-2">Fixed Amount</th>
+                  <th className="p-2">Jan 2025</th>
+                  <th className="p-2">Feb 2025</th>
+                  <th className="p-2">Mar 2025</th>
+                  <th className="p-2">Total Due</th>
                 </tr>
               </thead>
               <tbody>
-                {paymentsData.map((payment, index) => (
-                  <tr key={index} className="hover:bg-gray-50 transition duration-200">
-                    <td className="p-3 text-center text-gray-800">{payment.Client_Name}</td>
-                    <td className="p-3 text-center text-gray-600">{payment.Type}</td>
-                    <td className="p-3 text-center text-gray-600">₹{payment.Amount_To_Be_Paid}</td>
-                    {['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].map(month => (
-                      <td key={month} className="p-3 text-center text-gray-600">₹{payment[month] || '0'}</td>
-                    ))}
-                    <td className="p-3 text-center text-gray-600">₹{payment.Due_Payment}</td>
+                {paginatedData.map((payment, index) => (
+                  <tr key={index} className="border-t">
+                    <td className="p-2 flex items-center">
+                      <i className="fas fa-user-circle mr-2"></i>
+                      {payment.Client_Name}
+                    </td>
+                    <td className="p-2">${payment.Amount_To_Be_Paid}</td>
+                    <td className="p-2">{payment.january || '—'}</td>
+                    <td className="p-2">{payment.february || '—'}</td>
+                    <td className="p-2">{payment.march || '—'}</td>
+                    <td className="p-2">${payment.Due_Payment}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+
+          <div className="flex justify-between items-center mt-4">
+            <p>Showing {(currentPage - 1) * entriesPerPage + 1} to {Math.min(currentPage * entriesPerPage, totalEntries)} of {totalEntries} entries</p>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="px-4 py-2 border rounded-lg"
+              >
+                Previous
+              </button>
+              {[...Array(totalPages)].map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setCurrentPage(i + 1)}
+                  className={`px-4 py-2 border rounded-lg ${currentPage === i + 1 ? 'bg-blue-900 text-white' : ''}`}
+                >
+                  {i + 1}
+                </button>
+              ))}
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="px-4 py-2 border rounded-lg"
+              >
+                Next
+              </button>
+            </div>
           </div>
         </div>
       );
@@ -718,8 +826,7 @@
       <ErrorBoundary>
         <App />
       </ErrorBoundary>,
-      document.getElementById('root'), 
-      () => console.log('ReactDOM.render completed')
+      document.getElementById('root')
     );
   </script>
 </body>
