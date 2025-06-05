@@ -628,7 +628,6 @@
         <span></span>
       </div>
       <span>Payment Tracking App</span>
-      <!-- <span id="currentUserDisplay" class="ms-2"></span> -->
     </div>
 
     <div id="homePage" style="display: none;">
@@ -854,7 +853,7 @@
     const cancelAddClientBtn = document.getElementById('cancelAddClientBtn');
     const importCsvBtn = document.getElementById('importCsvBtn');
     const csvFileInput = document.getElementById('csvFileInput');
-    const currentUserDisplay = document.getElementById('currentUserDisplay');
+    // const currentUserDisplay = document.getElementById('currentUserDisplay');
 
     let loginBtn, signupBtn, loginForm, signupForm, usernameInput, passwordInput, signupUsernameInput, signupPasswordInput, signupGmailInput, showSignupLink, showLoginLink, loginHeader, signupHeader;
 
@@ -953,7 +952,7 @@
           .then(data => {
             currentUser = data.username;
             sessionToken = data.sessionToken;
-            currentUserDisplay.textContent = currentUser;
+            // currentUserDisplay.textContent = currentUser;
             persistUserSession();
             fetchClients();
             fetchPayments();
@@ -985,7 +984,7 @@
         e.preventDefault();
         currentUser = null;
         sessionToken = null;
-        currentUserDisplay.textContent = '';
+        // currentUserDisplay.textContent = '';
         clearUserSession();
         clientsData = [];
         tableBody.innerHTML = '';
@@ -1008,7 +1007,7 @@
         currentUser = localStorage.getItem('currentUser');
         sessionToken = localStorage.getItem('sessionToken');
         if (currentUser && sessionToken) {
-          currentUserDisplay.textContent = currentUser;
+          // currentUserDisplay.textContent = currentUser;
           fetchClients();
           fetchPayments();
           showHomePage();
