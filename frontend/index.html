@@ -10,47 +10,42 @@
   <script src="https://cdn.jsdelivr.net/npm/axios@1.4.0/dist/axios.min.js"></script>
   <link rel="stylesheet" href="./src/output.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-  <script>
-    window.addEventListener('error', (e) => {
-      console.error('Script load failed:', e.message, e.filename);
-    });
-  </script>
 </head>
 <body>
   <div id="root"></div>
   <script type="text/babel">
     console.log('Starting React app...');
     const { useState, useEffect, useRef } = React;
-    const BASE_URL = 'https://payment-tracker-aswa.onrender.com';
 
-    const ErrorBoundary = ({ children }) => {
-      const [hasError, setHasError] = useState(false);
-      const [error, setError] = useState(null);
-      useEffect(() => {
-        const errorHandler = (e) => {
-          console.error('ErrorBoundary caught:', e.error);
-          setHasError(true);
-          setError(e.error);
-        };
-        window.addEventListener('error', errorHandler);
-        return () => window.removeEventListener('error', errorHandler);
-      }, []);
-      if (hasError) {
-        return (
-          <div className="p-4 bg-red-100 text-red-700 rounded-lg m-4">
-            <h2 className="text-xl font-bold">Something went wrong.</h2>
-            <p>{error?.toString()}</p>
-            <button
-              onClick={() => window.location.reload()}
-              className="mt-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition"
-            >
-              Reload Page
-            </button>
-          </div>
-        );
+    // Error Boundary Component
+    class ErrorBoundary extends React.Component {
+      constructor(props) {
+        super(props);
+        this.state = { hasError: false, error: null };
       }
-      return children;
-    };
+
+      static getDerivedStateFromError(error) {
+        return { hasError: true, error };
+      }
+
+      render() {
+        if (this.state.hasError) {
+          return (
+            <div className="p-4 bg-red-100 text-red-700 rounded-xl m-4">
+              <h2 className="text-xl font-semibold">Something went wrong.</h2>
+              <p>{this.state.error?.toString()}</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="mt-2 bg-red-600 text-white px-4 py-2 rounded-xl hover:bg-red-700 transition duration-200"
+              >
+                Reload Page
+              </button>
+            </div>
+          );
+        }
+        return this.props.children;
+      }
+    }
 
     const App = () => {
       const [sessionToken, setSessionToken] = useState(null);
@@ -58,7 +53,16 @@
       const [page, setPage] = useState('signIn');
       const [clientsData, setClientsData] = useState([]);
       const [paymentsData, setPaymentsData] = useState([]);
+      const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+      const [contextTargetRow, setContextTargetRow] = useState(null);
+      const [filterOptionsVisible, setFilterOptionsVisible] = useState(false);
+      const [searchQuery, setSearchQuery] = useState('');
+      const [monthFilter, setMonthFilter] = useState('');
+      const [statusFilter, setStatusFilter] = useState('');
+      const [editClient, setEditClient] = useState(null);
       const csvFileInputRef = useRef(null);
+
+      const BASE_URL = 'https://payment-tracker-aswa.onrender.com';
 
       useEffect(() => {
         const storedUser = localStorage.getItem('currentUser');
@@ -66,28 +70,15 @@
         if (storedUser && storedToken) {
           setCurrentUser(storedUser);
           setSessionToken(storedToken);
-          setPage('home');
           fetchClients(storedToken);
           fetchPayments(storedToken);
+          setPage('home');
         }
       }, []);
 
-      const fetchWithRetry = async (url, options, retries = 3) => {
-        for (let i = 0; i < retries; i++) {
-          try {
-            const response = await axios.get(url, options);
-            return response;
-          } catch (error) {
-            if (i === retries - 1) throw error;
-            console.log(`Retrying ${url} (${i + 1}/${retries})...`);
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          }
-        }
-      };
-
       const fetchClients = async (token) => {
         try {
-          const response = await fetchWithRetry(`${BASE_URL}/api/get-clients`, {
+          const response = await axios.get(`${BASE_URL}/api/get-clients`, {
             headers: { Authorization: `Bearer ${token}` },
           });
           setClientsData(response.data);
@@ -99,7 +90,7 @@
 
       const fetchPayments = async (token) => {
         try {
-          const response = await fetchWithRetry(`${BASE_URL}/api/get-payments`, {
+          const response = await axios.get(`${BASE_URL}/api/get-payments`, {
             headers: { Authorization: `Bearer ${token}` },
           });
           setPaymentsData(response.data);
@@ -117,18 +108,76 @@
       };
 
       const logout = () => {
+        setCurrentUser(null);
+        setSessionToken(null);
         localStorage.removeItem('currentUser');
         localStorage.removeItem('sessionToken');
-        setSessionToken(null);
-        setCurrentUser(null);
-        setPage('signIn');
         setClientsData([]);
         setPaymentsData([]);
+        setPage('signIn');
+      };
+
+      const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
+
+      const handleContextMenu = (e, rowIndex) => {
+        e.preventDefault();
+        setContextTargetRow({ rowIndex, x: e.pageX, y: e.pageY });
+      };
+
+      const hideContextMenu = () => setContextTargetRow(null);
+
+      const deleteRow = async () => {
+        if (paymentsData.length <= 1) {
+          alert('Cannot delete the last row.');
+          hideContextMenu();
+          return;
+        }
+        const rowData = paymentsData[contextTargetRow.rowIndex];
+        try {
+          await axios.delete(`${BASE_URL}/api/delete-client`, {
+            headers: { Authorization: `Bearer ${sessionToken}` },
+            data: { Client_Name: rowData.Client_Name, Type: rowData.Type },
+          });
+          setPaymentsData(paymentsData.filter((_, i) => i !== contextTargetRow.rowIndex));
+          setClientsData(clientsData.filter(client => client.Client_Name !== rowData.Client_Name || client.Type !== rowData.Type));
+          hideContextMenu();
+        } catch (error) {
+          console.error('Error deleting row:', error);
+          handleSessionError(error);
+        }
+      };
+
+      const updatePayment = async (rowIndex, month, value) => {
+        const updatedPayments = [...paymentsData];
+        const rowData = updatedPayments[rowIndex];
+        rowData[month] = value;
+
+        const amountToBePaidPerMonth = parseFloat(rowData.Amount_To_Be_Paid) || 0;
+        const activeMonths = Object.keys(rowData)
+          .filter(key => ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].includes(key))
+          .filter(m => rowData[m] && parseFloat(rowData[m]) >= 0).length;
+        const expectedPayment = amountToBePaidPerMonth * activeMonths;
+        const totalPayments = Object.keys(rowData)
+          .filter(key => ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].includes(key))
+          .reduce((sum, m) => sum + (parseFloat(rowData[m]) || 0), 0);
+        rowData.Due_Payment = Math.max(expectedPayment - totalPayments, 0).toFixed(2);
+
+        setPaymentsData(updatedPayments);
+        try {
+          await axios.post(`${BASE_URL}/api/save-payments`, paymentsData, {
+            headers: { Authorization: `Bearer ${sessionToken}` },
+          });
+        } catch (error) {
+          console.error('Error saving payments:', error);
+          handleSessionError(error);
+        }
       };
 
       const importCsv = async (e) => {
+        console.log('App component rendering');
         const file = e.target.files[0];
         if (!file) return;
+
         const reader = new FileReader();
         reader.onload = async (event) => {
           const text = event.target.result;
@@ -138,14 +187,15 @@
             csvFileInputRef.current.value = '';
             return;
           }
+
           const data = rows.map(row => {
             const cols = row.split(',').map(col => col.trim());
-            return {
-              Client_Name: cols[0] || 'Unknown Client',
-              Type: cols[1] || 'Unknown Type',
-              Amount_To_Be_Paid: cols[2] || '0',
-            };
+            return cols.reduce((obj, val, i) => {
+              obj[`col${i}`] = val;
+              return obj;
+            }, {});
           });
+
           try {
             await axios.post(`${BASE_URL}/api/import-csv`, data, {
               headers: { Authorization: `Bearer ${sessionToken}` },
@@ -156,6 +206,7 @@
             csvFileInputRef.current.value = '';
           } catch (error) {
             console.error('Error importing CSV:', error);
+            handleSessionError(error);
             alert('Failed to import CSV data: ' + error.message);
             csvFileInputRef.current.value = '';
           }
@@ -163,238 +214,459 @@
         reader.readAsText(file);
       };
 
-      console.log('App rendering, page:', page);
       return (
         <div className="min-h-screen bg-gray-50">
-          {page === 'signIn' && (
-            <>
-              <SignInPage setSessionToken={setSessionToken} setCurrentUser={setCurrentUser} setPage={setPage} />
-              <div className="text-center mt-4 text-red-500">Debug: SignInPage should be above</div>
-            </>
-          )}
+          {page === 'signIn' && <SignInPage setSessionToken={setSessionToken} setCurrentUser={setCurrentUser} setPage={setPage} />}
           {page !== 'signIn' && (
-            <div>
-              <nav className="bg-teal-600 text-white p-5 flex justify-between items-center shadow-md">
-                <div className="space-x-6">
-                  <button onClick={() => setPage('home')} className="text-lg hover:text-teal-100 transition duration-200">Home</button>
-                  <button onClick={() => setPage('clients')} className="text-lg hover:text-teal-100 transition duration-200">Clients</button>
-                  <button onClick={() => setPage('addClient')} className="text-lg hover:text-teal-100 transition duration-200">Add Client</button>
-                  <button onClick={() => setPage('payments')} className="text-lg hover:text-teal-100 transition duration-200">Payments</button>
-                  <label className="text-lg hover:text-teal-100 transition duration-200 cursor-pointer">
-                    Import CSV
-                    <input
-                      type="file"
-                      accept=".csv"
-                      onChange={importCsv}
-                      ref={csvFileInputRef}
-                      className="hidden"
+            <div className="flex flex-col h-screen">
+              <header className="bg-gradient-to-r from-teal-600 to-teal-400 text-white text-xl font-semibold p-5 flex items-center justify-between shadow-xl">
+                <div className="flex items-center">
+                  <button onClick={toggleSidebar} className="mr-4 focus:outline-none">
+                    <i className={`fas fa-${isSidebarOpen ? 'times' : 'bars'} text-xl`}></i>
+                  </button>
+                  <span>Payment Tracking App</span>
+                </div>
+              </header>
+
+              <div className="flex flex-1 overflow-hidden">
+                <nav className={`bg-gray-900 text-gray-100 w-64 p-6 fixed top-0 h-full transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} z-50 shadow-xl`}>
+                  <ul className="space-y-3">
+                    <li><button onClick={() => { setPage('home'); setIsSidebarOpen(false); }} className="w-full text-left p-3 hover:bg-gray-700 rounded-xl transition duration-200"><i className="fas fa-tachometer-alt mr-3"></i> Dashboard</button></li>
+                    <li><button onClick={() => { setPage('clients'); setIsSidebarOpen(false); }} className="w-full text-left p-3 hover:bg-gray-700 rounded-xl transition duration-200"><i className="fas fa-users mr-3"></i> Clients</button></li>
+                    <li><button onClick={() => { setPage('payments'); setIsSidebarOpen(false); }} className="w-full text-left p-3 hover:bg-gray-700 rounded-xl transition duration-200"><i className="fas fa-money-bill-wave mr-3"></i> Payments</button></li>
+                    <li><button onClick={() => { alert('Reports coming soon!'); setIsSidebarOpen(false); }} className="w-full text-left p-3 hover:bg-gray-700 rounded-xl transition duration-200"><i className="fas fa-chart-line mr-3"></i> Reports</button></li>
+                    <li><button onClick={logout} className="w-full text-left p-3 hover:bg-gray-700 rounded-xl transition duration-200 text-red-400"><i className="fas fa-sign-out-alt mr-3"></i> Logout</button></li>
+                  </ul>
+                </nav>
+                {isSidebarOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={toggleSidebar}></div>}
+
+                <main className="flex-1 p-6 overflow-y-auto">
+                  {page === 'home' && (
+                    <HomePage
+                      paymentsData={paymentsData}
+                      setPaymentsData={setPaymentsData}
+                      searchQuery={searchQuery}
+                      setSearchQuery={setSearchQuery}
+                      monthFilter={monthFilter}
+                      setMonthFilter={setMonthFilter}
+                      statusFilter={statusFilter}
+                      setStatusFilter={setStatusFilter}
+                      filterOptionsVisible={filterOptionsVisible}
+                      setFilterOptionsVisible={setFilterOptionsVisible}
+                      updatePayment={updatePayment}
+                      handleContextMenu={handleContextMenu}
+                      contextTargetRow={contextTargetRow}
+                      hideContextMenu={hideContextMenu}
+                      deleteRow={deleteRow}
+                      setPage={setPage}
+                      csvFileInputRef={csvFileInputRef}
+                      importCsv={importCsv}
                     />
-                  </label>
-                </div>
-                <div className="space-x-6">
-                  <span className="text-lg">Welcome, {currentUser}</span>
-                  <button onClick={logout} className="text-lg hover:text-teal-100 transition duration-200">Logout</button>
-                </div>
-              </nav>
-              <div className="p-8">
-                {page === 'home' && (
-                  <HomePage clientsData={clientsData} paymentsData={paymentsData} />
-                )}
-                {page === 'clients' && (
-                  <ClientsPage
-                    clientsData={clientsData}
-                    setPage={setPage}
-                    fetchClients={fetchClients}
-                    sessionToken={sessionToken}
-                    handleSessionError={handleSessionError}
-                  />
-                )}
-                {page === 'addClient' && (
-                  <AddClientPage
-                    setPage={setPage}
-                    fetchClients={fetchClients}
-                    sessionToken={sessionToken}
-                    handleSessionError={handleSessionError}
-                  />
-                )}
-                {page === 'payments' && (
-                  <PaymentsPage
-                    paymentsData={paymentsData}
-                    fetchPayments={fetchPayments}
-                    sessionToken={sessionToken}
-                    handleSessionError={handleSessionError}
-                  />
-                )}
+                  )}
+                  {page === 'addClient' && (
+                    <AddClientPage
+                      setPage={setPage}
+                      fetchClients={fetchClients}
+                      fetchPayments={fetchPayments}
+                      sessionToken={sessionToken}
+                      currentUser={currentUser}
+                      editClient={editClient}
+                      setEditClient={setEditClient}
+                    />
+                  )}
+                  {page === 'clients' && (
+                    <ClientsPage
+                      clientsData={clientsData}
+                      setPage={setPage}
+                      setEditClient={setEditClient}
+                      fetchClients={fetchClients}
+                      fetchPayments={fetchPayments}
+                      sessionToken={sessionToken}
+                    />
+                  )}
+                  {page === 'payments' && (
+                    <PaymentsPage
+                      paymentsData={paymentsData}
+                      fetchClients={fetchClients}
+                      fetchPayments={fetchPayments}
+                      sessionToken={sessionToken}
+                    />
+                  )}
+                </main>
               </div>
             </div>
           )}
-          <div className="text-center mt-4">Debug: App rendered, current page: {page}</div>
+          <div className="text-center mt-4 text-gray-500">Debug: App rendered, current page: {page}</div>
         </div>
       );
     };
 
     const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
+      const [isSignup, setIsSignup] = useState(false);
       const [username, setUsername] = useState('');
       const [password, setPassword] = useState('');
-      const [isLogin, setIsLogin] = useState(true);
-      console.log('Rendering SignInPage');
+      const [gmailId, setGmailId] = useState('');
+      const BASE_URL = 'https://payment-tracker-aswa.onrender.com';
+
       const handleLogin = async () => {
         try {
-          console.log('Attempting login with:', { username, password });
           const response = await axios.post(`${BASE_URL}/api/login`, { username, password });
-          console.log('Login response:', response.data);
           setCurrentUser(response.data.username);
           setSessionToken(response.data.sessionToken);
           localStorage.setItem('currentUser', response.data.username);
           localStorage.setItem('sessionToken', response.data.sessionToken);
           setPage('home');
         } catch (error) {
-          console.error('Login error:', error.response?.data || error.message);
           alert(error.response?.data?.error || 'Error logging in');
         }
       };
+
       const handleSignup = async () => {
         try {
-          const response = await axios.post(`${BASE_URL}/api/signup`, { username, password });
-          alert('Signup successful! Please login.');
-          setIsLogin(true);
+          await axios.post(`${BASE_URL}/api/signup`, { username, password, gmailId });
+          alert('Account created successfully! Please login.');
+          setIsSignup(false);
+          setUsername('');
+          setPassword('');
+          setGmailId('');
         } catch (error) {
           alert(error.response?.data?.error || 'Error signing up');
         }
       };
+
       return (
         <div className="max-w-md mx-auto mt-24 p-8 bg-white rounded-xl shadow-xl">
-          <div>Debug: SignInPage is rendering</div>
-          <h2 className="text-3xl font-bold mb-6 text-teal-600">{isLogin ? 'Login' : 'Sign Up'}</h2>
-          <input
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="Username"
-            className="w-full p-3 mb-5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
-          />
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password"
-            className="w-full p-3 mb-5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
-          />
-          <button
-            onClick={isLogin ? handleLogin : handleSignup}
-            className="w-full p-3 bg-teal-500 text-white rounded-lg hover:bg-teal-600 transition duration-200 font-semibold"
-          >
-            {isLogin ? 'Login' : 'Sign Up'}
-          </button>
-          <p className="mt-5 text-center text-gray-600">
-            {isLogin ? "Don't have an account?" : 'Already have an account?'}
-            <button
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-teal-500 hover:underline ml-1"
-            >
-              {isLogin ? 'Sign Up' : 'Login'}
-            </button>
-          </p>
+          <h2 className="text-3xl font-semibold text-center mb-6 text-teal-600">
+            <i className={`fas fa-${isSignup ? 'user-plus' : 'sign-in-alt'} mr-3`}></i>
+            {isSignup ? 'Sign Up' : 'Sign In'}
+          </h2>
+          {isSignup ? (
+            <div>
+              <div className="mb-5">
+                <label className="block mb-2 text-gray-700 font-medium"><i className="fas fa-user mr-2 text-teal-500"></i>Username</label>
+                <input type="text" className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none transition duration-200" value={username} onChange={e => setUsername(e.target.value)} placeholder="Enter username" />
+              </div>
+              <div className="mb-5">
+                <label className="block mb-2 text-gray-700 font-medium"><i className="fas fa-lock mr-2 text-teal-500"></i>Password</label>
+                <input type="password" className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none transition duration-200" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter password" />
+              </div>
+              <div className="mb-5">
+                <label className="block mb-2 text-gray-700 font-medium"><i className="fas fa-envelope mr-2 text-teal-500"></i>Gmail ID</label>
+                <input type="email" className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none transition duration-200" value={gmailId} onChange={e => setGmailId(e.target.value)} placeholder="Enter Gmail ID" />
+              </div>
+              <button onClick={handleSignup} className="w-full bg-teal-600 text-white p-3 rounded-xl hover:bg-teal-700 transition duration-200 flex items-center justify-center font-semibold">
+                <i className="fas fa-user-plus mr-2"></i> Sign Up
+              </button>
+              <p className="text-center mt-4 text-gray-600">
+                Already have an account? <button onClick={() => setIsSignup(false)} className="text-teal-600 hover:underline">Login</button>
+              </p>
+            </div>
+          ) : (
+            <div>
+              <div className="mb-5">
+                <label className="block mb-2 text-gray-700 font-medium"><i className="fas fa-user mr-2 text-teal-500"></i>Username</label>
+                <input type="text" className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none transition duration-200" value={username} onChange={e => setUsername(e.target.value)} placeholder="Enter username" />
+              </div>
+              <div className="mb-5">
+                <label className="block mb-2 text-gray-700 font-medium"><i className="fas fa-lock mr-2 text-teal-500"></i>Password</label>
+                <input type="password" className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none transition duration-200" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter password" />
+              </div>
+              <button onClick={handleLogin} className="w-full bg-teal-600 text-white p-3 rounded-xl hover:bg-teal-700 transition duration-200 flex items-center justify-center font-semibold">
+                <i className="fas fa-sign-in-alt mr-2"></i> Login
+              </button>
+              <p className="text-center mt-4 text-gray-600">
+                Don't have an account? <button onClick={() => setIsSignup(true)} className="text-teal-600 hover:underline">Sign Up</button>
+              </p>
+            </div>
+          )}
         </div>
       );
     };
 
-    const HomePage = ({ clientsData, paymentsData }) => {
-      const totalClients = clientsData.length;
-      const totalPaymentsDue = paymentsData.reduce((sum, payment) => sum + (parseFloat(payment[16]) || 0), 0);
+    const HomePage = ({
+      paymentsData, setPaymentsData, searchQuery, setSearchQuery, monthFilter, setMonthFilter, statusFilter, setStatusFilter,
+      filterOptionsVisible, setFilterOptionsVisible, updatePayment, handleContextMenu, contextTargetRow, hideContextMenu, deleteRow,
+      setPage, csvFileInputRef, importCsv
+    }) => {
+      const filteredData = paymentsData.filter(row => {
+        const clientName = row.Client_Name.toLowerCase();
+        const nameMatches = clientName.includes(searchQuery.toLowerCase());
+        let filterMatches = true;
+
+        if (monthFilter && statusFilter) {
+          const amountToBePaid = parseFloat(row.Amount_To_Be_Paid) || 0;
+          const paymentValue = parseFloat(row[monthFilter]) || 0;
+          if (statusFilter === 'paid') {
+            filterMatches = paymentValue >= amountToBePaid && amountToBePaid > 0;
+          } else if (statusFilter === 'unpaid') {
+            filterMatches = paymentValue === 0 || !row[monthFilter];
+          } else if (statusFilter === 'partially-paid') {
+            filterMatches = paymentValue > 0 && paymentValue < amountToBePaid;
+          }
+        }
+
+        return nameMatches && filterMatches;
+      });
+
       return (
         <div>
-          <h2 className="text-3xl font-bold mb-6 text-gray-800">Dashboard</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="p-6 bg-white rounded-xl shadow-xl">
-              <h3 className="text-xl font-semibold text-gray-700">Total Clients</h3>
-              <p className="text-3xl font-bold text-teal-600 mt-2">{totalClients}</p>
+          <div className="bg-white p-6 rounded-xl shadow-xl mb-6 flex flex-wrap items-center gap-6">
+            <div className="flex gap-3">
+              <button onClick={() => setPage('addClient')} className="bg-teal-600 text-white px-5 py-2 rounded-xl hover:bg-teal-700 flex items-center transition duration-200 font-semibold">
+                <i className="fas fa-user-plus mr-2"></i> Add Client
+              </button>
+              <button onClick={() => csvFileInputRef.current.click()} className="bg-red-600 text-white px-5 py-2 rounded-xl hover:bg-red-700 flex items-center transition duration-200 font-semibold">
+                <i className="fas fa-file-import mr-2"></i> Import CSV
+              </button>
+              <input type="file" ref={csvFileInputRef} accept=".csv" className="hidden" onChange={importCsv} />
             </div>
-            <div className="p-6 bg-white rounded-xl shadow-xl">
-              <h3 className="text-xl font-semibold text-gray-700">Total Payments Due</h3>
-              <p className="text-3xl font-bold text-red-500 mt-2">₹{totalPaymentsDue.toFixed(2)}</p>
+            <div className="ml-auto flex items-center gap-3">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Search Client Name"
+                  className="p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none transition duration-200"
+                />
+                <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700">
+                  <i className="fas fa-times"></i>
+                </button>
+              </div>
+              <div className="relative">
+                <button onClick={() => setFilterOptionsVisible(!filterOptionsVisible)} className="bg-teal-600 text-white px-5 py-2 rounded-xl hover:bg-teal-700 flex items-center transition duration-200 font-semibold">
+                  <i className="fas fa-filter mr-2"></i> Filter
+                </button>
+                {filterOptionsVisible && (
+                  <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-xl p-5 z-50">
+                    <div className="mb-4">
+                      <label className="block mb-2 text-gray-700 font-medium">Month</label>
+                      <select value={monthFilter} onChange={e => setMonthFilter(e.target.value)} className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none transition duration-200">
+                        <option value="">Select Month</option>
+                        {['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].map(month => (
+                          <option key={month} value={month}>{month.charAt(0).toUpperCase() + month.slice(1)}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="mb-4">
+                      <label className="block mb-2 text-gray-700 font-medium">Payment Status</label>
+                      <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none transition duration-200">
+                        <option value="">Select Status</option>
+                        <option value="paid">Paid</option>
+                        <option value="unpaid">Unpaid</option>
+                        <option value="partially-paid">Partially Paid</option>
+                      </select>
+                    </div>
+                    <div className="flex justify-end gap-3">
+                      <button onClick={() => { setMonthFilter(''); setStatusFilter(''); setFilterOptionsVisible(false); }} className="bg-gray-500 text-white px-4 py-2 rounded-xl hover:bg-gray-600 transition duration-200 font-semibold">Clear</button>
+                      <button onClick={() => setFilterOptionsVisible(false)} className="bg-teal-600 text-white px-4 py-2 rounded-xl hover:bg-teal-700 transition duration-200 font-semibold">Apply</button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
+          </div>
+
+          <div className="overflow-x-auto h-[calc(100vh-200px)]">
+            <table className="w-full bg-white rounded-xl shadow-xl">
+              <thead>
+                <tr className="bg-gradient-to-r from-teal-600 to-teal-400 text-white text-center">
+                  <th className="p-3 sticky top-0 z-10">Sr.No</th>
+                  <th className="p-3 sticky top-0 z-10">Client Name</th>
+                  <th className="p-3 sticky top-0 z-10">Type</th>
+                  <th className="p-3 sticky top-0 z-10">Amount To be Paid</th>
+                  <th colSpan="12" className="p-3 sticky top-0 z-10">Jan - Dec</th>
+                  <th className="p-3 sticky top-0 z-10">Due Payment</th>
+                </tr>
+                <tr className="bg-gray-100 text-center text-gray-700 font-semibold">
+                  <th className="p-3 sticky top-[56px] z-10"></th>
+                  <th className="p-3 sticky top-[56px] z-10"></th>
+                  <th className="p-3 sticky top-[56px] z-10"></th>
+                  <th className="p-3 sticky top-[56px] z-10"></th>
+                  {['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].map(month => (
+                    <th key={month} className={`p-3 sticky top-[56px] z-10 ${month <= 'june' ? 'bg-teal-50' : 'bg-gray-100'}`}>
+                      {month.charAt(0).toUpperCase() + month.slice(1)}
+                    </th>
+                  ))}
+                  <th className="p-3 sticky top-[56px] z-10"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredData.map((row, index) => (
+                  <tr key={index} onContextMenu={e => handleContextMenu(e, index)} className="hover:bg-gray-50 transition duration-200">
+                    <td className="p-3 text-center">{index + 1}</td>
+                    <td className="p-3 text-center">{row.Client_Name}</td>
+                    <td className="p-3 text-center">{row.Type}</td>
+                    <td className="p-3 text-center">₹{row.Amount_To_Be_Paid}</td>
+                    {['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].map(month => {
+                      const amountToBePaid = parseFloat(row.Amount_To_Be_Paid) || 0;
+                      const paymentValue = parseFloat(row[month]) || 0;
+                      let cellClass = '';
+                      if (!row[month] || paymentValue === 0) cellClass = 'bg-red-100';
+                      else if (paymentValue >= amountToBePaid) cellClass = 'bg-green-100';
+                      else if (paymentValue > 0) cellClass = 'bg-orange-100';
+                      return (
+                        <td key={month} className={`p-3 text-center ${month <= 'june' ? 'bg-teal-50' : ''} ${cellClass}`}>
+                          <input
+                            type="text"
+                            value={row[month] || ''}
+                            onChange={e => updatePayment(index, month, e.target.value)}
+                            className="w-full p-2 border border-gray-200 rounded-lg text-center focus:ring-2 focus:ring-teal-500 focus:outline-none transition duration-200"
+                            placeholder={month.charAt(0).toUpperCase() + month.slice(1)}
+                          />
+                        </td>
+                      );
+                    })}
+                    <td className="p-3 text-center">
+                      <input type="text" value={`₹${row.Due_Payment}`} readOnly className="w-full p-2 border border-gray-200 rounded-lg text-center bg-gray-100" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {contextTargetRow && (
+            <div
+              className="absolute bg-white border border-gray-200 rounded-xl shadow-xl z-50"
+              style={{ left: contextTargetRow.x, top: contextTargetRow.y }}
+            >
+              <button onClick={deleteRow} className="w-full text-left p-3 hover:bg-gray-100 text-red-600 font-semibold transition duration-200">Delete This Row</button>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    const AddClientPage = ({ setPage, fetchClients, fetchPayments, sessionToken, currentUser, editClient, setEditClient }) => {
+      const [clientName, setClientName] = useState(editClient?.Client_Name || '');
+      const [email, setEmail] = useState(editClient?.Email || '');
+      const [type, setType] = useState(editClient?.Type || '');
+      const [monthlyPayment, setMonthlyPayment] = useState(editClient?.monthly_payment || '');
+      const BASE_URL = 'https://payment-tracker-aswa.onrender.com';
+
+      const saveClient = async () => {
+        if (!clientName || !type || !monthlyPayment || (editClient && !email)) {
+          alert('All fields are required.');
+          return;
+        }
+        const paymentValue = parseFloat(monthlyPayment);
+        if (isNaN(paymentValue) || paymentValue <= 0) {
+          alert('Monthly payment must be a positive number.');
+          return;
+        }
+
+        try {
+          if (editClient) {
+            await axios.put(`${BASE_URL}/api/update-client`, {
+              clientName,
+              email,
+              type,
+              monthlyPayment: paymentValue,
+              Old_Client_Name: editClient.Client_Name,
+              Old_Type: editClient.Type,
+            }, {
+              headers: { Authorization: `Bearer ${sessionToken}` },
+            });
+            alert('Client updated successfully!');
+          } else {
+            await axios.post(`${BASE_URL}/api/add-client`, {
+              clientName,
+              email,
+              type,
+              monthlyPayment: paymentValue,
+            }, {
+              headers: { Authorization: `Bearer ${sessionToken}` },
+            });
+            alert('Client added successfully!');
+          }
+          fetchClients(sessionToken);
+          fetchPayments(sessionToken);
+          setEditClient(null);
+          setPage('home');
+        } catch (error) {
+          console.error('Error saving client:', error);
+          alert('Failed to save client: ' + error.message);
+        }
+      };
+
+      return (
+        <div className="max-w-md mx-auto p-8 bg-white rounded-xl shadow-xl">
+          <h2 className="text-3xl font-semibold text-center mb-6 text-teal-600">
+            <i className="fas fa-user-plus mr-3"></i>{editClient ? 'Edit Client' : 'Add New Client'}
+          </h2>
+          <div className="mb-5">
+            <label className="block mb-2 text-gray-700 font-medium"><i className="fas fa-user mr-2 text-teal-500"></i>Client Name</label>
+            <input type="text" value={clientName} onChange={e => setClientName(e.target.value)} className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none transition duration-200" placeholder="Enter client name" />
+          </div>
+          <div className="mb-5">
+            <label className="block mb-2 text-gray-700 font-medium"><i className="fas fa-envelope mr-2 text-teal-500"></i>Client Email</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none transition duration-200" placeholder="Enter client email" />
+          </div>
+          <div className="mb-5">
+            <label className="block mb-2 text-gray-700 font-medium"><i className="fas fa-tag mr-2 text-teal-500"></i>Type</label>
+            <input type="text" value={type} onChange={e => setType(e.target.value)} className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none transition duration-200" placeholder="Enter type" />
+          </div>
+          <div className="mb-5">
+            <label className="block mb-2 text-gray-700 font-medium"><i className="fas fa-dollar-sign mr-2 text-teal-500"></i>Monthly Payment Amount</label>
+            <input type="text" value={monthlyPayment} onChange={e => setMonthlyPayment(e.target.value)} className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none transition duration-200" placeholder="Enter amount" />
+          </div>
+          <div className="flex justify-end gap-3">
+            <button onClick={() => { setEditClient(null); setPage('home'); }} className="bg-gray-500 text-white px-5 py-2 rounded-xl hover:bg-gray-600 flex items-center transition duration-200 font-semibold">
+              <i className="fas fa-times mr-2"></i> Cancel
+            </button>
+            <button onClick={saveClient} className="bg-teal-600 text-white px-5 py-2 rounded-xl hover:bg-teal-700 flex items-center transition duration-200 font-semibold">
+              <i className="fas fa-save mr-2"></i> {editClient ? 'Update Client' : 'Add Client'}
+            </button>
           </div>
         </div>
       );
     };
 
-    const ClientsPage = ({ clientsData, setPage, fetchClients, sessionToken, handleSessionError }) => {
-      const [editingClient, setEditingClient] = useState(null);
-      const [clientName, setClientName] = useState('');
-      const [clientEmail, setClientEmail] = useState('');
-      const [clientType, setClientType] = useState('subscription');
-      const [monthlyPayment, setMonthlyPayment] = useState('');
+    const ClientsPage = ({ clientsData, setPage, setEditClient, fetchClients, fetchPayments, sessionToken }) => {
+      const BASE_URL = 'https://payment-tracker-aswa.onrender.com';
 
-      const handleEdit = (client) => {
-        setEditingClient(client);
-        setClientName(client[1]);
-        setClientEmail(client[2]);
-        setClientType(client[3]);
-        setMonthlyPayment(client[4]);
-      };
-
-      const handleUpdate = async () => {
+      const deleteClient = async (client) => {
+        if (!confirm(`Are you sure you want to delete ${client.Client_Name} (${client.Type})?`)) return;
         try {
-          await axios.post(`${BASE_URL}/api/update-client`, {
-            oldClient: editingClient,
-            newClient: [editingClient[0], clientName, clientEmail, clientType, monthlyPayment],
-          }, {
+          await axios.delete(`${BASE_URL}/api/delete-client`, {
             headers: { Authorization: `Bearer ${sessionToken}` },
+            data: { Client_Name: client.Client_Name, Type: client.Type },
           });
-          setEditingClient(null);
           fetchClients(sessionToken);
+          fetchPayments(sessionToken);
+          alert('Client deleted successfully!');
         } catch (error) {
-          handleSessionError(error);
-        }
-      };
-
-      const handleDelete = async (client) => {
-        if (window.confirm(`Are you sure you want to delete ${client[1]}?`)) {
-          try {
-            await axios.post(`${BASE_URL}/api/delete-client`, { client }, {
-              headers: { Authorization: `Bearer ${sessionToken}` },
-            });
-            fetchClients(sessionToken);
-          } catch (error) {
-            handleSessionError(error);
-          }
+          console.error('Error deleting client:', error);
+          alert('Failed to delete client: ' + error.message);
         }
       };
 
       return (
-        <div>
-          <h2 className="text-3xl font-bold mb-6 text-gray-800">Clients</h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full bg-white border border-gray-200 rounded-xl shadow-xl">
-              <thead className="bg-gray-100">
-                <tr>
-                  <th className="border-b border-gray-200 p-4 text-left text-gray-600 font-semibold">Client Name</th>
-                  <th className="border-b border-gray-200 p-4 text-left text-gray-600 font-semibold">Email</th>
-                  <th className="border-b border-gray-200 p-4 text-left text-gray-600 font-semibold">Type</th>
-                  <th className="border-b border-gray-200 p-4 text-left text-gray-600 font-semibold">Monthly Payment</th>
-                  <th className="border-b border-gray-200 p-4 text-left text-gray-600 font-semibold">Actions</th>
+        <div className="bg-white p-6 rounded-xl shadow-xl">
+          <h2 className="text-3xl font-semibold mb-6 text-teal-600"><i className="fas fa-users mr-3"></i>Clients</h2>
+          <div className="overflow-x-auto h-[calc(100vh-150px)]">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gradient-to-r from-teal-600 to-teal-400 text-white text-center">
+                  <th className="p-3 sticky top-0 z-10">Client Name</th>
+                  <th className="p-3 sticky top-0 z-10">Email</th>
+                  <th className="p-3 sticky top-0 z-10">Monthly Amount</th>
+                  <th className="p-3 sticky top-0 z-10">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {clientsData.map((client, index) => (
-                  <tr key={index} className="hover:bg-gray-50 transition">
-                    <td className="border-b border-gray-200 p-4 text-gray-800">{client[1]}</td>
-                    <td className="border-b border-gray-200 p-4 text-gray-600">{client[2]}</td>
-                    <td className="border-b border-gray-200 p-4 text-gray-600">{client[3]}</td>
-                    <td className="border-b border-gray-200 p-4 text-gray-600">₹{client[4]}</td>
-                    <td className="border-b border-gray-200 p-4">
-                      <button
-                        onClick={() => handleEdit(client)}
-                        className="text-teal-500 hover:text-teal-700 transition duration-200 mr-3 font-semibold"
-                      >
-                        Edit
+                  <tr key={index} className="hover:bg-gray-50 transition duration-200">
+                    <td className="p-3 text-center text-gray-800">{client.Client_Name}</td>
+                    <td className="p-3 text-center text-gray-600">{client.Email || 'N/A'}</td>
+                    <td className="p-3 text-center text-gray-600">₹{client.monthly_payment}</td>
+                    <td className="p-3 text-center">
+                      <button onClick={() => { setEditClient(client); setPage('addClient'); }} className="bg-teal-600 text-white px-3 py-1 rounded-xl hover:bg-teal-700 mr-3 transition duration-200 font-semibold">
+                        <i className="fas fa-edit mr-1"></i> Edit
                       </button>
-                      <button
-                        onClick={() => handleDelete(client)}
-                        className="text-red-500 hover:text-red-700 transition duration-200 font-semibold"
-                      >
-                        Delete
+                      <button onClick={() => deleteClient(client)} className="bg-red-600 text-white px-3 py-1 rounded-xl hover:bg-red-700 transition duration-200 font-semibold">
+                        <i className="fas fa-trash-alt mr-1"></i> Delete
                       </button>
                     </td>
                   </tr>
@@ -402,208 +674,42 @@
               </tbody>
             </table>
           </div>
-          {editingClient && (
-            <div className="mt-8 p-6 bg-white rounded-xl shadow-xl">
-              <h3 className="text-xl font-semibold mb-5 text-gray-800">Edit Client</h3>
-              <input
-                type="text"
-                value={clientName}
-                onChange={(e) => setClientName(e.target.value)}
-                placeholder="Client Name"
-                className="w-full p-3 mb-5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
-              />
-              <input
-                type="email"
-                value={clientEmail}
-                onChange={(e) => setClientEmail(e.target.value)}
-                placeholder="Email"
-                className="w-full p-3 mb-5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
-              />
-              <select
-                value={clientType}
-                onChange={(e) => setClientType(e.target.value)}
-                className="w-full p-3 mb-5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
-              >
-                <option value="subscription">Subscription</option>
-                <option value="one-time">One-Time</option>
-              </select>
-              <input
-                type="number"
-                value={monthlyPayment}
-                onChange={(e) => setMonthlyPayment(e.target.value)}
-                placeholder="Monthly Payment"
-                className="w-full p-3 mb-5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
-              />
-              <button
-                onClick={handleUpdate}
-                className="w-full p-3 bg-teal-500 text-white rounded-lg hover:bg-teal-600 transition duration-200 font-semibold"
-              >
-                Update Client
-              </button>
-              <button
-                onClick={() => setEditingClient(null)}
-                className="w-full p-3 mt-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition duration-200 font-semibold"
-              >
-                Cancel
-              </button>
-            </div>
-          )}
         </div>
       );
     };
 
-    const AddClientPage = ({ setPage, fetchClients, sessionToken, handleSessionError }) => {
-      const [clientName, setClientName] = useState('');
-      const [clientEmail, setClientEmail] = useState('');
-      const [clientType, setClientType] = useState('subscription');
-      const [monthlyPayment, setMonthlyPayment] = useState('');
-
-      const handleSubmit = async () => {
-        try {
-          await axios.post(`${BASE_URL}/api/add-client`, {
-            client: [null, clientName, clientEmail, clientType, monthlyPayment],
-          }, {
-            headers: { Authorization: `Bearer ${sessionToken}` },
-          });
-          fetchClients(sessionToken);
-          setPage('clients');
-        } catch (error) {
-          handleSessionError(error);
-        }
-      };
-
+    const PaymentsPage = ({ paymentsData, fetchClients, fetchPayments, sessionToken }) => {
       return (
-        <div>
-          <h2 className="text-3xl font-bold mb-6 text-gray-800">Add Client</h2>
-          <div className="p-6 bg-white rounded-xl shadow-xl">
-            <input
-              type="text"
-              value={clientName}
-              onChange={(e) => setClientName(e.target.value)}
-              placeholder="Client Name"
-              className="w-full p-3 mb-5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
-            />
-            <input
-              type="email"
-              value={clientEmail}
-              onChange={(e) => setClientEmail(e.target.value)}
-              placeholder="Email"
-              className="w-full p-3 mb-5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
-            />
-            <select
-              value={clientType}
-              onChange={(e) => setClientType(e.target.value)}
-              className="w-full p-3 mb-5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
-            >
-              <option value="subscription">Subscription</option>
-              <option value="one-time">One-Time</option>
-            </select>
-            <input
-              type="number"
-              value={monthlyPayment}
-              onChange={(e) => setMonthlyPayment(e.target.value)}
-              placeholder="Monthly Payment"
-              className="w-full p-3 mb-5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition"
-            />
-            <button
-              onClick={handleSubmit}
-              className="w-full p-3 bg-teal-500 text-white rounded-lg hover:bg-teal-600 transition duration-200 font-semibold"
-            >
-              Add Client
-            </button>
-            <button
-              onClick={() => setPage('clients')}
-              className="w-full p-3 mt-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition duration-200 font-semibold"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      );
-    };
-
-    const PaymentsPage = ({ paymentsData, fetchPayments, sessionToken, handleSessionError }) => {
-      const [monthPayments, setMonthPayments] = useState({});
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-      const handlePaymentChange = (index, monthIndex, value) => {
-        setMonthPayments(prev => ({
-          ...prev,
-          [index]: {
-            ...prev[index],
-            [monthIndex]: value,
-          },
-        }));
-      };
-
-      const handleSavePayments = async () => {
-        try {
-          const updatedPayments = paymentsData.map((payment, index) => {
-            const updatedRow = [...payment];
-            for (let i = 0; i < 12; i++) {
-              updatedRow[4 + i] = monthPayments[index]?.[i] || payment[4 + i] || '';
-            }
-            return updatedRow;
-          });
-          await axios.post(`${BASE_URL}/api/save-payments`, { payments: updatedPayments }, {
-            headers: { Authorization: `Bearer ${sessionToken}` },
-          });
-          fetchPayments(sessionToken);
-          setMonthPayments({});
-          alert('Payments saved successfully!');
-        } catch (error) {
-          handleSessionError(error);
-        }
-      };
-
-      return (
-        <div>
-          <h2 className="text-3xl font-bold mb-6 text-gray-800">Payments</h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full bg-white border border-gray-200 rounded-xl shadow-xl">
-              <thead className="bg-gray-100">
-                <tr>
-                  <th className="border-b border-gray-200 p-4 text-left text-gray-600 font-semibold">Client Name</th>
-                  <th className="border-b border-gray-200 p-4 text-left text-gray-600 font-semibold">Type</th>
-                  <th className="border-b border-gray-200 p-4 text-left text-gray-600 font-semibold">Amount</th>
-                  {months.map((month, idx) => (
-                    <th key={idx} className="border-b border-gray-200 p-4 text-left text-gray-600 font-semibold">{month}</th>
+        <div className="bg-white p-6 rounded-xl shadow-xl">
+          <h2 className="text-3xl font-semibold mb-6 text-teal-600"><i className="fas fa-money-bill-wave mr-3"></i>Payments</h2>
+          <div className="overflow-x-auto h-[calc(100vh-150px)]">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gradient-to-r from-teal-600 to-teal-400 text-white text-center">
+                  <th className="p-3 sticky top-0 z-10">Client Name</th>
+                  <th className="p-3 sticky top-0 z-10">Type</th>
+                  <th className="p-3 sticky top-0 z-10">Amount To be Paid</th>
+                  {['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].map(month => (
+                    <th key={month} className="p-3 sticky top-0 z-10">{month.charAt(0).toUpperCase() + month.slice(1)}</th>
                   ))}
-                  <th className="border-b border-gray-200 p-4 text-left text-gray-600 font-semibold">Due Payment</th>
+                  <th className="p-3 sticky top-0 z-10">Due Payment</th>
                 </tr>
               </thead>
               <tbody>
                 {paymentsData.map((payment, index) => (
-                  <tr key={index} className="hover:bg-gray-50 transition">
-                    <td className="border-b border-gray-200 p-4 text-gray-800">{payment[1]}</td>
-                    <td className="border-b border-gray-200 p-4 text-gray-600">{payment[2]}</td>
-                    <td className="border-b border-gray-200 p-4 text-gray-600">₹{payment[3]}</td>
-                    {months.map((_, monthIndex) => (
-                      <td key={monthIndex} className="border-b border-gray-200 p-4">
-                        <input
-                          type="checkbox"
-                          checked={
-                            (monthPayments[index]?.[monthIndex] !== undefined
-                              ? monthPayments[index]?.[monthIndex]
-                              : payment[4 + monthIndex]) || false
-                          }
-                          onChange={(e) => handlePaymentChange(index, monthIndex, e.target.checked)}
-                          className="h-5 w-5 text-teal-500 rounded focus:ring-teal-500"
-                        />
-                      </td>
+                  <tr key={index} className="hover:bg-gray-50 transition duration-200">
+                    <td className="p-3 text-center text-gray-800">{payment.Client_Name}</td>
+                    <td className="p-3 text-center text-gray-600">{payment.Type}</td>
+                    <td className="p-3 text-center text-gray-600">₹{payment.Amount_To_Be_Paid}</td>
+                    {['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].map(month => (
+                      <td key={month} className="p-3 text-center text-gray-600">₹{payment[month] || '0'}</td>
                     ))}
-                    <td className="border-b border-gray-200 p-4 text-gray-600">₹{payment[16]}</td>
+                    <td className="p-3 text-center text-gray-600">₹{payment.Due_Payment}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <button
-            onClick={handleSavePayments}
-            className="mt-6 p-3 bg-teal-500 text-white rounded-lg hover:bg-teal-600 transition duration-200 font-semibold"
-          >
-            Save Payments
-          </button>
         </div>
       );
     };
@@ -612,7 +718,7 @@
       <ErrorBoundary>
         <App />
       </ErrorBoundary>,
-      document.getElementById('root'),
+      document.getElementById('root'), 
       () => console.log('ReactDOM.render completed')
     );
   </script>
