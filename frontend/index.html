@@ -11,6 +11,17 @@
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
   <style>
+    nav {
+      background-color: #ffffff;
+      width: 16rem;
+      padding: 1rem;
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100%;
+      border-right: 1px solid #e5e7eb;
+      z-index: 50;
+    }
     .payment-full {
       background-color: #d1fae5 !important;
     }
@@ -31,26 +42,6 @@
     .table-container table {
       min-width: 1200px;
     }
-    nav {
-  background-color: #ffffff;
-  width: 16rem; /* 64 units in Tailwind, equivalent to 256px */
-  padding: 1rem;
-  position: fixed;
-  top: 0;
-  left: 0;
-  height: 100%;
-  transition: transform 0.3s ease-in-out;
-  border-right: 1px solid #e5e7eb;
-  z-index: 50;
-}
-
-nav.translate-x-0 {
-  transform: translateX(0);
-}
-
-nav.-translate-x-full {
-  transform: translateX(-100%);
-}
   </style>
 </head>
 <body className="bg-gray-50">
@@ -94,7 +85,6 @@ nav.-translate-x-full {
       const [page, setPage] = useState('signIn');
       const [clientsData, setClientsData] = useState([]);
       const [paymentsData, setPaymentsData] = useState([]);
-      const [isSidebarOpen, setIsSidebarOpen] = useState(false);
       const [contextTargetRow, setContextTargetRow] = useState(null);
       const [searchQuery, setSearchQuery] = useState('');
       const [monthFilter, setMonthFilter] = useState('');
@@ -156,8 +146,6 @@ nav.-translate-x-full {
         setPage('signIn');
       };
 
-      const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
-
       const handleContextMenu = (e, rowIndex) => {
         e.preventDefault();
         setContextTargetRow({ rowIndex, x: e.pageX, y: e.pageY });
@@ -200,38 +188,15 @@ nav.-translate-x-full {
             return;
           }
 
-          const headers = rows[0].split(',').map(header => header.trim().replace(/\s+/g, ' '));
-          const expectedHeaders = ['Client Name', 'Type', 'Amount To Be Paid'];
-          const headersMatch = expectedHeaders.every((header, index) => headers[index] === header);
-          if (!headersMatch || headers.length !== expectedHeaders.length) {
-            alert('CSV file must have headers: Client Name, Type, Amount To Be Paid');
-            csvFileInputRef.current.value = '';
-            return;
-          }
-
-          const data = rows.slice(1).map(row => {
+          const data = rows.map(row => {
             const cols = row.split(',').map(col => col.trim());
             if (cols.length < 3) return null;
             const amount = parseFloat(cols[2]);
             if (isNaN(amount) || amount <= 0) return null;
             return {
-              User: currentUser,
               Client_Name: cols[0],
               Type: cols[1],
-              Amount_To_Be_Paid: amount,
-              january: '',
-              february: '',
-              march: '',
-              april: '',
-              may: '',
-              june: '',
-              july: '',
-              august: '',
-              september: '',
-              october: '',
-              november: '',
-              december: '',
-              Due_Payment: '0.00'
+              Amount_To_Be_Paid: amount
             };
           }).filter(row => row);
 
@@ -264,29 +229,29 @@ nav.-translate-x-full {
           {page === 'signIn' && <SignInPage setSessionToken={setSessionToken} setCurrentUser={setCurrentUser} setPage={setPage} />}
           {page !== 'signIn' && (
             <div className="flex h-screen">
-              <nav className={`bg-white w-64 p-4 fixed top-0 h-full transition-transform duration-300 border-r border-gray-200 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} z-50`}>
+              <nav className="bg-white w-64 p-4 fixed top-0 h-full border-r border-gray-200 z-50">
                 <div className="flex items-center mb-6">
                   <i className="fas fa-money-bill-wave text-2xl mr-2"></i>
                   <h1 className="text-xl font-semibold">Payment Tracker</h1>
                 </div>
                 <ul className="space-y-2">
                   <li>
-                    <button onClick={() => { setPage('home'); setIsSidebarOpen(false); }} className="w-full text-left p-2 hover:bg-gray-100 rounded-lg flex items-center">
+                    <button onClick={() => setPage('home')} className="w-full text-left p-2 hover:bg-gray-100 rounded-lg flex items-center">
                       <i className="fas fa-tachometer-alt mr-2"></i> Dashboard
                     </button>
                   </li>
                   <li>
-                    <button onClick={() => { setPage('clients'); setIsSidebarOpen(false); }} className="w-full text-left p-2 hover:bg-gray-100 rounded-lg flex items-center">
+                    <button onClick={() => setPage('clients')} className="w-full text-left p-2 hover:bg-gray-100 rounded-lg flex items-center">
                       <i className="fas fa-users mr-2"></i> Clients
                     </button>
                   </li>
                   <li>
-                    <button onClick={() => { setPage('payments'); setIsSidebarOpen(false); }} className="w-full text-left p-2 hover:bg-gray-100 rounded-lg flex items-center">
+                    <button onClick={() => setPage('payments')} className="w-full text-left p-2 hover:bg-gray-100 rounded-lg flex items-center">
                       <i className="fas fa-money-bill-wave mr-2"></i> Payments
                     </button>
                   </li>
                   <li>
-                    <button onClick={() => { alert('Reports coming soon!'); setIsSidebarOpen(false); }} className="w-full text-left p-2 hover:bg-gray-100 rounded-lg flex items-center">
+                    <button onClick={() => { alert('Reports coming soon!'); }} className="w-full text-left p-2 hover:bg-gray-100 rounded-lg flex items-center">
                       <i className="fas fa-chart-line mr-2"></i> Reports
                     </button>
                   </li>
@@ -297,13 +262,9 @@ nav.-translate-x-full {
                   </li>
                 </ul>
               </nav>
-              {isSidebarOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={toggleSidebar}></div>}
 
-              <main className="flex-1 p-6 overflow-y-auto transition-all duration-300" style={{ marginLeft: isSidebarOpen ? '16rem' : '0' }}>
+              <main className="flex-1 p-6 overflow-y-auto" style={{ marginLeft: '16rem' }}>
                 <header className="flex items-center justify-between mb-6">
-                  <button onClick={toggleSidebar} className="focus:outline-none">
-                    <i className={`fas fa-${isSidebarOpen ? 'times' : 'bars'} text-xl`}></i>
-                  </button>
                   <div className="flex items-center space-x-4">
                     <i className="fas fa-bell"></i>
                     <i className="fas fa-user-circle text-2xl"></i>
@@ -465,9 +426,14 @@ nav.-translate-x-full {
                 <label className="block mb-1">Gmail ID</label>
                 <input type="email" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={gmailId} onChange={e => setGmailId(e.target.value)} placeholder="Enter Gmail ID" />
               </div>
-              <button onClick={handleSignup} className="w-full bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition duration-200">
-                Sign Up
-              </button>
+'opposition: <div className="flex justify-end gap-2">
+                <button onClick={() => setIsSignup(false)} className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600">
+                  Cancel
+                </button>
+                <button onClick={handleSignup} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                  Sign Up
+                </button>
+              </div>
               <p className="text-center mt-2">
                 Already have an account? <button onClick={() => setIsSignup(false)} className="text-blue-600 hover:underline">Login</button>
               </p>
@@ -482,9 +448,11 @@ nav.-translate-x-full {
                 <label className="block mb-1">Password</label>
                 <input type="password" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter password" />
               </div>
-              <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition duration-200">
-                Login
-              </button>
+              <div className="flex justify-end gap-2">
+                <button onClick={handleLogin} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                  Login
+                </button>
+              </div>
               <p className="text-center mt-2">
                 Don't have an account? <button onClick={() => setIsSignup(true)} className="text-blue-600 hover:underline">Sign Up</button>
               </p>
@@ -670,13 +638,13 @@ nav.-translate-x-full {
             <table className="w-full">
               <thead>
                 <tr className="bg-gray-100 text-left">
-                  <th rowspan="2" className="p-2 text-center">Sr.</th>
-                  <th rowspan="2" className="p-2 text-center">Client</th>
-                  <th rowspan="2" className="p-2 text-center">Type</th>
-                  <th rowspan="2" className="p-2 text-center">Amount To Be Paid</th>
+                  <th rowSpan="2" className="p-2 text-center">Sr.</th>
+                  <th rowSpan="2" className="p-2 text-center">Client</th>
+                  <th rowSpan="2" className="p-2 text-center">Type</th>
+                  <th rowSpan="2" className="p-2 text-center">Amount To Be Paid</th>
                   <th colSpan="12" className="p-2 text-center">Jan - Dec</th>
-                  <th rowspan="2" className="p-2 text-center">Total Due</th>
-                  <th rowspan="2" className="p-2 text-center">Actions</th>
+                  <th rowSpan="2" className="p-2 text-center">Total Due</th>
+                  <th rowSpan="2" className="p-2 text-center">Actions</th>
                 </tr>
                 <tr className="bg-gray-100">
                   {months.map((month, index) => (

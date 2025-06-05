@@ -247,47 +247,119 @@ app.post('/api/save-payments', authenticateToken, async (req, res) => {
   }
 });
 
-// Import CSV (Flexible Mapping)
+// Import CSV (Flexible Mapping with Auto-Correction)
 app.post('/api/import-csv', authenticateToken, async (req, res) => {
   try {
-    const csvData = req.body;
-    const buffer = Buffer.from(JSON.stringify(csvData));
-    const readable = Readable.from(buffer);
-
-    const parser = readable.pipe(csv.parse({ columns: true, trim: true }));
-    const records = [];
-
-    for await (const record of parser) {
-      records.push(record);
+    const csvData = req.body; // Expecting an array of objects from the frontend
+    if (!csvData || !Array.isArray(csvData) || csvData.length === 0) {
+      return res.status(400).json({ error: 'No valid CSV data provided' });
     }
 
-    if (records.length === 0) {
-      return res.status(400).json({ error: 'CSV file is empty' });
-    }
+    const records = csvData;
+    const processedRecords = [];
+
+    // Define possible column name variations for mapping
+    const clientNameAliases = ['client name', 'client_name', 'client', 'name', 'customer'];
+    const typeAliases = ['type', 'category', 'service', 'product'];
+    const amountAliases = ['amount to be paid', 'amount_to_be_paid', 'amount', 'payment', 'monthly payment', 'monthly_payment', 'price'];
 
     for (const record of records) {
-      const clientName = record['Client Name'] || record['Client_Name'] || record['client_name'] || Object.values(record)[0] || 'Unknown Client';
-      const type = record['Type'] || record['type'] || Object.values(record)[1] || 'Unknown Type';
-      const amountToBePaid = parseFloat(record['Amount To Be Paid'] || record['Amount_To_Be_Paid'] || Object.values(record)[2] || 0);
+      // Convert all keys to lowercase for case-insensitive matching
+      const normalizedRecord = Object.fromEntries(
+        Object.entries(record).map(([key, value]) => [key.toLowerCase().replace(/\s+/g, '_'), value])
+      );
 
-      if (isNaN(amountToBePaid) || amountToBePaid <= 0) continue;
+      // Find matching keys for each field
+      const clientNameKey = Object.keys(normalizedRecord).find(key =>
+        clientNameAliases.some(alias => key.includes(alias.toLowerCase().replace(/\s+/g, '_')))
+      ) || Object.keys(normalizedRecord)[0]; // Fallback to first column
+      const typeKey = Object.keys(normalizedRecord).find(key =>
+        typeAliases.some(alias => key.includes(alias.toLowerCase().replace(/\s+/g, '_')))
+      ) || Object.keys(normalizedRecord)[1] || 'Unknown_Type'; // Fallback to second column or default
+      const amountKey = Object.keys(normalizedRecord).find(key =>
+        amountAliases.some(alias => key.includes(alias.toLowerCase().replace(/\s+/g, '_')))
+      ) || Object.keys(normalizedRecord)[2]; // Fallback to third column
 
-      let clients = await readSheet('Clients', 'A2:E');
-      const clientExists = clients.some(client => client[0] === req.user.username && client[1] === clientName && client[3] === type);
-      if (!clientExists) {
-        await appendSheet('Clients', [[req.user.username, clientName, '', type, amountToBePaid]]);
+      // Extract and clean values
+      let clientName = normalizedRecord[clientNameKey] || 'Unknown_Client_' + Math.random().toString(36).substr(2, 5);
+      let type = normalizedRecord[typeKey] || 'Unknown_Type';
+      let amountToBePaid = parseFloat(normalizedRecord[amountKey] || '0');
+
+      // Data validation and auto-correction
+      clientName = clientName.trim().replace(/[^a-zA-Z0-9\s]/g, ''); // Remove special characters
+      if (!clientName) clientName = 'Unknown_Client_' + Math.random().toString(36).substr(2, 5);
+      type = type.trim().replace(/[^a-zA-Z0-9\s]/g, ''); // Remove special characters
+      if (!type) type = 'Unknown_Type';
+
+      // Validate and correct amount
+      if (isNaN(amountToBePaid) || amountToBePaid <= 0) {
+        console.warn(`Invalid amount for record: ${JSON.stringify(record)}. Setting to 0.`);
+        amountToBePaid = 0; // Default to 0 for invalid amounts
+        continue; // Skip records with invalid amounts
+      } else {
+        amountToBePaid = Math.round(amountToBePaid * 100) / 100; // Round to 2 decimal places
       }
 
-      let payments = await readSheet('Payments', 'A2:R');
-      const paymentExists = payments.some(payment => payment[0] === req.user.username && payment[1] === clientName && payment[2] === type);
+      processedRecords.push({
+        User: req.user.username,
+        Client_Name: clientName,
+        Type: type,
+        Amount_To_Be_Paid: amountToBePaid,
+        january: '',
+        february: '',
+        march: '',
+        april: '',
+        may: '',
+        june: '',
+        july: '',
+        august: '',
+        september: '',
+        october: '',
+        november: '',
+        december: '',
+        Due_Payment: '0'
+      });
+    }
+
+    if (processedRecords.length === 0) {
+      return res.status(400).json({ error: 'No valid records found in CSV data' });
+    }
+
+    // Update Clients and Payments sheets
+    let clients = await readSheet('Clients', 'A2:E');
+    let payments = await readSheet('Payments', 'A2:R');
+
+    for (const record of processedRecords) {
+      const { Client_Name, Type, Amount_To_Be_Paid } = record;
+
+      // Check if client exists
+      const clientExists = clients.some(client => 
+        client[0] === req.user.username && 
+        client[1].toLowerCase() === Client_Name.toLowerCase() && 
+        client[3].toLowerCase() === Type.toLowerCase()
+      );
+      if (!clientExists) {
+        await appendSheet('Clients', [[req.user.username, Client_Name, '', Type, Amount_To_Be_Paid]]);
+      }
+
+      // Check if payment exists
+      const paymentExists = payments.some(payment => 
+        payment[0] === req.user.username && 
+        payment[1].toLowerCase() === Client_Name.toLowerCase() && 
+        payment[2].toLowerCase() === Type.toLowerCase()
+      );
       if (!paymentExists) {
-        await appendSheet('Payments', [[req.user.username, clientName, type, amountToBePaid, '', '', '', '', '', '', '', '', '', '', '', '', '0']]);
+        await appendSheet('Payments', [[
+          req.user.username, Client_Name, Type, Amount_To_Be_Paid,
+          '', '', '', '', '', '', '', '', '', '', '', '', '0'
+        ]]);
       }
     }
 
     res.status(200).json({ message: 'CSV data imported successfully' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error importing CSV:', error);
+    res.status(500).json({ error: 'Failed to import CSV: ' + error.message });
   }
 });
 
