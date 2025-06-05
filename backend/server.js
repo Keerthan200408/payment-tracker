@@ -7,16 +7,18 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: 'https://reliable-eclair-abf03c.netlify.app',
+}));
 app.use(express.json());
 
 // Google Sheets setup
 const auth = new google.auth.GoogleAuth({
-  keyFile: 'credentials.json', // Path to your credentials file
+  credentials: JSON.parse(process.env.GOOGLE_CREDENTIALS),
   scopes: ['https://www.googleapis.com/auth/spreadsheets'],
 });
 
-const spreadsheetId = 'YOUR_SPREADSHEET_ID'; // Replace with your Google Sheet ID
+const spreadsheetId = process.env.SPREADSHEET_ID || '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
 
 async function getSheetsClient() {
   const client = await auth.getClient();

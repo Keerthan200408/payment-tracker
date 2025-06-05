@@ -31,6 +31,8 @@
       const [editClient, setEditClient] = useState(null);
       const csvFileInputRef = useRef(null);
 
+      const BASE_URL = 'https://payment-tracker-aswa.onrender.com';
+
       useEffect(() => {
         const storedUser = localStorage.getItem('currentUser');
         const storedToken = localStorage.getItem('sessionToken');
@@ -45,7 +47,7 @@
 
       const fetchClients = async (token) => {
         try {
-          const response = await axios.get('http://localhost:5000/api/get-clients', {
+          const response = await axios.get(`${BASE_URL}/api/get-clients`, {
             headers: { Authorization: `Bearer ${token}` },
           });
           setClientsData(response.data);
@@ -57,7 +59,7 @@
 
       const fetchPayments = async (token) => {
         try {
-          const response = await axios.get('http://localhost:5000/api/get-payments', {
+          const response = await axios.get(`${BASE_URL}/api/get-payments`, {
             headers: { Authorization: `Bearer ${token}` },
           });
           setPaymentsData(response.data);
@@ -100,7 +102,7 @@
         }
         const rowData = paymentsData[contextTargetRow.rowIndex];
         try {
-          await axios.delete('http://localhost:5000/api/delete-client', {
+          await axios.delete(`${BASE_URL}/api/delete-client`, {
             headers: { Authorization: `Bearer ${sessionToken}` },
             data: { Client_Name: rowData.Client_Name, Type: rowData.Type },
           });
@@ -130,7 +132,7 @@
 
         setPaymentsData(updatedPayments);
         try {
-          await axios.post('http://localhost:5000/api/save-payments', paymentsData, {
+          await axios.post(`${BASE_URL}/api/save-payments`, paymentsData, {
             headers: { Authorization: `Bearer ${sessionToken}` },
           });
         } catch (error) {
@@ -162,7 +164,7 @@
           });
 
           try {
-            await axios.post('http://localhost:5000/api/import-csv', data, {
+            await axios.post(`${BASE_URL}/api/import-csv`, data, {
               headers: { Authorization: `Bearer ${sessionToken}` },
             });
             fetchClients(sessionToken);
@@ -270,10 +272,11 @@
       const [username, setUsername] = useState('');
       const [password, setPassword] = useState('');
       const [gmailId, setGmailId] = useState('');
+      const BASE_URL = 'https://payment-tracker-aswa.onrender.com';
 
       const handleLogin = async () => {
         try {
-          const response = await axios.post('http://localhost:5000/api/login', { username, password });
+          const response = await axios.post(`${BASE_URL}/api/login`, { username, password });
           setCurrentUser(response.data.username);
           setSessionToken(response.data.sessionToken);
           localStorage.setItem('currentUser', response.data.username);
@@ -286,7 +289,7 @@
 
       const handleSignup = async () => {
         try {
-          await axios.post('http://localhost:5000/api/signup', { username, password, gmailId });
+          await axios.post(`${BASE_URL}/api/signup`, { username, password, gmailId });
           alert('Account created successfully! Please login.');
           setIsSignup(false);
           setUsername('');
@@ -506,6 +509,7 @@
       const [email, setEmail] = useState(editClient?.Email || '');
       const [type, setType] = useState(editClient?.Type || '');
       const [monthlyPayment, setMonthlyPayment] = useState(editClient?.monthly_payment || '');
+      const BASE_URL = 'https://payment-tracker-aswa.onrender.com';
 
       const saveClient = async () => {
         if (!clientName || !type || !monthlyPayment || (editClient && !email)) {
@@ -520,7 +524,7 @@
 
         try {
           if (editClient) {
-            await axios.put('http://localhost:5000/api/update-client', {
+            await axios.put(`${BASE_URL}/api/update-client`, {
               clientName,
               email,
               type,
@@ -532,7 +536,7 @@
             });
             alert('Client updated successfully!');
           } else {
-            await axios.post('http://localhost:5000/api/add-client', {
+            await axios.post(`${BASE_URL}/api/add-client`, {
               clientName,
               email,
               type,
@@ -586,10 +590,12 @@
     };
 
     const ClientsPage = ({ clientsData, setPage, setEditClient, fetchClients, fetchPayments, sessionToken }) => {
+      const BASE_URL = 'https://payment-tracker-aswa.onrender.com';
+
       const deleteClient = async (client) => {
         if (!confirm(`Are you sure you want to delete ${client.Client_Name} (${client.Type})?`)) return;
         try {
-          await axios.delete('http://localhost:5000/api/delete-client', {
+          await axios.delete(`${BASE_URL}/api/delete-client`, {
             headers: { Authorization: `Bearer ${sessionToken}` },
             data: { Client_Name: client.Client_Name, Type: client.Type },
           });
