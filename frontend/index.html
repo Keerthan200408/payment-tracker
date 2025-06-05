@@ -590,18 +590,20 @@
             <div className="flex space-x-2 relative">
               <input
                 type="text"
-                value={inputData}
-                onChange={(e) => setInputData(e.target.value)}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && setSearchQuery(searchQuery)}
                 placeholder="Search clients..."
+                className="p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
               />
               <button
-                onClick={() => setSearchQuery(searchQuery) }
+                onClick={() => setSearchQuery(searchQuery)}
                 className="bg-blue-500 text-white px-3 py-2 rounded-lg hover:bg-blue-600"
               >
                 <i className="fas fa-search"></i>
               </button>
               <button
-                onClick={() => { setSearchQuery(''); setInputData(''); }}
+                onClick={() => setSearchQuery('')}
                 className="bg-gray-500 text-white px-3 py-2 rounded-lg hover:bg-gray-600"
               >
                 ×
@@ -631,7 +633,7 @@
                       </select>
                     </div>
                     <div className="flex justify-end gap-2">
-                      <button onClick={() => { setMonthFilter(''); setStatusFilter(''); setFilterOptionsVisible(false); setSearchQuery(null); }} className="bg-gray-500 text-white px-3 py-2 rounded-lg hover:bg-gray-600">
+                      <button onClick={() => { setMonthFilter(''); setStatusFilter(''); setFilterOptionsVisible(false); setSearchQuery(''); }} className="bg-gray-500 text-white px-3 py-2 rounded-lg hover:bg-gray-600">
                         Clear
                       </button>
                       <button onClick={() => setFilterOptionsVisible(false)} className="bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700">
