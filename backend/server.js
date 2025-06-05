@@ -280,63 +280,6 @@ app.post('/api/save-payments', verifySessionToken, async (req, res) => {
   }
 });
 
-app.post('/api/save-temp-payments', verifySessionToken, async (req, res) => {
-  try {
-    const sheets = await getSheetsClient();
-    const spreadsheetId = '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
-    const data = req.body;
-
-    const existingDataResponse = await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range: 'TempPayments!A2:Q',
-    });
-    const existingRows = existingDataResponse.data.values || [];
-
-    const rowsToKeep = existingRows.filter(row => row[0] !== req.username);
-
-    const values = data.map(row => [
-      row.User || req.username,
-      row.Client_Name || '',
-      row.Type || '',
-      row.Amount_To_Be_Paid || '',
-      row.january || '',
-      row.february || '',
-      row.march || '',
-      row.april || '',
-      row.may || '',
-      row.june || '',
-      row.july || '',
-      row.august || '',
-      row.september || '',
-      row.october || '',
-      row.november || '',
-      row.december || '',
-      row.Due_Payment || '',
-    ]);
-
-    const updatedValues = [...rowsToKeep, ...values];
-
-    await sheets.spreadsheets.values.clear({
-      spreadsheetId,
-      range: 'TempPayments!A2:Q',
-    });
-
-    if (updatedValues.length > 0) {
-      await sheets.spreadsheets.values.update({
-        spreadsheetId,
-        range: 'TempPayments!A2',
-        valueInputOption: 'RAW',
-        requestBody: { values: updatedValues },
-      });
-    }
-
-    res.json({ status: 'success' });
-  } catch (error) {
-    console.error('Error saving to TempPayments:', error);
-    res.status(500).json({ error: 'Failed to save to TempPayments' });
-  }
-});
-
 app.post('/api/add-client', verifySessionToken, async (req, res) => {
   try {
     const sheets = await getSheetsClient();

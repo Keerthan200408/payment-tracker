@@ -171,6 +171,10 @@
       max-width: 320px;
       width: 100%;
     }
+    .filter-group {
+      display: flex;
+      gap: 0.5rem;
+    }
     .controls-container {
       display: flex;
       flex-wrap: wrap;
@@ -184,7 +188,7 @@
     .btn-add-new {
       flex-shrink: 0;
     }
-    .search-group {
+    .search-group, .filter-group {
       flex-grow: 1;
       max-width: 320px;
       margin-left: auto;
@@ -367,10 +371,36 @@
       <button id="addClientBtn" class="btn btn-add-client px-3 py-1">+ Add Client</button>
       <button id="importCsvBtn" class="btn btn-add-new px-3 py-1">Import CSV</button>
       <input type="file" id="csvFileInput" accept=".csv" style="display: none;" />
-      <div class="input-group search-group">
-        <input id="searchInput" type="text" class="form-control" placeholder="Search Client Name" aria-label="Search Client Name" />
-        <button id="searchBtn" class="btn btn-outline-primary" type="button">Search</button>
-        <button id="clearSearchBtn" class="btn btn-outline-secondary" type="button" title="Clear Search">×</button>
+      <div class="search-group">
+        <div class="input-group">
+          <input id="searchInput" type="text" class="form-control" placeholder="Search Client Name" aria-label="Search Client Name" />
+          <button id="searchBtn" class="btn btn-outline-primary" type="button">Search</button>
+          <button id="clearSearchBtn" class="btn btn-outline-secondary" type="button" title="Clear Search">×</button>
+        </div>
+      </div>
+      <div class="filter-group">
+        <select id="monthFilter" class="form-control">
+          <option value="">Select Month</option>
+          <option value="january">January</option>
+          <option value="february">February</option>
+          <option value="march">March</option>
+          <option value="april">April</option>
+          <option value="may">May</option>
+          <option value="june">June</option>
+          <option value="july">July</option>
+          <option value="august">August</option>
+          <option value="september">September</option>
+          <option value="october">October</option>
+          <option value="november">November</option>
+          <option value="december">December</option>
+        </select>
+        <select id="statusFilter" class="form-control">
+          <option value="">Select Status</option>
+          <option value="paid">Paid</option>
+          <option value="unpaid">Unpaid</option>
+          <option value="partially-paid">Partially Paid</option>
+        </select>
+        <button id="clearFilterBtn" class="btn btn-outline-secondary" type="button" title="Clear Filter">×</button>
       </div>
     </div>
 
@@ -509,6 +539,9 @@
     const searchInput = document.getElementById('searchInput');
     const searchBtn = document.getElementById('searchBtn');
     const clearSearchBtn = document.getElementById('clearSearchBtn');
+    const monthFilter = document.getElementById('monthFilter');
+    const statusFilter = document.getElementById('statusFilter');
+    const clearFilterBtn = document.getElementById('clearFilterBtn');
     const menuToggle = document.getElementById('menuToggle');
     const sidebarMenu = document.getElementById('sidebarMenu');
     const sidebarOverlay = document.getElementById('sidebarOverlay');
@@ -739,7 +772,7 @@
       const rows = tableBody.querySelectorAll('tr');
       rows.forEach((row, index) => {
         const serialCell = row.querySelector('.serial-cell');
-        if (serialCell) {
+        if (serialCell && row.style.display !== 'none') {
           serialCell.textContent = index + 1;
         }
       });
@@ -873,19 +906,6 @@
         return;
       }
 
-      fetch('https://payment-tracker-aswa.onrender.com/api/save-temp-payments', {
-        method: 'POST',
-        headers: {
-          'user': currentUser,
-          'Authorization': `Bearer ${sessionToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(data)
-      })
-        .catch(error => {
-          console.error('Error saving to TempPayments:', error);
-        });
-
       fetch('https://payment-tracker-aswa.onrender.com/api/save-payments', {
         method: 'POST',
         headers: {
@@ -911,18 +931,15 @@
         });
     }
 
-    // CHANGE 1: Modified to auto-fill zeros for skipped months
     tableBody.addEventListener('input', e => {
       const cellInput = e.target;
       const row = cellInput.closest('tr');
       const cellIndex = cellInput.closest('td').cellIndex;
 
       if (cellIndex >= 4 && cellIndex <= 15) {
-        // Get all month inputs (january to december)
         const monthInputs = Array.from(row.cells).slice(4, 16).map(cell => cell.querySelector('input'));
-        const currentMonthIndex = cellIndex - 4; // Adjust for table columns (Sr.No, Client Name, Type, Amount)
+        const currentMonthIndex = cellIndex - 4;
 
-        // If a value is entered, check previous months and set zeros if empty
         if (cellInput.value.trim() !== '') {
           for (let i = 0; i < currentMonthIndex; i++) {
             if (monthInputs[i].value.trim() === '') {
@@ -946,19 +963,42 @@
 
     function searchClients() {
       const filter = searchInput.value.trim().toLowerCase();
+      const month = monthFilter.value;
+      const status = statusFilter.value;
       const rows = tableBody.querySelectorAll('tr');
       let anyVisible = false;
+
       rows.forEach(row => {
         const clientName = row.querySelector('.client-name-display').textContent.toLowerCase();
-        if (clientName.includes(filter)) {
+        const nameMatches = clientName.includes(filter);
+
+        let filterMatches = true;
+        if (month && status) {
+          const monthInputs = Array.from(row.cells).slice(4, 16).map(cell => cell.querySelector('input'));
+          const monthIndex = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].indexOf(month);
+          const paymentInput = monthInputs[monthIndex];
+          const amountToBePaid = parseFloat(row.querySelector('.amount-display').textContent) || 0;
+          const paymentValue = parseFloat(paymentInput.value) || 0;
+
+          if (status === 'paid') {
+            filterMatches = paymentValue >= amountToBePaid && amountToBePaid > 0;
+          } else if (status === 'unpaid') {
+            filterMatches = paymentValue === 0 || paymentInput.value.trim() === '';
+          } else if (status === 'partially-paid') {
+            filterMatches = paymentValue > 0 && paymentValue < amountToBePaid;
+          }
+        }
+
+        if (nameMatches && filterMatches) {
           row.style.display = '';
           anyVisible = true;
         } else {
           row.style.display = 'none';
         }
       });
+
       updateSerialNumbers();
-      if (!filter || !anyVisible) {
+      if (!filter && !month && !status) {
         rows.forEach(row => (row.style.display = ''));
         updateSerialNumbers();
       }
@@ -975,10 +1015,17 @@
 
     clearSearchBtn.addEventListener('click', () => {
       searchInput.value = '';
-      const rows = tableBody.querySelectorAll('tr');
-      rows.forEach(row => (row.style.display = ''));
-      updateSerialNumbers();
+      searchClients();
       searchInput.focus();
+    });
+
+    monthFilter.addEventListener('change', searchClients);
+    statusFilter.addEventListener('change', searchClients);
+
+    clearFilterBtn.addEventListener('click', () => {
+      monthFilter.value = '';
+      statusFilter.value = '';
+      searchClients();
     });
 
     tableBody.addEventListener('keydown', e => {
@@ -1232,6 +1279,7 @@
             userPayments.forEach(row => addRowToTable(row));
           }
           updateSerialNumbers();
+          searchClients(); // Apply any existing filters on load
         })
         .catch(error => {
           console.error('Error fetching payments:', error);
@@ -1314,7 +1362,6 @@
         });
     }
 
-    // CHANGE 3: Updated to show all clients, not just those with payments
     function fetchPaymentsForDisplay() {
       if (!sessionToken) {
         console.error('No sessionToken available. Redirecting to sign-in page.');
@@ -1551,7 +1598,6 @@
       csvFileInput.click();
     });
 
-    // CHANGE 2: Fixed CSV import by normalizing header comparison
     csvFileInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
