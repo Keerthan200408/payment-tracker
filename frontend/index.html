@@ -279,7 +279,7 @@
               </nav>
               {isSidebarOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={toggleSidebar}></div>}
 
-              <main className="flex-1 p-6 overflow-y-auto">
+              <main className={`flex-1 p-6 overflow-y-auto transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-0'}`}>
                 <header className="flex items-center justify-between mb-6">
                   <button onClick={toggleSidebar} className="focus:outline-none">
                     <i className={`fas fa-${isSidebarOpen ? 'times' : 'bars'} text-xl`}></i>
