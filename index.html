@@ -1,1990 +1,680 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Payment Tracking App</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.22.5/Babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios@1.4.0/dist/axios.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-  <style>
-    :root {
-      --primary-color: #2563eb;
-      --secondary-color: #6b7280;
-      --accent-color: #dc2626;
-      --background-color: #f9fafb;
-      --text-color: #1f2937;
-      --border-color: #e5e7eb;
-      --success-color: #10b981;
-      --warning-color: #f59e0b;
-      --danger-color: #ef4444;
-      --sidebar-bg: #1f2937;
-      --sidebar-text: #f3f4f6;
-      --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.05);
-      --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
-      --border-radius: 0.5rem;
-      --header-height: 64px;
-    }
-
-    html, body {
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--background-color);
-      color: var(--text-color);
-      overflow-x: hidden;
-      overflow-y: hidden;
-    }
-
-    body::-webkit-scrollbar {
-      display: none;
-    }
-    body {
-      -ms-overflow-style: none;
-      scrollbar-width: none;
-    }
-
-    .main-wrapper {
-      display: none;
-      flex-direction: column;
-      min-height: 100vh;
-      width: 100vw;
-      overflow-x: hidden;
-      overflow-y: hidden;
-    }
-
-    .header-section {
-      background: linear-gradient(90deg, var(--primary-color), #3b82f6);
-      color: white;
-      font-weight: 600;
-      font-size: 1.5rem;
-      padding: 1rem;
-      text-align: center;
-      box-shadow: var(--shadow-md);
-      user-select: none;
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 100%;
-      box-sizing: border-box;
-      height: var(--header-height);
-    }
-
-    .menu-toggle {
-      position: absolute;
-      left: 1rem;
-      top: 50%;
-      transform: translateY(-50%);
-      cursor: pointer;
-      width: 28px;
-      height: 22px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      z-index: 1051;
-    }
-
-    .menu-toggle span {
-      display: block;
-      height: 3.5px;
-      background: white;
-      border-radius: 2px;
-      transition: all 0.3s ease;
-    }
-
-    .menu-toggle.active span:nth-child(1) {
-      transform: translateY(9px) rotate(45deg);
-    }
-
-    .menu-toggle.active span:nth-child(2) {
-      opacity: 0;
-    }
-
-    .menu-toggle.active span:nth-child(3) {
-      transform: translateY(-9px) rotate(-45deg);
-    }
-
-    #sidebarMenu {
-      position: fixed;
-      top: 0;
-      left: -280px;
-      width: 280px;
-      height: 100vh;
-      background: var(--sidebar-bg);
-      color: var(--sidebar-text);
-      padding-top: 4rem;
-      transition: left 0.3s ease;
-      z-index: 1050;
-      box-shadow: 2px 0 8px rgba(0, 0, 0, 0.3);
-      overflow-y: auto;
-    }
-
-    #sidebarMenu.show {
-      left: 0;
-    }
-
-    #sidebarMenu ul {
-      list-style: none;
-      padding-left: 0;
-      margin: 0;
-    }
-
-    #sidebarMenu ul li {
-      padding: 1rem 1.5rem;
-      cursor: pointer;
-      font-weight: 500;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-      user-select: none;
-      transition: background-color 0.2s ease, padding-left 0.2s ease;
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-    }
-
-    #sidebarMenu ul li:hover {
-      background-color: rgba(255, 255, 255, 0.1);
-      padding-left: 1.75rem;
-    }
-
-    #sidebarOverlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background: rgba(0, 0, 0, 0.5);
-      opacity: 0;
-      visibility: hidden;
-      transition: opacity 0.3s ease, visibility 0.3s ease;
-      z-index: 1049;
-    }
-
-    #sidebarOverlay.show {
-      opacity: 1;
-      visibility: visible;
-    }
-
-    .btn-primary-custom {
-      background-color: var(--primary-color);
-      border: none;
-      font-weight: 500;
-      transition: background-color 0.3s ease, box-shadow 0.3s ease, transform 0.1s ease;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    .btn-primary-custom:hover {
-      background-color: #1d4ed8;
-      box-shadow: var(--shadow-md);
-      transform: translateY(-1px);
-    }
-
-    .btn-primary-custom:active {
-      transform: translateY(0);
-    }
-
-    .btn-danger-custom {
-      background-color: var(--accent-color);
-      border: none;
-      font-weight: 500;
-      transition: background-color 0.3s ease, box-shadow 0.3s ease, transform 0.1s ease;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
-
-    .btn-danger-custom:hover {
-      background-color: #b91c1c;
-      box-shadow: var(--shadow-md);
-      transform: translateY(-1px);
-    }
-
-    .btn-danger-custom:active {
-      transform: translateY(0);
-    }
-
-    .btn-secondary-custom {
-      background-color: var(--secondary-color);
-      border: none;
-      font-weight: 500;
-      transition: background-color 0.3s ease, box-shadow 0.3s ease, transform 0.1s ease;
-    }
-
-    .btn-secondary-custom:hover {
-      background-color: #4b5563;
-      box-shadow: var(--shadow-md);
-      transform: translateY(-1px);
-    }
-
-    .btn-secondary-custom:active {
-      transform: translateY(0);
-    }
-
-    .table {
-      background: white;
-      border-radius: var(--border-radius);
-      overflow: hidden;
-      box-shadow: var(--shadow-sm);
-      margin-bottom: 0;
-    }
-
-    .table thead th {
-      background-color: #f1f5f9;
-      color: var(--text-color);
-      font-weight: 600;
-      border-color: var(--border-color);
-      padding: 0.75rem;
-      white-space: nowrap;
-      text-align: center;
-      position: sticky;
-      top: 0;
-      z-index: 10;
-    }
-
-    #mainTable thead tr:nth-child(1) th {
-      position: sticky;
-      top: 0;
-      z-index: 11;
-    }
-
-    #mainTable thead tr:nth-child(2) th {
-      position: sticky;
-      top: 48px;
-      z-index: 10;
-    }
-
-    .table tbody td {
-      vertical-align: middle;
-      padding: 0.5rem;
-      border-color: var(--border-color);
-    }
-
-    .manual-entry-cell {
-      background-color: #eff6ff !important;
-    }
-
-    input.form-control, select.form-control {
-      font-size: 0.875rem;
-      padding: 0.375rem 0.75rem;
-      border-radius: 0.375rem;
-      border: 1px solid var(--border-color);
-      transition: border-color 0.2s ease, box-shadow 0.2s ease;
-    }
-
-    input.form-control:focus, select.form-control:focus {
-      border-color: var(--primary-color);
-      box-shadow: 0 0 0 0.2rem rgba(37, 99, 235, 0.1);
-      outline: none;
-    }
-
-    .due-payment-cell {
-      min-width: 140px;
-    }
-
-    .table-responsive {
-      width: 100%;
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-      height: calc(100vh - var(--header-height) - 150px);
-      overflow-y: auto;
-    }
-
-    .table-responsive::-webkit-scrollbar {
-      display: none;
-    }
-    .table-responsive {
-      -ms-overflow-style: none;
-      scrollbar-width: none;
-    }
-
-    #mainTable {
-      width: 100%;
-      min-width: 1200px;
-    }
-
-    .controls-container {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 1rem;
-      margin-bottom: 1.5rem;
-      padding: 1rem;
-      background: white;
-      border-radius: var(--border-radius);
-      box-shadow: var(--shadow-sm);
-    }
-
-    .action-buttons {
-      display: flex;
-      gap: 0.5rem;
-    }
-
-    .search-filter-group {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      margin-left: auto;
-    }
-
-    .search-group {
-      max-width: 250px;
-      width: 100%;
-    }
-
-    .filter-btn {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      background-color: var(--primary-color);
-      color: white;
-      font-weight: 500;
-      border: none;
-      padding: 0.375rem 1rem;
-      border-radius: 0.375rem;
-      transition: background-color 0.3s ease, box-shadow 0.3s ease, transform 0.1s ease;
-    }
-
-    .filter-btn:hover {
-      background-color: #1d4ed8;
-      box-shadow: var(--shadow-md);
-      transform: translateY(-1px);
-    }
-
-    .filter-btn:active {
-      transform: translateY(0);
-    }
-
-    .filter-options {
-      display: none;
-      position: absolute;
-      top: 100%;
-      right: 0;
-      background: white;
-      border-radius: var(--border-radius);
-      box-shadow: var(--shadow-md);
-      padding: 1rem;
-      z-index: 1000;
-      min-width: 300px;
-    }
-
-    .filter-options.show {
-      display: block;
-    }
-
-    .filter-options .form-group {
-      margin-bottom: 1rem;
-    }
-
-    .filter-options label {
-      font-weight: 500;
-      margin-bottom: 0.5rem;
-      display: block;
-    }
-
-    #contextMenu {
-      position: absolute;
-      background: white;
-      border: 1px solid var(--border-color);
-      box-shadow: var(--shadow-md);
-      border-radius: 0.375rem;
-      z-index: 2000;
-      display: none;
-      min-width: 150px;
-      font-size: 0.9rem;
-    }
-
-    #contextMenu button {
-      width: 100%;
-      padding: 0.5rem 1rem;
-      border: none;
-      background: none;
-      text-align: left;
-      cursor: pointer;
-      color: var(--text-color);
-      border-bottom: 1px solid var(--border-color);
-      transition: background-color 0.15s ease;
-    }
-
-    #contextMenu button:last-child {
-      border-bottom: none;
-    }
-
-    #contextMenu button:hover, #contextMenu button:focus {
-      background-color: #f1f5f9;
-      outline: none;
-    }
-
-    .payment-full {
-      background-color: #d1fae5 !important;
-    }
-
-    .payment-partial {
-      background-color: #ffedd5 !important;
-    }
-
-    .payment-none {
-      background-color: #fee2e2 !important;
-    }
-
-    .sign-in-container, .add-client-container {
-      max-width: 600px;
-      margin: 3rem auto;
-      padding: 2rem;
-      background: white;
-      border-radius: var(--border-radius);
-      box-shadow: var(--shadow-md);
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
-    }
-
-    .sign-in-container:hover, .add-client-container:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
-    }
-
-    .clients-container, .payments-container {
-      max-width: 100%;
-      margin: 1rem;
-      padding: 1rem;
-      background: white;
-      border-radius: var(--border-radius);
-      box-shadow: var(--shadow-sm);
-    }
-
-    .clients-container:hover, .payments-container:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
-    }
-
-    #clientsTableWrapper, #paymentsTableWrapper {
-      height: calc(100vh - var(--header-height) - 100px);
-      overflow-y: auto;
-      width: 100%;
-    }
-
-    #clientsTableWrapper::-webkit-scrollbar,
-    #paymentsTableWrapper::-webkit-scrollbar {
-      display: none;
-    }
-    #clientsTableWrapper,
-    #paymentsTableWrapper {
-      -ms-overflow-style: none;
-      scrollbar-width: none;
-    }
-
-    #clientsTable, #paymentsTable {
-      width: 100%;
-      min-width: 1200px;
-    }
-
-    .sign-in-container h2, .add-client-container h2, .clients-container h2, .payments-container h2 {
-      font-size: 1.75rem;
-      font-weight: 600;
-      margin-bottom: 1.5rem;
-      text-align: center;
-      color: var(--text-color);
-    }
-
-    .btn-edit {
-      background-color: var(--primary-color) !important;
-      color: white !important;
-      margin-right: 0.5rem;
-      transition: background-color 0.3s ease, transform 0.1s ease;
-    }
-
-    .btn-edit:hover {
-      background-color: #1d4ed8 !important;
-      transform: translateY(-1px);
-    }
-
-    .btn-delete {
-      background-color: var(--accent-color) !important;
-      color: white !important;
-      transition: background-color 0.3s ease, transform 0.1s ease;
-    }
-
-    .btn-delete:hover {
-      background-color: #b91c1c !important;
-      transform: translateY(-1px);
-    }
-
-    @media (max-width: 768px) {
-      .sign-in-container, .add-client-container, .clients-container, .payments-container {
-        margin: 1rem;
-        padding: 1.5rem;
-      }
-
-      .header-section {
-        font-size: 1.25rem;
-        padding: 0.75rem;
-        height: var(--header-height);
-      }
-
-      .menu-toggle {
-        width: 24px;
-        height: 18px;
-      }
-
-      .menu-toggle span {
-        height: 3px;
-      }
-
-      #sidebarMenu {
-        width: 240px;
-        left: -240px;
-      }
-
-      .table-responsive, #clientsTableWrapper, #paymentsTableWrapper {
-        height: calc(100vh - var(--header-height) - 120px);
-        font-size: 0.75rem;
-      }
-
-      input.form-control, select.form-control {
-        font-size: 0.75rem;
-        padding: 0.25rem 0.5rem;
-      }
-
-      .controls-container {
-        flex-direction: column;
-        align-items: stretch;
-      }
-
-      .search-filter-group {
-        margin-left: 0;
-        margin-top: 1rem;
-        width: 100%;
-      }
-
-      .search-group {
-        max-width: 100%;
-      }
-
-      .filter-options {
-        min-width: 100%;
-        right: -1rem;
-        width: calc(100% + 2rem);
-      }
-    }
-  </style>
 </head>
 <body>
-  <div id="signInPage" class="sign-in-container">
-    <h2 id="loginHeader" class="text-center mb-4"><i class="fas fa-sign-in-alt me-2"></i>Sign In</h2>
-    <h2 id="signupHeader" class="text-center mb-4" style="display: none;"><i class="fas fa-user-plus me-2"></i>Sign Up</h2>
-    <div id="loginForm">
-      <div class="mb-3">
-        <label for="usernameInput" class="form-label"><i class="fas fa-user me-2"></i>Username</label>
-        <input type="text" class="form-control" id="usernameInput" placeholder="Enter username">
-      </div>
-      <div class="mb-3">
-        <label for="passwordInput" class="form-label"><i class="fas fa-lock me-2"></i>Password</label>
-        <input type="password" class="form-control" id="passwordInput" placeholder="Enter password">
-      </div>
-      <button id="loginBtn" class="btn btn-primary-custom d-block mx-auto mb-3"><i class="fas fa-sign-in-alt"></i> Login</button>
-      <p class="text-center">
-        Don't have an account? <a href="#" id="showSignupLink">Sign Up</a>
-      </p>
-    </div>
-    <div id="signupForm" style="display: none;">
-      <div class="mb-3">
-        <label for="signupUsernameInput" class="form-label"><i class="fas fa-user me-2"></i>Username</label>
-        <input type="text" class="form-control" id="signupUsernameInput" placeholder="Enter username">
-      </div>
-      <div class="mb-3">
-        <label for="signupPasswordInput" class="form-label"><i class="fas fa-lock me-2"></i>Password</label>
-        <input type="password" class="form-control" id="signupPasswordInput" placeholder="Enter password">
-      </div>
-      <div class="mb-3">
-        <label for="signupGmailInput" class="form-label"><i class="fas fa-envelope me-2"></i>Gmail ID</label>
-        <input type="email" class="form-control" id="signupGmailInput" placeholder="Enter Gmail ID">
-      </div>
-      <button id="signupBtn" class="btn btn-primary-custom d-block mx-auto mb-3"><i class="fas fa-user-plus"></i> Sign Up</button>
-      <p class="text-center">
-        Already have an account? <a href="#" id="showLoginLink">Login</a>
-      </p>
-    </div>
-  </div>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
 
-  <div id="mainWrapper" class="main-wrapper">
-    <nav id="sidebarMenu" aria-label="Sidebar menu">
-      <ul>
-        <li id="dashboardLink"><i class="fas fa-tachometer-alt"></i> Dashboard</li>
-        <li id="clientsLink"><i class="fas fa-users"></i> Clients</li>
-        <li id="paymentsLink"><i class="fas fa-money-bill-wave"></i> Payments</li>
-        <li id="reportsLink"><i class="fas fa-chart-line"></i> Reports</li>
-        <li>
-          <a href="#" id="logoutLink" class="text-white text-decoration-none fw-bold d-block"><i class="fas fa-sign-out-alt me-2"></i> Logout</a>
-        </li>
-      </ul>
-    </nav>
-    <div id="sidebarOverlay"></div>
+    const App = () => {
+      const [sessionToken, setSessionToken] = useState(null);
+      const [currentUser, setCurrentUser] = useState(null);
+      const [page, setPage] = useState('signIn');
+      const [clientsData, setClientsData] = useState([]);
+      const [paymentsData, setPaymentsData] = useState([]);
+      const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+      const [contextTargetRow, setContextTargetRow] = useState(null);
+      const [filterOptionsVisible, setFilterOptionsVisible] = useState(false);
+      const [searchQuery, setSearchQuery] = useState('');
+      const [monthFilter, setMonthFilter] = useState('');
+      const [statusFilter, setStatusFilter] = useState('');
+      const [editClient, setEditClient] = useState(null);
+      const csvFileInputRef = useRef(null);
 
-    <div id="headerSection" class="header-section" role="banner" aria-label="Page header">
-      <div class="menu-toggle" id="menuToggle" aria-label="Toggle menu" role="button" tabindex="0" aria-expanded="false" aria-controls="sidebarMenu">
-        <span></span>
-        <span></span>
-        <span></span>
-      </div>
-      <span>Payment Tracking App</span>
-    </div>
-
-    <div id="homePage" style="display: none;">
-      <div class="controls-container">
-        <div class="action-buttons">
-          <button id="addClientBtn" class="btn btn-primary-custom px-3 py-2"><i class="fas fa-user-plus"></i> Add Client</button>
-          <button id="importCsvBtn" class="btn btn-danger-custom px-3 py-2"><i class="fas fa-file-import"></i> Import CSV</button>
-          <input type="file" id="csvFileInput" accept=".csv" style="display: none;" />
-        </div>
-        <div class="search-filter-group">
-          <div class="search-group">
-            <div class="input-group">
-              <input id="searchInput" type="text" class="form-control" placeholder="Search Client Name" aria-label="Search Client Name" />
-              <button id="searchBtn" class="btn btn-outline-primary" type="button"><i class="fas fa-search"></i></button>
-              <button id="clearSearchBtn" class="btn btn-outline-secondary" type="button" title="Clear Search"><i class="fas fa-times"></i></button>
-            </div>
-          </div>
-          <div class="position-relative">
-            <button id="filterBtn" class="filter-btn">
-              <i class="fas fa-filter"></i> Filter
-            </button>
-            <div id="filterOptions" class="filter-options">
-              <div class="form-group">
-                <label for="monthFilter">Month</label>
-                <select id="monthFilter" class="form-control">
-                  <option value="">Select Month</option>
-                  <option value="january">January</option>
-                  <option value="february">February</option>
-                  <option value="march">March</option>
-                  <option value="april">April</option>
-                  <option value="may">May</option>
-                  <option value="june">June</option>
-                  <option value="july">July</option>
-                  <option value="august">August</option>
-                  <option value="september">September</option>
-                  <option value="october">October</option>
-                  <option value="november">November</option>
-                  <option value="december">December</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label for="statusFilter">Payment Status</label>
-                <select id="statusFilter" class="form-control">
-                  <option value="">Select Status</option>
-                  <option value="paid">Paid</option>
-                  <option value="unpaid">Unpaid</option>
-                  <option value="partially-paid">Partially Paid</option>
-                </select>
-              </div>
-              <div class="d-flex justify-content-end gap-2">
-                <button id="clearFilterBtn" class="btn btn-secondary-custom">Clear</button>
-                <button id="applyFilterBtn" class="btn btn-primary-custom">Apply</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="table-responsive">
-        <table id="mainTable" class="table table-bordered align-middle text-center">
-          <thead>
-            <tr>
-              <th rowspan="2" class="align-middle" style="width: 40px;">Sr.No</th>
-              <th rowspan="2" class="align-middle">Client Name</th>
-              <th rowspan="2" class="align-middle">Type</th>
-              <th rowspan="2" class="align-middle">Amount To be Paid</th>
-              <th colspan="12">Jan - Dec</th>
-              <th rowspan="2" class="align-middle due-payment-cell">Due Payment</th>
-            </tr>
-            <tr>
-              <th class="manual-entry-cell">January</th>
-              <th class="manual-entry-cell">February</th>
-              <th class="manual-entry-cell">March</th>
-              <th class="manual-entry-cell">April</th>
-              <th class="manual-entry-cell">May</th>
-              <th class="manual-entry-cell">June</th>
-              <th>July</th>
-              <th>August</th>
-              <th>September</th>
-              <th>October</th>
-              <th>November</th>
-              <th>December</th>
-            </tr>
-          </thead>
-          <tbody id="tableBody">
-            <tr>
-              <td class="serial-cell"></td>
-              <td><span class="client-name-display"></span></td>
-              <td><span class="type-display"></span></td>
-              <td><span class="amount-display"></span></td>
-              <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="January" /></td>
-              <td class="manual-entry-cell"><input type="text" class="form-control"></td>
-              <td class="manual-entry-cell"><input type="text" class="form-control"></td>
-              <td class="manual-entry-cell"><input type="text" class="form-control"></td>
-              <td class="manual-entry-cell"><input type="text" class="form-control"></td>
-              <td class="manual-entry-cell"><input type="text" class="form-control"></td>
-              <td><input type="text" class="form-control"></td>
-              <td><input type="text" class="form-control"></td>
-              <td><input type="text" class="form-control"></td>
-              <td><input type="text" class="form-control"></td>
-              <td><input type="text" class="form-control"></td>
-              <td><input type="text" class="form-control"></td>
-              <td><input type="text" class="form-control due-payment-display" readonly value="0.00" /></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div id="contextMenu" role="menu" aria-hidden="true" tabindex="-1">
-        <button type="button" id="deleteRowBtn" role="menuitem">Delete This Row</button>
-      </div>
-    </div>
-
-    <div id="addClientPage" class="add-client-container" style="display: none;">
-      <h2><i class="fas fa-user-plus me-2"></i>Add New Client</h2>
-      <div class="mb-3">
-        <label for="clientNameInput" class="form-label"><i class="fas fa-user me-2"></i>Client Name</label>
-        <input type="text" class="form-control" id="clientNameInput" placeholder="Enter client name">
-      </div>
-      <div class="mb-3">
-        <label for="clientEmailInput" class="form-label"><i class="fas fa-envelope me-2"></i>Client Email</label>
-        <input type="email" class="form-control" id="clientEmailInput" placeholder="Enter client email">
-      </div>
-      <div class="mb-3">
-        <label for="typeInput" class="form-label"><i class="fas fa-tag me-2"></i>Type</label>
-        <input type="text" class="form-control" id="typeInput" placeholder="Enter type">
-      </div>
-      <div class="mb-3">
-        <label for="monthlyPaymentInput" class="form-label"><i class="fas fa-dollar-sign me-2"></i>Monthly Payment Amount</label>
-        <input type="text" class="form-control" id="monthlyPaymentInput" placeholder="Enter amount">
-      </div>
-      <div class="d-flex justify-content-end gap-2">
-        <button id="cancelAddClientBtn" class="btn btn-secondary-custom px-3 py-2"><i class="fas fa-times me-2"></i>Cancel</button>
-        <button id="saveClientBtn" class="btn btn-primary-custom px-3 py-2"><i class="fas fa-save me-2"></i>Add Client</button>
-      </div>
-    </div>
-
-    <div id="clientsPage" class="clients-container" style="display: none;">
-      <h2><i class="fas fa-users me-2"></i>Clients</h2>
-      <div id="clientsTableWrapper">
-        <table id="clientsTable" class="table table-bordered align-middle text-center">
-          <thead>
-            <tr>
-              <th>Client Name</th>
-              <th>Email</th>
-              <th>Monthly Amount</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="clientsTableBody"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div id="paymentsPage" class="payments-container" style="display: none;">
-      <h2><i class="fas fa-money-bill-wave me-2"></i>Payments</h2>
-      <div id="paymentsTableWrapper">
-        <table id="paymentsTable" class="table table-bordered align-middle text-center">
-          <thead>
-            <tr>
-              <th>Client Name</th>
-              <th>Type</th>
-              <th>Amount To be Paid</th>
-              <th>January</th>
-              <th>February</th>
-              <th>March</th>
-              <th>April</th>
-              <th>May</th>
-              <th>June</th>
-              <th>July</th>
-              <th>August</th>
-              <th>September</th>
-              <th>October</th>
-              <th>November</th>
-              <th>December</th>
-              <th>Due Payment</th>
-            </tr>
-          </thead>
-          <tbody id="paymentsTableBody"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  <script>
-    let sessionToken = null;
-    let currentUser = null;
-
-    const mainWrapper = document.getElementById('mainWrapper');
-    const signInPage = document.getElementById('signInPage');
-    const homePage = document.getElementById('homePage');
-    const addClientPage = document.getElementById('addClientPage');
-    const clientsPage = document.getElementById('clientsPage');
-    const paymentsPage = document.getElementById('paymentsPage');
-    const headerSection = document.getElementById('headerSection');
-    const addClientBtn = document.getElementById('addClientBtn');
-    const tableBody = document.getElementById('tableBody');
-    const searchInput = document.getElementById('searchInput');
-    const searchBtn = document.getElementById('searchBtn');
-    const clearSearchBtn = document.getElementById('clearSearchBtn');
-    const filterBtn = document.getElementById('filterBtn');
-    const filterOptions = document.getElementById('filterOptions');
-    const monthFilter = document.getElementById('monthFilter');
-    const statusFilter = document.getElementById('statusFilter');
-    const clearFilterBtn = document.getElementById('clearFilterBtn');
-    const applyFilterBtn = document.getElementById('applyFilterBtn');
-    const menuToggle = document.getElementById('menuToggle');
-    const sidebarMenu = document.getElementById('sidebarMenu');
-    const sidebarOverlay = document.getElementById('sidebarOverlay');
-    const contextMenu = document.getElementById('contextMenu');
-    const deleteRowBtn = document.getElementById('deleteRowBtn');
-    const dashboardLink = document.getElementById('dashboardLink');
-    const clientsLink = document.getElementById('clientsLink');
-    const paymentsLink = document.getElementById('paymentsLink');
-    const reportsLink = document.getElementById('reportsLink');
-    const logoutLink = document.getElementById('logoutLink');
-    const clientNameInput = document.getElementById('clientNameInput');
-    const clientEmailInput = document.getElementById('clientEmailInput');
-    const typeInput = document.getElementById('typeInput');
-    const monthlyPaymentInput = document.getElementById('monthlyPaymentInput');
-    const saveClientBtn = document.getElementById('saveClientBtn');
-    const cancelAddClientBtn = document.getElementById('cancelAddClientBtn');
-    const importCsvBtn = document.getElementById('importCsvBtn');
-    const csvFileInput = document.getElementById('csvFileInput');
-    // const currentUserDisplay = document.getElementById('currentUserDisplay');
-
-    let loginBtn, signupBtn, loginForm, signupForm, usernameInput, passwordInput, signupUsernameInput, signupPasswordInput, signupGmailInput, showSignupLink, showLoginLink, loginHeader, signupHeader;
-
-    let contextTargetRow = null;
-    let clientsData = [];
-
-    document.addEventListener('DOMContentLoaded', () => {
-      loginBtn = document.getElementById('loginBtn');
-      signupBtn = document.getElementById('signupBtn');
-      loginForm = document.getElementById('loginForm');
-      signupForm = document.getElementById('signupForm');
-      usernameInput = document.getElementById('usernameInput');
-      passwordInput = document.getElementById('passwordInput');
-      signupUsernameInput = document.getElementById('signupUsernameInput');
-      signupPasswordInput = document.getElementById('signupPasswordInput');
-      signupGmailInput = document.getElementById('signupGmailInput');
-      showSignupLink = document.getElementById('showSignupLink');
-      showLoginLink = document.getElementById('showLoginLink');
-      loginHeader = document.getElementById('loginHeader');
-      signupHeader = document.getElementById('signupHeader');
-
-      console.log('loginBtn:', loginBtn);
-      console.log('signupBtn:', signupBtn);
-
-      signupBtn.addEventListener('click', () => {
-        console.log('Signup button clicked');
-        const username = signupUsernameInput.value.trim();
-        const password = signupPasswordInput.value.trim();
-        const gmailId = signupGmailInput.value.trim();
-
-        if (!username || !password || !gmailId) {
-          alert('All fields are required.');
-          return;
+      useEffect(() => {
+        const storedUser = localStorage.getItem('currentUser');
+        const storedToken = localStorage.getItem('sessionToken');
+        if (storedUser && storedToken) {
+          setCurrentUser(storedUser);
+          setSessionToken(storedToken);
+          fetchClients(storedToken);
+          fetchPayments(storedToken);
+          setPage('home');
         }
+      }, []);
 
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(gmailId) || !gmailId.endsWith('@gmail.com')) {
-          alert('Please enter a valid Gmail ID.');
-          return;
-        }
-
-        fetch('https://payment-tracker-aswa.onrender.com/api/signup', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ username, password, gmailId })
-        })
-          .then(res => {
-            console.log('Signup fetch response:', res);
-            if (!res.ok) {
-              return res.json().then(data => { throw new Error(data.error); });
-            }
-            return res.json();
-          })
-          .then(data => {
-            alert('Account created successfully! Please login.');
-            signupUsernameInput.value = '';
-            signupPasswordInput.value = '';
-            signupGmailInput.value = '';
-            loginForm.style.display = 'block';
-            signupForm.style.display = 'none';
-            loginHeader.style.display = 'block';
-            signupHeader.style.display = 'none';
-          })
-          .catch(error => {
-            console.error('Error signing up:', error);
-            alert(error.message);
+      const fetchClients = async (token) => {
+        try {
+          const response = await axios.get('http://localhost:5000/api/get-clients', {
+            headers: { Authorization: `Bearer ${token}` },
           });
-      });
-
-      loginBtn.addEventListener('click', () => {
-        console.log('Login button clicked');
-        const username = usernameInput.value.trim();
-        const password = passwordInput.value.trim();
-
-        if (!username || !password) {
-          alert('Username and password are required.');
-          return;
+          setClientsData(response.data);
+        } catch (error) {
+          console.error('Error fetching clients:', error);
+          handleSessionError(error);
         }
+      };
 
-        fetch('https://payment-tracker-aswa.onrender.com/api/login', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ username, password })
-        })
-          .then(res => {
-            console.log('Login fetch response:', res);
-            if (!res.ok) {
-              return res.json().then(data => { throw new Error(data.error); });
-            }
-            return res.json();
-          })
-          .then(data => {
-            currentUser = data.username;
-            sessionToken = data.sessionToken;
-            // currentUserDisplay.textContent = currentUser;
-            persistUserSession();
-            fetchClients();
-            fetchPayments();
-            showHomePage();
-          })
-          .catch(error => {
-            console.error('Error logging in:', error);
-            alert(error.message);
+      const fetchPayments = async (token) => {
+        try {
+          const response = await axios.get('http://localhost:5000/api/get-payments', {
+            headers: { Authorization: `Bearer ${token}` },
           });
-      });
+          setPaymentsData(response.data);
+        } catch (error) {
+          console.error('Error fetching payments:', error);
+          handleSessionError(error);
+        }
+      };
 
-      showSignupLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        loginForm.style.display = 'none';
-        signupForm.style.display = 'block';
-        loginHeader.style.display = 'none';
-        signupHeader.style.display = 'block';
-      });
+      const handleSessionError = (error) => {
+        if (error.response && error.response.status === 401) {
+          logout();
+        }
+      };
 
-      showLoginLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        loginForm.style.display = 'block';
-        signupForm.style.display = 'none';
-        loginHeader.style.display = 'block';
-        signupHeader.style.display = 'none';
-      });
-
-      logoutLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        currentUser = null;
-        sessionToken = null;
-        // currentUserDisplay.textContent = '';
-        clearUserSession();
-        clientsData = [];
-        tableBody.innerHTML = '';
-        showSignInPage();
-      });
-
-      function persistUserSession() {
-        localStorage.setItem('currentUser', currentUser);
-        localStorage.setItem('sessionToken', sessionToken);
-      }
-
-      function clearUserSession() {
+      const logout = () => {
+        setCurrentUser(null);
+        setSessionToken(null);
         localStorage.removeItem('currentUser');
         localStorage.removeItem('sessionToken');
-        currentUser = null;
-        sessionToken = null;
-      }
+        setClientsData([]);
+        setPaymentsData([]);
+        setPage('signIn');
+      };
 
-      function loadUserSession() {
-        currentUser = localStorage.getItem('currentUser');
-        sessionToken = localStorage.getItem('sessionToken');
-        if (currentUser && sessionToken) {
-          // currentUserDisplay.textContent = currentUser;
-          fetchClients();
-          fetchPayments();
-          showHomePage();
-        } else {
-          showSignInPage();
-        }
-      }
+      const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
-      function showSignInPage() {
-        signInPage.style.display = 'block';
-        mainWrapper.style.display = 'none';
-        loginHeader.style.display = 'block';
-        signupHeader.style.display = 'none';
-      }
-
-      function showHomePage() {
-        signInPage.style.display = 'none';
-        mainWrapper.style.display = 'flex';
-        homePage.style.display = 'block';
-        addClientPage.style.display = 'none';
-        clientsPage.style.display = 'none';
-        paymentsPage.style.display = 'none';
-      }
-
-      function showAddClientPage() {
-        signInPage.style.display = 'none';
-        mainWrapper.style.display = 'flex';
-        homePage.style.display = 'none';
-        addClientPage.style.display = 'block';
-        clientsPage.style.display = 'none';
-        paymentsPage.style.display = 'none';
-      }
-
-      function showClientsPage() {
-        signInPage.style.display = 'none';
-        mainWrapper.style.display = 'flex';
-        homePage.style.display = 'none';
-        addClientPage.style.display = 'none';
-        clientsPage.style.display = 'block';
-        paymentsPage.style.display = 'none';
-        fetchClientsForDisplay();
-      }
-
-      function showPaymentsPage() {
-        signInPage.style.display = 'none';
-        mainWrapper.style.display = 'flex';
-        homePage.style.display = 'none';
-        addClientPage.style.display = 'none';
-        clientsPage.style.display = 'none';
-        paymentsPage.style.display = 'block';
-        fetchPaymentsForDisplay();
-      }
-
-      function updateSerialNumbers() {
-        const rows = tableBody.querySelectorAll('tr');
-        rows.forEach((row, index) => {
-          const serialCell = row.querySelector('.serial-cell');
-          if (serialCell && row.style.display !== 'none') {
-            serialCell.textContent = index + 1;
-          }
-        });
-      }
-
-      function createEditableRow(clientName = '', type = '', amount = '') {
-        const tr = document.createElement('tr');
-        let td = document.createElement('td');
-        td.className = 'serial-cell';
-        tr.appendChild(td);
-
-        td = document.createElement('td');
-        let span = document.createElement('span');
-        span.className = 'client-name-display';
-        span.textContent = clientName || '';
-        td.appendChild(span);
-        tr.appendChild(td);
-
-        td = document.createElement('td');
-        span = document.createElement('span');
-        span.className = 'type-display';
-        span.textContent = type || '';
-        td.appendChild(span);
-        tr.appendChild(td);
-
-        td = document.createElement('td');
-        span = document.createElement('span');
-        span.className = 'amount-display';
-        span.textContent = amount || '';
-        td.appendChild(span);
-        tr.appendChild(td);
-
-        const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
-        months.forEach(month => {
-          td = document.createElement('td');
-          let input = document.createElement('input');
-          input.type = 'text';
-          input.placeholder = month.charAt(0).toUpperCase() + month.slice(1);
-          input.className = 'form-control';
-          td.appendChild(input);
-          tr.appendChild(td);
-        });
-
-        td = document.createElement('td');
-        td.className = 'due-payment-cell';
-        let input = document.createElement('input');
-        input.type = 'text';
-        input.className = 'form-control due-payment-display';
-        input.readOnly = true;
-        input.value = '0.00';
-        td.appendChild(input);
-        tr.appendChild(td);
-
-        return tr;
-      }
-
-      function updateDuePayment(row) {
-        const amountDisplay = row.querySelector('.amount-display').textContent;
-        const monthInputs = Array.from(row.cells).slice(4, 16).map(cell => cell.querySelector('input'));
-        const duePaymentDisplay = row.querySelector('.due-payment-display');
-
-        const amountToBePaidPerMonth = parseFloat(amountDisplay) || 0;
-        const activeMonths = monthInputs.filter(input => input.value.trim() !== '' && parseFloat(input.value) >= 0).length;
-
-        if (activeMonths === 0) {
-          duePaymentDisplay.value = '0.00';
-          row.querySelectorAll('td input').forEach(input => input.classList.remove('payment-full', 'payment-partial', 'payment-none'));
-          return;
-        }
-
-        const expectedPayment = amountToBePaidPerMonth * activeMonths;
-        const totalPayments = monthInputs.reduce((sum, input) => {
-          const value = parseFloat(input.value) || 0;
-          return sum + value;
-        }, 0);
-
-        const duePayment = Math.max(expectedPayment - totalPayments, 0);
-        duePaymentDisplay.value = duePayment.toFixed(2);
-
-        monthInputs.forEach(input => updatePaymentStatus(input));
-      }
-
-      function updatePaymentStatus(cellInput) {
-        const row = cellInput.closest('tr');
-        const amountDisplay = row.querySelector('.amount-display').textContent;
-        const amountToBePaid = parseFloat(amountDisplay) || 0;
-        const enteredValue = parseFloat(cellInput.value) || 0;
-
-        cellInput.classList.remove('payment-full', 'payment-partial', 'payment-none');
-
-        if (enteredValue === 0 || cellInput.value.trim() === '') {
-          cellInput.classList.add('payment-none');
-        } else if (enteredValue >= amountToBePaid && amountToBePaid > 0) {
-          cellInput.classList.add('payment-full');
-        } else if (enteredValue > 0 && enteredValue < amountToBePaid) {
-          cellInput.classList.add('payment-partial');
-        }
-      }
-
-      function saveToGoogleSheets() {
-        const rows = tableBody.querySelectorAll('tr');
-        const data = Array.from(rows).map(row => {
-          const clientName = row.querySelector('.client-name-display').textContent;
-          const type = row.querySelector('.type-display').textContent;
-          const amount = row.querySelector('.amount-display').textContent;
-          const inputs = row.querySelectorAll('.form-control');
-          return {
-            User: currentUser,
-            Client_Name: clientName,
-            Type: type,
-            Amount_To_Be_Paid: amount,
-            january: inputs[0].value,
-            february: inputs[1].value,
-            march: inputs[2].value,
-            april: inputs[3].value,
-            may: inputs[4].value,
-            june: inputs[5].value,
-            july: inputs[6].value,
-            august: inputs[7].value,
-            september: inputs[8].value,
-            october: inputs[9].value,
-            november: inputs[10].value,
-            december: inputs[11].value,
-            Due_Payment: inputs[12].value
-          };
-        });
-
-        if (!sessionToken) {
-          console.error('No sessionToken available. Redirecting to sign-in page.');
-          showSignInPage();
-          return;
-        }
-
-        fetch('https://payment-tracker-aswa.onrender.com/api/save-payments', {
-          method: 'POST',
-          headers: {
-            'user': currentUser,
-            'Authorization': `Bearer ${sessionToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(data)
-        })
-          .then(response => {
-            if (!response.ok) {
-              if (response.status === 401) {
-                console.error('Session token invalid. Redirecting to sign-in page.');
-                clearUserSession();
-                showSignInPage();
-                return;
-              }
-              throw new Error('Failed to save to Google Sheets');
-            }
-          })
-          .catch(error => {
-            console.error('Error saving to Google Sheets:', error);
-          });
-      }
-
-      tableBody.addEventListener('input', e => {
-        const cellInput = e.target;
-        const row = cellInput.closest('tr');
-        const cellIndex = cellInput.closest('td').cellIndex;
-
-        if (cellIndex >= 4 && cellIndex <= 15) {
-          const monthInputs = Array.from(row.cells).slice(4, 16).map(cell => cell.querySelector('input'));
-          const currentMonthIndex = cellIndex - 4;
-
-          if (cellInput.value.trim() !== '') {
-            for (let i = 0; i < currentMonthIndex; i++) {
-              if (monthInputs[i].value.trim() === '') {
-                monthInputs[i].value = '0';
-                updatePaymentStatus(monthInputs[i]);
-              }
-            }
-          }
-
-          updatePaymentStatus(cellInput);
-          updateDuePayment(row);
-          saveToGoogleSheets();
-        }
-      });
-
-      addClientBtn.addEventListener('click', () => {
-        showAddClientPage();
-      });
-
-      updateSerialNumbers();
-
-      function searchClients() {
-        const filter = searchInput.value.trim().toLowerCase();
-        const month = monthFilter.value;
-        const status = statusFilter.value;
-        const rows = tableBody.querySelectorAll('tr');
-        let anyVisible = false;
-
-        rows.forEach(row => {
-          const clientName = row.querySelector('.client-name-display').textContent.toLowerCase();
-          const nameMatches = clientName.includes(filter);
-
-          let filterMatches = true;
-          if (month && status) {
-            const monthInputs = Array.from(row.cells).slice(4, 16).map(cell => cell.querySelector('input'));
-            const monthIndex = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].indexOf(month);
-            const paymentInput = monthInputs[monthIndex];
-            const amountToBePaid = parseFloat(row.querySelector('.amount-display').textContent) || 0;
-            const paymentValue = parseFloat(paymentInput.value) || 0;
-
-            if (status === 'paid') {
-              filterMatches = paymentValue >= amountToBePaid && amountToBePaid > 0;
-            } else if (status === 'unpaid') {
-              filterMatches = paymentValue === 0 || paymentInput.value.trim() === '';
-            } else if (status === 'partially-paid') {
-              filterMatches = paymentValue > 0 && paymentValue < amountToBePaid;
-            }
-          }
-
-          if (nameMatches && filterMatches) {
-            row.style.display = '';
-            anyVisible = true;
-          } else {
-            row.style.display = 'none';
-          }
-        });
-
-        updateSerialNumbers();
-        if (!filter && !month && !status) {
-          rows.forEach(row => (row.style.display = ''));
-          updateSerialNumbers();
-        }
-      }
-
-      searchBtn.addEventListener('click', searchClients);
-
-      searchInput.addEventListener('keydown', e => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          searchClients();
-        }
-      });
-
-      clearSearchBtn.addEventListener('click', () => {
-        searchInput.value = '';
-        searchClients();
-        searchInput.focus();
-      });
-
-      filterBtn.addEventListener('click', () => {
-        filterOptions.classList.toggle('show');
-      });
-
-      applyFilterBtn.addEventListener('click', () => {
-        searchClients();
-        filterOptions.classList.remove('show');
-      });
-
-      clearFilterBtn.addEventListener('click', () => {
-        monthFilter.value = '';
-        statusFilter.value = '';
-        searchClients();
-        filterOptions.classList.remove('show');
-      });
-
-      document.addEventListener('click', e => {
-        if (!filterBtn.contains(e.target) && !filterOptions.contains(e.target)) {
-          filterOptions.classList.remove('show');
-        }
-      });
-
-      tableBody.addEventListener('keydown', e => {
-        const arrowKeys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
-        if (!arrowKeys.includes(e.key)) return;
-
-        const inputs = Array.from(tableBody.querySelectorAll('.form-control'));
-        const currentInput = e.target;
-        const currentIndex = inputs.indexOf(currentInput);
-        if (currentIndex === -1) return;
-
+      const handleContextMenu = (e, rowIndex) => {
         e.preventDefault();
+        setContextTargetRow({ rowIndex, x: e.pageX, y: e.pageY });
+      };
 
-        const inputsPerRow = 13;
-        const totalInputs = inputs.length;
+      const hideContextMenu = () => setContextTargetRow(null);
 
-        let nextIndex = currentIndex;
-
-        switch (e.key) {
-          case 'ArrowRight':
-            nextIndex = currentIndex + 1;
-            if (nextIndex >= totalInputs) nextIndex = 0;
-            break;
-          case 'ArrowLeft':
-            nextIndex = currentIndex - 1;
-            if (nextIndex < 0) nextIndex = totalInputs - 1;
-            break;
-          case 'ArrowDown':
-            nextIndex = currentIndex + inputsPerRow;
-            if (nextIndex >= totalInputs) nextIndex = currentIndex % inputsPerRow;
-            break;
-          case 'ArrowUp':
-            nextIndex = currentIndex - inputsPerRow;
-            if (nextIndex < 0) {
-              const rowsCount = Math.floor(totalInputs / inputsPerRow);
-              nextIndex = currentIndex + inputsPerRow * (rowsCount - 1);
-              if (nextIndex >= totalInputs) nextIndex = totalInputs - 1;
-            }
-            break;
-        }
-
-        inputs[nextIndex].focus();
-        if (inputs[nextIndex].tagName === 'INPUT') {
-          inputs[nextIndex].select();
-        }
-      });
-
-      function openSidebar() {
-        sidebarMenu.classList.add('show');
-        sidebarOverlay.classList.add('show');
-        menuToggle.classList.add('active');
-        menuToggle.setAttribute('aria-expanded', 'true');
-      }
-
-      function closeSidebar() {
-        sidebarMenu.classList.remove('show');
-        sidebarOverlay.classList.remove('show');
-        menuToggle.classList.remove('active');
-        menuToggle.setAttribute('aria-expanded', 'false');
-      }
-
-      menuToggle.addEventListener('click', () => {
-        if (sidebarMenu.classList.contains('show')) {
-          closeSidebar();
-        } else {
-          openSidebar();
-        }
-      });
-
-      sidebarOverlay.addEventListener('click', closeSidebar);
-
-      document.addEventListener('keydown', e => {
-        if (e.key === 'Escape' && sidebarMenu.classList.contains('show')) {
-          closeSidebar();
-          menuToggle.focus();
-        }
-        if (e.key === 'Escape' && contextMenu.style.display === 'block') {
-          hideContextMenu();
-        }
-      });
-
-      const sidebarItems = sidebarMenu.querySelectorAll('li');
-      sidebarItems.forEach(item => {
-        item.addEventListener('click', () => {
-          closeSidebar();
-          if (item.id === 'dashboardLink') {
-            showHomePage();
-          } else if (item.id === 'clientsLink') {
-            showClientsPage();
-          } else if (item.id === 'paymentsLink') {
-            showPaymentsPage();
-          } else if (item.id === 'reportsLink') {
-            alert(`Navigating to: ${item.textContent}`);
-          }
-        });
-        item.addEventListener('keydown', e => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            item.click();
-          }
-        });
-      });
-
-      function showContextMenu(x, y, targetRow) {
-        contextTargetRow = targetRow;
-        contextMenu.style.left = x + 'px';
-        contextMenu.style.top = y + 'px';
-        contextMenu.style.display = 'block';
-        contextMenu.setAttribute('aria-hidden', 'false');
-        contextMenu.focus();
-      }
-
-      function hideContextMenu() {
-        contextMenu.style.display = 'none';
-        contextMenu.setAttribute('aria-hidden', 'true');
-        contextTargetRow = null;
-      }
-
-      deleteRowBtn.addEventListener('click', () => {
-        if (!contextTargetRow) return;
-        if (tableBody.rows.length === 1) {
+      const deleteRow = async () => {
+        if (paymentsData.length <= 1) {
           alert('Cannot delete the last row.');
           hideContextMenu();
           return;
         }
-        const clientName = contextTargetRow.querySelector('.client-name-display').textContent;
-        const type = contextTargetRow.querySelector('.type-display').textContent;
-        contextTargetRow.remove();
-        updateSerialNumbers();
-        deleteClient(clientName, type);
-        hideContextMenu();
-      });
-
-      tableBody.addEventListener('contextmenu', e => {
-        if (e.target.tagName !== 'INPUT') return;
-        e.preventDefault();
-        const tr = e.target.closest('tr');
-        if (!tr) return;
-        showContextMenu(e.pageX, e.pageY, tr);
-      });
-
-      tableBody.addEventListener('keydown', e => {
-        if ((e.shiftKey && e.key === 'F10') || e.key === 'ContextMenu') {
-          if (e.target.tagName !== 'INPUT') return;
-          e.preventDefault();
-          const tr = e.target.closest('tr');
-          if (!tr) return;
-          const rect = e.target.getBoundingClientRect();
-          showContextMenu(rect.left + window.pageXOffset, rect.bottom + window.pageYOffset, tr);
-        }
-      });
-
-      document.addEventListener('click', e => {
-        if (!contextMenu.contains(e.target)) {
+        const rowData = paymentsData[contextTargetRow.rowIndex];
+        try {
+          await axios.delete('http://localhost:5000/api/delete-client', {
+            headers: { Authorization: `Bearer ${sessionToken}` },
+            data: { Client_Name: rowData.Client_Name, Type: rowData.Type },
+          });
+          setPaymentsData(paymentsData.filter((_, i) => i !== contextTargetRow.rowIndex));
+          setClientsData(clientsData.filter(client => client.Client_Name !== rowData.Client_Name || client.Type !== rowData.Type));
           hideContextMenu();
+        } catch (error) {
+          console.error('Error deleting row:', error);
+          handleSessionError(error);
         }
+      };
+
+      const updatePayment = async (rowIndex, month, value) => {
+        const updatedPayments = [...paymentsData];
+        const rowData = updatedPayments[rowIndex];
+        rowData[month] = value;
+
+        const amountToBePaidPerMonth = parseFloat(rowData.Amount_To_Be_Paid) || 0;
+        const activeMonths = Object.keys(rowData)
+          .filter(key => ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].includes(key))
+          .filter(m => rowData[m] && parseFloat(rowData[m]) >= 0).length;
+        const expectedPayment = amountToBePaidPerMonth * activeMonths;
+        const totalPayments = Object.keys(rowData)
+          .filter(key => ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].includes(key))
+          .reduce((sum, m) => sum + (parseFloat(rowData[m]) || 0), 0);
+        rowData.Due_Payment = Math.max(expectedPayment - totalPayments, 0).toFixed(2);
+
+        setPaymentsData(updatedPayments);
+        try {
+          await axios.post('http://localhost:5000/api/save-payments', paymentsData, {
+            headers: { Authorization: `Bearer ${sessionToken}` },
+          });
+        } catch (error) {
+          console.error('Error saving payments:', error);
+          handleSessionError(error);
+        }
+      };
+
+      const importCsv = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          const text = event.target.result;
+          const rows = text.split('\n').map(row => row.trim()).filter(row => row);
+          if (rows.length === 0) {
+            alert('CSV file is empty.');
+            csvFileInputRef.current.value = '';
+            return;
+          }
+
+          const data = rows.map(row => {
+            const cols = row.split(',').map(col => col.trim());
+            return cols.reduce((obj, val, i) => {
+              obj[`col${i}`] = val;
+              return obj;
+            }, {});
+          });
+
+          try {
+            await axios.post('http://localhost:5000/api/import-csv', data, {
+              headers: { Authorization: `Bearer ${sessionToken}` },
+            });
+            fetchClients(sessionToken);
+            fetchPayments(sessionToken);
+            alert('CSV data imported successfully!');
+            csvFileInputRef.current.value = '';
+          } catch (error) {
+            console.error('Error importing CSV:', error);
+            handleSessionError(error);
+            alert('Failed to import CSV data: ' + error.message);
+            csvFileInputRef.current.value = '';
+          }
+        };
+        reader.readAsText(file);
+      };
+
+      return (
+        <div className="min-h-screen bg-gray-100">
+          {page === 'signIn' && <SignInPage setSessionToken={setSessionToken} setCurrentUser={setCurrentUser} setPage={setPage} />}
+          {page !== 'signIn' && (
+            <div className="flex flex-col h-screen">
+              <header className="bg-gradient-to-r from-blue-600 to-blue-400 text-white text-xl font-semibold p-4 flex items-center justify-between shadow-lg">
+                <div className="flex items-center">
+                  <button onClick={toggleSidebar} className="mr-4 focus:outline-none">
+                    <i className={`fas fa-${isSidebarOpen ? 'times' : 'bars'} text-xl`}></i>
+                  </button>
+                  <span>Payment Tracking App</span>
+                </div>
+              </header>
+
+              <div className="flex flex-1 overflow-hidden">
+                <nav className={`bg-gray-800 text-gray-100 w-64 p-4 fixed top-0 h-full transition-transform duration-300 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} z-50`}>
+                  <ul className="space-y-2">
+                    <li><button onClick={() => { setPage('home'); setIsSidebarOpen(false); }} className="w-full text-left p-2 hover:bg-gray-700 rounded-lg"><i className="fas fa-tachometer-alt mr-2"></i> Dashboard</button></li>
+                    <li><button onClick={() => { setPage('clients'); setIsSidebarOpen(false); }} className="w-full text-left p-2 hover:bg-gray-700 rounded-lg"><i className="fas fa-users mr-2"></i> Clients</button></li>
+                    <li><button onClick={() => { setPage('payments'); setIsSidebarOpen(false); }} className="w-full text-left p-2 hover:bg-gray-700 rounded-lg"><i className="fas fa-money-bill-wave mr-2"></i> Payments</button></li>
+                    <li><button onClick={() => { alert('Reports coming soon!'); setIsSidebarOpen(false); }} className="w-full text-left p-2 hover:bg-gray-700 rounded-lg"><i className="fas fa-chart-line mr-2"></i> Reports</button></li>
+                    <li><button onClick={logout} className="w-full text-left p-2 hover:bg-gray-700 rounded-lg text-red-500"><i className="fas fa-sign-out-alt mr-2"></i> Logout</button></li>
+                  </ul>
+                </nav>
+                {isSidebarOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={toggleSidebar}></div>}
+
+                <main className="flex-1 p-4 overflow-y-auto">
+                  {page === 'home' && (
+                    <HomePage
+                      paymentsData={paymentsData}
+                      setPaymentsData={setPaymentsData}
+                      searchQuery={searchQuery}
+                      setSearchQuery={setSearchQuery}
+                      monthFilter={monthFilter}
+                      setMonthFilter={setMonthFilter}
+                      statusFilter={statusFilter}
+                      setStatusFilter={setStatusFilter}
+                      filterOptionsVisible={filterOptionsVisible}
+                      setFilterOptionsVisible={setFilterOptionsVisible}
+                      updatePayment={updatePayment}
+                      handleContextMenu={handleContextMenu}
+                      contextTargetRow={contextTargetRow}
+                      hideContextMenu={hideContextMenu}
+                      deleteRow={deleteRow}
+                      setPage={setPage}
+                      csvFileInputRef={csvFileInputRef}
+                      importCsv={importCsv}
+                    />
+                  )}
+                  {page === 'addClient' && (
+                    <AddClientPage
+                      setPage={setPage}
+                      fetchClients={fetchClients}
+                      fetchPayments={fetchPayments}
+                      sessionToken={sessionToken}
+                      currentUser={currentUser}
+                      editClient={editClient}
+                      setEditClient={setEditClient}
+                    />
+                  )}
+                  {page === 'clients' && (
+                    <ClientsPage
+                      clientsData={clientsData}
+                      setPage={setPage}
+                      setEditClient={setEditClient}
+                      fetchClients={fetchClients}
+                      fetchPayments={fetchPayments}
+                      sessionToken={sessionToken}
+                    />
+                  )}
+                  {page === 'payments' && (
+                    <PaymentsPage
+                      paymentsData={paymentsData}
+                      fetchClients={fetchClients}
+                      fetchPayments={fetchPayments}
+                      sessionToken={sessionToken}
+                    />
+                  )}
+                </main>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
+      const [isSignup, setIsSignup] = useState(false);
+      const [username, setUsername] = useState('');
+      const [password, setPassword] = useState('');
+      const [gmailId, setGmailId] = useState('');
+
+      const handleLogin = async () => {
+        try {
+          const response = await axios.post('http://localhost:5000/api/login', { username, password });
+          setCurrentUser(response.data.username);
+          setSessionToken(response.data.sessionToken);
+          localStorage.setItem('currentUser', response.data.username);
+          localStorage.setItem('sessionToken', response.data.sessionToken);
+          setPage('home');
+        } catch (error) {
+          alert(error.response?.data?.error || 'Error logging in');
+        }
+      };
+
+      const handleSignup = async () => {
+        try {
+          await axios.post('http://localhost:5000/api/signup', { username, password, gmailId });
+          alert('Account created successfully! Please login.');
+          setIsSignup(false);
+          setUsername('');
+          setPassword('');
+          setGmailId('');
+        } catch (error) {
+          alert(error.response?.data?.error || 'Error signing up');
+        }
+      };
+
+      return (
+        <div className="max-w-md mx-auto mt-20 p-6 bg-white rounded-lg shadow-lg">
+          <h2 className="text-2xl font-semibold text-center mb-4">
+            <i className={`fas fa-${isSignup ? 'user-plus' : 'sign-in-alt'} mr-2`}></i>
+            {isSignup ? 'Sign Up' : 'Sign In'}
+          </h2>
+          {isSignup ? (
+            <div>
+              <div className="mb-4">
+                <label className="block mb-1"><i className="fas fa-user mr-2"></i>Username</label>
+                <input type="text" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={username} onChange={e => setUsername(e.target.value)} placeholder="Enter username" />
+              </div>
+              <div className="mb-4">
+                <label className="block mb-1"><i className="fas fa-lock mr-2"></i>Password</label>
+                <input type="password" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter password" />
+              </div>
+              <div className="mb-4">
+                <label className="block mb-1"><i className="fas fa-envelope mr-2"></i>Gmail ID</label>
+                <input type="email" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={gmailId} onChange={e => setGmailId(e.target.value)} placeholder="Enter Gmail ID" />
+              </div>
+              <button onClick={handleSignup} className="w-full bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition duration-200 flex items-center justify-center">
+                <i className="fas fa-user-plus mr-2"></i> Sign Up
+              </button>
+              <p className="text-center mt-2">
+                Already have an account? <button onClick={() => setIsSignup(false)} className="text-blue-600 hover:underline">Login</button>
+              </p>
+            </div>
+          ) : (
+            <div>
+              <div className="mb-4">
+                <label className="block mb-1"><i className="fas fa-user mr-2"></i>Username</label>
+                <input type="text" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={username} onChange={e => setUsername(e.target.value)} placeholder="Enter username" />
+              </div>
+              <div className="mb-4">
+                <label className="block mb-1"><i className="fas fa-lock mr-2"></i>Password</label>
+                <input type="password" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter password" />
+              </div>
+              <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition duration-200 flex items-center justify-center">
+                <i className="fas fa-sign-in-alt mr-2"></i> Login
+              </button>
+              <p className="text-center mt-2">
+                Don't have an account? <button onClick={() => setIsSignup(true)} className="text-blue-600 hover:underline">Sign Up</button>
+              </p>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    const HomePage = ({
+      paymentsData, setPaymentsData, searchQuery, setSearchQuery, monthFilter, setMonthFilter, statusFilter, setStatusFilter,
+      filterOptionsVisible, setFilterOptionsVisible, updatePayment, handleContextMenu, contextTargetRow, hideContextMenu, deleteRow,
+      setPage, csvFileInputRef, importCsv
+    }) => {
+      const filteredData = paymentsData.filter(row => {
+        const clientName = row.Client_Name.toLowerCase();
+        const nameMatches = clientName.includes(searchQuery.toLowerCase());
+        let filterMatches = true;
+
+        if (monthFilter && statusFilter) {
+          const amountToBePaid = parseFloat(row.Amount_To_Be_Paid) || 0;
+          const paymentValue = parseFloat(row[monthFilter]) || 0;
+          if (statusFilter === 'paid') {
+            filterMatches = paymentValue >= amountToBePaid && amountToBePaid > 0;
+          } else if (statusFilter === 'unpaid') {
+            filterMatches = paymentValue === 0 || !row[monthFilter];
+          } else if (statusFilter === 'partially-paid') {
+            filterMatches = paymentValue > 0 && paymentValue < amountToBePaid;
+          }
+        }
+
+        return nameMatches && filterMatches;
       });
 
-      window.addEventListener('scroll', () => {
-        if (contextMenu.style.display === 'block') {
-          hideContextMenu();
-        }
-      }, true);
+      return (
+        <div>
+          <div className="bg-white p-4 rounded-lg shadow mb-4 flex flex-wrap items-center gap-4">
+            <div className="flex gap-2">
+              <button onClick={() => setPage('addClient')} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center">
+                <i className="fas fa-user-plus mr-2"></i> Add Client
+              </button>
+              <button onClick={() => csvFileInputRef.current.click()} className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center">
+                <i className="fas fa-file-import mr-2"></i> Import CSV
+              </button>
+              <input type="file" ref={csvFileInputRef} accept=".csv" className="hidden" onChange={importCsv} />
+            </div>
+            <div className="ml-auto flex items-center gap-2">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Search Client Name"
+                  className="p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+                <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700">
+                  <i className="fas fa-times"></i>
+                </button>
+              </div>
+              <div className="relative">
+                <button onClick={() => setFilterOptionsVisible(!filterOptionsVisible)} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center">
+                  <i className="fas fa-filter mr-2"></i> Filter
+                </button>
+                {filterOptionsVisible && (
+                  <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg p-4 z-50">
+                    <div className="mb-4">
+                      <label className="block mb-1">Month</label>
+                      <select value={monthFilter} onChange={e => setMonthFilter(e.target.value)} className="w-full p-2 border rounded-lg">
+                        <option value="">Select Month</option>
+                        {['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].map(month => (
+                          <option key={month} value={month}>{month.charAt(0).toUpperCase() + month.slice(1)}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="mb-4">
+                      <label className="block mb-1">Payment Status</label>
+                      <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="w-full p-2 border rounded-lg">
+                        <option value="">Select Status</option>
+                        <option value="paid">Paid</option>
+                        <option value="unpaid">Unpaid</option>
+                        <option value="partially-paid">Partially Paid</option>
+                      </select>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => { setMonthFilter(''); setStatusFilter(''); setFilterOptionsVisible(false); }} className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600">Clear</button>
+                      <button onClick={() => setFilterOptionsVisible(false)} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Apply</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
 
-      function addRowToTable(rowData) {
-        const tableBody = document.querySelector('#mainTable tbody');
-        const newRow = createEditableRow(rowData.Client_Name || '', rowData.Type || '', rowData.Amount_To_Be_Paid || '');
-        const inputs = newRow.querySelectorAll('.form-control');
-        inputs[0].value = rowData.january || '';
-        inputs[1].value = rowData.february || '';
-        inputs[2].value = rowData.march || '';
-        inputs[3].value = rowData.april || '';
-        inputs[4].value = rowData.may || '';
-        inputs[5].value = rowData.june || '';
-        inputs[6].value = rowData.july || '';
-        inputs[7].value = rowData.august || '';
-        inputs[8].value = rowData.september || '';
-        inputs[9].value = rowData.october || '';
-        inputs[10].value = rowData.november || '';
-        inputs[11].value = rowData.december || '';
-        inputs[12].value = rowData.Due_Payment || '0.00';
+          <div className="overflow-x-auto h-[calc(100vh-200px)]">
+            <table className="w-full bg-white rounded-lg shadow">
+              <thead>
+                <tr className="bg-gray-200 text-center">
+                  <th className="p-2 sticky top-0 bg-gray-200 z-10">Sr.No</th>
+                  <th className="p-2 sticky top-0 bg-gray-200 z-10">Client Name</th>
+                  <th className="p-2 sticky top-0 bg-gray-200 z-10">Type</th>
+                  <th className="p-2 sticky top-0 bg-gray-200 z-10">Amount To be Paid</th>
+                  <th colSpan="12" className="p-2 sticky top-0 bg-gray-200 z-10">Jan - Dec</th>
+                  <th className="p-2 sticky top-0 bg-gray-200 z-10">Due Payment</th>
+                </tr>
+                <tr className="bg-gray-200 text-center">
+                  <th className="p-2 sticky top-[48px] bg-gray-200 z-10"></th>
+                  <th className="p-2 sticky top-[48px] bg-gray-200 z-10"></th>
+                  <th className="p-2 sticky top-[48px] bg-gray-200 z-10"></th>
+                  <th className="p-2 sticky top-[48px] bg-gray-200 z-10"></th>
+                  {['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].map(month => (
+                    <th key={month} className={`p-2 sticky top-[48px] z-10 ${month <= 'june' ? 'bg-blue-50' : 'bg-gray-200'}`}>
+                      {month.charAt(0).toUpperCase() + month.slice(1)}
+                    </th>
+                  ))}
+                  <th className="p-2 sticky top-[48px] bg-gray-200 z-10"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredData.map((row, index) => (
+                  <tr key={index} onContextMenu={e => handleContextMenu(e, index)}>
+                    <td className="p-2 text-center">{index + 1}</td>
+                    <td className="p-2 text-center">{row.Client_Name}</td>
+                    <td className="p-2 text-center">{row.Type}</td>
+                    <td className="p-2 text-center">{row.Amount_To_Be_Paid}</td>
+                    {['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].map(month => {
+                      const amountToBePaid = parseFloat(row.Amount_To_Be_Paid) || 0;
+                      const paymentValue = parseFloat(row[month]) || 0;
+                      let cellClass = '';
+                      if (!row[month] || paymentValue === 0) cellClass = 'bg-red-100';
+                      else if (paymentValue >= amountToBePaid) cellClass = 'bg-green-100';
+                      else if (paymentValue > 0) cellClass = 'bg-orange-100';
+                      return (
+                        <td key={month} className={`p-2 text-center ${month <= 'june' ? 'bg-blue-50' : ''} ${cellClass}`}>
+                          <input
+                            type="text"
+                            value={row[month] || ''}
+                            onChange={e => updatePayment(index, month, e.target.value)}
+                            className="w-full p-1 border rounded-lg text-center"
+                            placeholder={month.charAt(0).toUpperCase() + month.slice(1)}
+                          />
+                        </td>
+                      );
+                    })}
+                    <td className="p-2 text-center">
+                      <input type="text" value={row.Due_Payment} readOnly className="w-full p-1 border rounded-lg text-center bg-gray-100" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-        tableBody.appendChild(newRow);
-        updateDuePayment(newRow);
-        const monthInputs = Array.from(inputs).slice(0, 12);
-        monthInputs.forEach(input => updatePaymentStatus(input));
-      }
+          {contextTargetRow && (
+            <div
+              className="absolute bg-white border rounded-lg shadow-lg z-50"
+              style={{ left: contextTargetRow.x, top: contextTargetRow.y }}
+            >
+              <button onClick={deleteRow} className="w-full text-left p-2 hover:bg-gray-200">Delete This Row</button>
+            </div>
+          )}
+        </div>
+      );
+    };
 
-      function fetchClients() {
-        if (!sessionToken) {
-          console.error('No sessionToken available. Redirecting to sign-in page.');
-          showSignInPage();
-          return;
-        }
+    const AddClientPage = ({ setPage, fetchClients, fetchPayments, sessionToken, currentUser, editClient, setEditClient }) => {
+      const [clientName, setClientName] = useState(editClient?.Client_Name || '');
+      const [email, setEmail] = useState(editClient?.Email || '');
+      const [type, setType] = useState(editClient?.Type || '');
+      const [monthlyPayment, setMonthlyPayment] = useState(editClient?.monthly_payment || '');
 
-        fetch('https://payment-tracker-aswa.onrender.com/api/get-clients', {
-          headers: {
-            'user': currentUser,
-            'Authorization': `Bearer ${sessionToken}`
-          }
-        })
-          .then(response => {
-            if (!response.ok) {
-              if (response.status === 401) {
-                console.error('Session token invalid. Redirecting to sign-in page.');
-                clearUserSession();
-                showSignInPage();
-                return;
-              }
-              throw new Error('Failed to fetch clients');
-            }
-            return response.json();
-          })
-          .then(data => {
-            clientsData = data;
-          })
-          .catch(error => {
-            console.error('Error fetching clients:', error);
-            alert('Failed to load client data from Google Sheets.');
-            clientsData = [{ User: currentUser, Client_Name: 'Test Client', Type: 'Test Type', monthly_payment: '100' }];
-          });
-      }
-
-      function fetchPayments() {
-        if (!sessionToken) {
-          console.error('No sessionToken available. Redirecting to sign-in page.');
-          showSignInPage();
-          return;
-        }
-
-        fetch('https://payment-tracker-aswa.onrender.com/api/get-payments', {
-          headers: {
-            'user': currentUser,
-            'Authorization': `Bearer ${sessionToken}`
-          }
-        })
-          .then(response => {
-            if (!response.ok) {
-              if (response.status === 401) {
-                console.error('Session token invalid. Redirecting to sign-in page.');
-                clearUserSession();
-                showSignInPage();
-                return;
-              }
-              throw new Error('Failed to fetch payments');
-            }
-            return response.json();
-          })
-          .then(data => {
-            const userPayments = data.filter(payment => payment.User === currentUser);
-            if (userPayments.length > 0) {
-              tableBody.innerHTML = '';
-              userPayments.forEach(row => addRowToTable(row));
-            }
-            updateSerialNumbers();
-            searchClients();
-          })
-          .catch(error => {
-            console.error('Error fetching payments:', error);
-            alert('Failed to load payments from Google Sheets.');
-          });
-      }
-
-      function fetchClientsForDisplay() {
-        if (!sessionToken) {
-          console.error('No sessionToken available. Redirecting to sign-in page.');
-          showSignInPage();
-          return;
-        }
-
-        fetch('https://payment-tracker-aswa.onrender.com/api/get-clients', {
-          headers: {
-            'user': currentUser,
-            'Authorization': `Bearer ${sessionToken}`
-          }
-        })
-          .then(response => {
-            if (!response.ok) {
-              if (response.status === 401) {
-                console.error('Session token invalid. Redirecting to sign-in page.');
-                clearUserSession();
-                showSignInPage();
-                return;
-              }
-              throw new Error('Failed to fetch clients');
-            }
-            return response.json();
-          })
-          .then(data => {
-            const clientsTableBody = document.getElementById('clientsTableBody');
-            clientsTableBody.innerHTML = '';
-            const userClients = data.filter(client => client.User === currentUser);
-            userClients.forEach(client => {
-              const tr = document.createElement('tr');
-              tr.innerHTML = `
-                <td>${client.Client_Name}</td>
-                <td>${client.Email || 'N/A'}</td>
-                <td>${client.monthly_payment}</td>
-                <td>
-                  <button class="btn btn-edit btn-sm edit-client-btn" data-client="${client.Client_Name}" data-type="${client.Type}"><i class="fas fa-edit"></i> Edit</button>
-                  <button class="btn btn-delete btn-sm delete-client-btn" data-client="${client.Client_Name}" data-type="${client.Type}"><i class="fas fa-trash-alt"></i> Delete</button>
-                </td>
-              `;
-              clientsTableBody.appendChild(tr);
-            });
-
-            document.querySelectorAll('.edit-client-btn').forEach(btn => {
-              btn.addEventListener('click', () => {
-                const clientName = btn.dataset.client;
-                const type = btn.dataset.type;
-                const clientData = userClients.find(client => client.Client_Name === clientName && client.Type === type);
-                clientNameInput.value = clientData.Client_Name;
-                clientEmailInput.value = clientData.Email || '';
-                typeInput.value = clientData.Type;
-                monthlyPaymentInput.value = clientData.monthly_payment;
-                showAddClientPage();
-                saveClientBtn.textContent = 'Update Client';
-                saveClientBtn.dataset.client = clientName;
-                saveClientBtn.dataset.type = type;
-              });
-            });
-
-            document.querySelectorAll('.delete-client-btn').forEach(btn => {
-              btn.addEventListener('click', () => {
-                const clientName = btn.dataset.client;
-                const type = btn.dataset.type;
-                if (confirm(`Are you sure you want to delete ${clientName} (${type})?`)) {
-                  deleteClient(clientName, type);
-                }
-              });
-            });
-          })
-          .catch(error => {
-            console.error('Error fetching clients:', error);
-            alert('Failed to load clients.');
-          });
-      }
-
-      function fetchPaymentsForDisplay() {
-        if (!sessionToken) {
-          console.error('No sessionToken available. Redirecting to sign-in page.');
-          showSignInPage();
-          return;
-        }
-
-        fetch('https://payment-tracker-aswa.onrender.com/api/get-payments', {
-          headers: {
-            'user': currentUser,
-            'Authorization': `Bearer ${sessionToken}`
-          }
-        })
-          .then(response => {
-            if (!response.ok) {
-              if (response.status === 401) {
-                console.error('Session token invalid. Redirecting to sign-in page.');
-                clearUserSession();
-                showSignInPage();
-                return;
-              }
-              throw new Error('Failed to fetch payments');
-            }
-            return response.json();
-          })
-          .then(data => {
-            const paymentsTableBody = document.getElementById('paymentsTableBody');
-            paymentsTableBody.innerHTML = '';
-            const userPayments = data.filter(payment => payment.User === currentUser);
-            userPayments.forEach(payment => {
-              const tr = document.createElement('tr');
-              tr.innerHTML = `
-                <td>${payment.Client_Name}</td>
-                <td>${payment.Type}</td>
-                <td>${payment.Amount_To_Be_Paid}</td>
-                <td>${payment.january || ''}</td>
-                <td>${payment.february || ''}</td>
-                <td>${payment.march || ''}</td>
-                <td>${payment.april || ''}</td>
-                <td>${payment.may || ''}</td>
-                <td>${payment.june || ''}</td>
-                <td>${payment.july || ''}</td>
-                <td>${payment.august || ''}</td>
-                <td>${payment.september || ''}</td>
-                <td>${payment.october || ''}</td>
-                <td>${payment.november || ''}</td>
-                <td>${payment.december || ''}</td>
-                <td>${payment.Due_Payment}</td>
-              `;
-              paymentsTableBody.appendChild(tr);
-            });
-          })
-          .catch(error => {
-            console.error('Error fetching payments:', error);
-            alert('Failed to load payments.');
-          });
-      }
-
-      function addNewClient() {
-        const clientName = clientNameInput.value.trim();
-        const clientEmail = clientEmailInput.value.trim();
-        const type = typeInput.value.trim();
-        const monthlyPayment = monthlyPaymentInput.value.trim();
-
-        if (!clientName || !clientEmail || !type || !monthlyPayment) {
+      const saveClient = async () => {
+        if (!clientName || !type || !monthlyPayment || (editClient && !email)) {
           alert('All fields are required.');
           return;
         }
-
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(clientEmail)) {
-          alert('Please enter a valid email address.');
-          return;
-        }
-
         const paymentValue = parseFloat(monthlyPayment);
         if (isNaN(paymentValue) || paymentValue <= 0) {
           alert('Monthly payment must be a positive number.');
           return;
         }
 
-        const newClient = {
-          User: currentUser,
-          Client_Name: clientName,
-          Email: clientEmail,
-          Type: type,
-          monthly_payment: paymentValue
-        };
-
-        const isUpdate = saveClientBtn.textContent === 'Update Client';
-        const endpoint = isUpdate ? '/api/update-client' : '/api/add-client';
-        const method = isUpdate ? 'PUT' : 'POST';
-
-        if (isUpdate) {
-          newClient.Old_Client_Name = saveClientBtn.dataset.client;
-          newClient.Old_Type = saveClientBtn.dataset.type;
-        }
-
-        if (!sessionToken) {
-          console.error('No sessionToken available. Redirecting to sign-in page.');
-          showSignInPage();
-          return;
-        }
-
-        fetch(`https://payment-tracker-aswa.onrender.com${endpoint}`, {
-          method: method,
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${sessionToken}`
-          },
-          body: JSON.stringify(newClient)
-        })
-          .then(response => {
-            if (!response.ok) {
-              if (response.status === 401) {
-                console.error('Session token invalid. Redirecting to sign-in page.');
-                clearUserSession();
-                showSignInPage();
-                return;
-              }
-              throw new Error(`Failed to ${isUpdate ? 'update' : 'add'} client`);
-            }
-            return response.json();
-          })
-          .then(data => {
-            alert(`Client ${isUpdate ? 'updated' : 'added'} successfully!`);
-            resetAddClientForm();
-            fetchClients();
-            fetchPayments();
-            fetchClientsForDisplay();
-            fetchPaymentsForDisplay();
-            showHomePage();
-          })
-          .catch(error => {
-            console.error(`Error ${isUpdate ? 'updating' : 'adding'} client:`, error);
-            alert(`Failed to ${isUpdate ? 'update' : 'add'} client to Google Sheets: ${error.message}`);
-            resetAddClientForm();
-            fetchClients();
-            fetchPayments();
-            fetchClientsForDisplay();
-            fetchPaymentsForDisplay();
-            showHomePage();
-          });
-      }
-
-      function deleteClient(clientName, type) {
-        if (!sessionToken) {
-          console.error('No sessionToken available. Redirecting to sign-in page.');
-          showSignInPage();
-          return;
-        }
-
-        fetch('https://payment-tracker-aswa.onrender.com/api/delete-client', {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${sessionToken}`
-          },
-          body: JSON.stringify({ User: currentUser, Client_Name: clientName, Type: type })
-        })
-          .then(response => {
-            if (!response.ok) {
-              if (response.status === 401) {
-                console.error('Session token invalid. Redirecting to sign-in page.');
-                clearUserSession();
-                showSignInPage();
-                return;
-              }
-              throw new Error('Failed to delete client');
-            }
-            return response.json();
-          })
-          .then(data => {
-            alert('Client deleted successfully!');
-            fetchClients();
-            fetchPayments();
-            fetchClientsForDisplay();
-            fetchPaymentsForDisplay();
-          })
-          .catch(error => {
-            console.error('Error deleting client:', error);
-            alert('Failed to delete client from Google Sheets. Please try again.');
-            fetchClients();
-            fetchPayments();
-            fetchClientsForDisplay();
-            fetchPaymentsForDisplay();
-          });
-      }
-
-      function resetAddClientForm() {
-        clientNameInput.value = '';
-        clientEmailInput.value = '';
-        typeInput.value = '';
-        monthlyPaymentInput.value = '';
-        saveClientBtn.textContent = 'Add Client';
-        delete saveClientBtn.dataset.client;
-        delete saveClientBtn.dataset.type;
-      }
-
-      saveClientBtn.addEventListener('click', addNewClient);
-
-      cancelAddClientBtn.addEventListener('click', () => {
-        resetAddClientForm();
-        showHomePage();
-      });
-
-      importCsvBtn.addEventListener('click', () => {
-        csvFileInput.click();
-      });
-
-      csvFileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = function(event) {
-          const text = event.target.result;
-          const rows = text.split('\n').map(row => row.trim()).filter(row => row);
-          if (rows.length === 0) {
-            alert('CSV file is empty.');
-            csvFileInput.value = '';
-            return;
-          }
-
-          const headers = rows[0].split(',').map(header => header.trim().replace(/\s+/g, ' '));
-          const expectedHeaders = ['Client Name', 'Type', 'Amount To Be Paid'].map(header => header.trim().replace(/\s+/g, ' '));
-          const headersMatch = expectedHeaders.every((header, index) => headers[index] === header);
-          if (!headersMatch || headers.length !== expectedHeaders.length) {
-            alert('CSV file must have headers: Client Name, Type, Amount To Be Paid');
-            csvFileInput.value = '';
-            return;
-          }
-
-          const data = rows.slice(1).map(row => {
-            const cols = row.split(',').map(col => col.trim());
-            if (cols.length < 3) return null;
-            const amount = parseFloat(cols[2]);
-            if (isNaN(amount) || amount <= 0) return null;
-            return {
-              User: currentUser,
-              Client_Name: cols[0],
-              Type: cols[1],
-              Amount_To_Be_Paid: amount,
-              january: '',
-              february: '',
-              march: '',
-              april: '',
-              may: '',
-              june: '',
-              july: '',
-              august: '',
-              september: '',
-              october: '',
-              november: '',
-              december: '',
-              Due_Payment: '0.00'
-            };
-          }).filter(row => row);
-
-          if (data.length === 0) {
-            alert('No valid data found in CSV file.');
-            csvFileInput.value = '';
-            return;
-          }
-
-          if (!sessionToken) {
-            console.error('No sessionToken available. Redirecting to sign-in page.');
-            showSignInPage();
-            csvFileInput.value = '';
-            return;
-          }
-
-          fetch('https://payment-tracker-aswa.onrender.com/api/import-csv', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${sessionToken}`
-            },
-            body: JSON.stringify(data)
-          })
-            .then(response => {
-              if (!response.ok) {
-                if (response.status === 401) {
-                  console.error('Session token invalid. Redirecting to sign-in page.');
-                  clearUserSession();
-                  showSignInPage();
-                  return;
-                }
-                throw new Error('Failed to import CSV data');
-              }
-              return response.json();
-            })
-            .then(() => {
-              alert('CSV data imported successfully!');
-              fetchClients();
-              fetchPayments();
-              fetchClientsForDisplay();
-              fetchPaymentsForDisplay();
-              csvFileInput.value = '';
-            })
-            .catch(error => {
-              console.error('Error importing CSV:', error);
-              alert('Failed to import CSV data: ' + error.message);
-              fetchClients();
-              fetchPayments();
-              fetchClientsForDisplay();
-              fetchPaymentsForDisplay();
-              csvFileInput.value = '';
+        try {
+          if (editClient) {
+            await axios.put('http://localhost:5000/api/update-client', {
+              clientName,
+              email,
+              type,
+              monthlyPayment: paymentValue,
+              Old_Client_Name: editClient.Client_Name,
+              Old_Type: editClient.Type,
+            }, {
+              headers: { Authorization: `Bearer ${sessionToken}` },
             });
-        };
-        reader.readAsText(file);
-      });
+            alert('Client updated successfully!');
+          } else {
+            await axios.post('http://localhost:5000/api/add-client', {
+              clientName,
+              email,
+              type,
+              monthlyPayment: paymentValue,
+            }, {
+              headers: { Authorization: `Bearer ${sessionToken}` },
+            });
+            alert('Client added successfully!');
+          }
+          fetchClients(sessionToken);
+          fetchPayments(sessionToken);
+          setEditClient(null);
+          setPage('home');
+        } catch (error) {
+          console.error('Error saving client:', error);
+          alert('Failed to save client: ' + error.message);
+        }
+      };
 
-      loadUserSession();
-    });
+      return (
+        <div className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-lg">
+          <h2 className="text-2xl font-semibold text-center mb-4">
+            <i className="fas fa-user-plus mr-2"></i>{editClient ? 'Edit Client' : 'Add New Client'}
+          </h2>
+          <div className="mb-4">
+            <label className="block mb-1"><i className="fas fa-user mr-2"></i>Client Name</label>
+            <input type="text" value={clientName} onChange={e => setClientName(e.target.value)} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Enter client name" />
+          </div>
+          <div className="mb-4">
+            <label className="block mb-1"><i className="fas fa-envelope mr-2"></i>Client Email</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Enter client email" />
+          </div>
+          <div className="mb-4">
+            <label className="block mb-1"><i className="fas fa-tag mr-2"></i>Type</label>
+            <input type="text" value={type} onChange={e => setType(e.target.value)} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Enter type" />
+          </div>
+          <div className="mb-4">
+            <label className="block mb-1"><i className="fas fa-dollar-sign mr-2"></i>Monthly Payment Amount</label>
+            <input type="text" value={monthlyPayment} onChange={e => setMonthlyPayment(e.target.value)} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Enter amount" />
+          </div>
+          <div className="flex justify-end gap-2">
+            <button onClick={() => { setEditClient(null); setPage('home'); }} className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 flex items-center">
+              <i className="fas fa-times mr-2"></i> Cancel
+            </button>
+            <button onClick={saveClient} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center">
+              <i className="fas fa-save mr-2"></i> {editClient ? 'Update Client' : 'Add Client'}
+            </button>
+          </div>
+        </div>
+      );
+    };
+
+    const ClientsPage = ({ clientsData, setPage, setEditClient, fetchClients, fetchPayments, sessionToken }) => {
+      const deleteClient = async (client) => {
+        if (!confirm(`Are you sure you want to delete ${client.Client_Name} (${client.Type})?`)) return;
+        try {
+          await axios.delete('http://localhost:5000/api/delete-client', {
+            headers: { Authorization: `Bearer ${sessionToken}` },
+            data: { Client_Name: client.Client_Name, Type: client.Type },
+          });
+          fetchClients(sessionToken);
+          fetchPayments(sessionToken);
+          alert('Client deleted successfully!');
+        } catch (error) {
+          console.error('Error deleting client:', error);
+          alert('Failed to delete client: ' + error.message);
+        }
+      };
+
+      return (
+        <div className="bg-white p-4 rounded-lg shadow">
+          <h2 className="text-2xl font-semibold mb-4"><i className="fas fa-users mr-2"></i>Clients</h2>
+          <div className="overflow-x-auto h-[calc(100vh-150px)]">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gray-200 text-center">
+                  <th className="p-2 sticky top-0 bg-gray-200 z-10">Client Name</th>
+                  <th className="p-2 sticky top-0 bg-gray-200 z-10">Email</th>
+                  <th className="p-2 sticky top-0 bg-gray-200 z-10">Monthly Amount</th>
+                  <th className="p-2 sticky top-0 bg-gray-200 z-10">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {clientsData.map((client, index) => (
+                  <tr key={index}>
+                    <td className="p-2 text-center">{client.Client_Name}</td>
+                    <td className="p-2 text-center">{client.Email || 'N/A'}</td>
+                    <td className="p-2 text-center">{client.monthly_payment}</td>
+                    <td className="p-2 text-center">
+                      <button onClick={() => { setEditClient(client); setPage('addClient'); }} className="bg-blue-600 text-white px-2 py-1 rounded-lg hover:bg-blue-700 mr-2">
+                        <i className="fas fa-edit mr-1"></i> Edit
+                      </button>
+                      <button onClick={() => deleteClient(client)} className="bg-red-600 text-white px-2 py-1 rounded-lg hover:bg-red-700">
+                        <i className="fas fa-trash-alt mr-1"></i> Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    };
+
+    const PaymentsPage = ({ paymentsData, fetchClients, fetchPayments, sessionToken }) => {
+      return (
+        <div className="bg-white p-4 rounded-lg shadow">
+          <h2 className="text-2xl font-semibold mb-4"><i className="fas fa-money-bill-wave mr-2"></i>Payments</h2>
+          <div className="overflow-x-auto h-[calc(100vh-150px)]">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gray-200 text-center">
+                  <th className="p-2 sticky top-0 bg-gray-200 z-10">Client Name</th>
+                  <th className="p-2 sticky top-0 bg-gray-200 z-10">Type</th>
+                  <th className="p-2 sticky top-0 bg-gray-200 z-10">Amount To be Paid</th>
+                  {['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].map(month => (
+                    <th key={month} className="p-2 sticky top-0 bg-gray-200 z-10">{month.charAt(0).toUpperCase() + month.slice(1)}</th>
+                  ))}
+                  <th className="p-2 sticky top-0 bg-gray-200 z-10">Due Payment</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paymentsData.map((payment, index) => (
+                  <tr key={index}>
+                    <td className="p-2 text-center">{payment.Client_Name}</td>
+                    <td className="p-2 text-center">{payment.Type}</td>
+                    <td className="p-2 text-center">{payment.Amount_To_Be_Paid}</td>
+                    {['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].map(month => (
+                      <td key={month} className="p-2 text-center">{payment[month] || ''}</td>
+                    ))}
+                    <td className="p-2 text-center">{payment.Due_Payment}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    };
+
+    ReactDOM.render(<App />, document.getElementById('root'));
   </script>
 </body>
 </html>
