@@ -1,1820 +1,3 @@
-<!-- <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Payment Tracking App</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-  <style>
-    :root {
-      --primary-color: #2563eb;
-      --secondary-color: #6b7280;
-      --accent-color: #dc2626;
-      --background-color: #f9fafb;
-      --text-color: #1f2937;
-      --border-color: #e5e7eb;
-    }
-
-    html, body {
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: var(--background-color);
-      color: var(--text-color);
-      overflow-x: hidden;
-    }
-
-    body {
-      display: flex;
-      flex-direction: column;
-      min-height: 100vh;
-    }
-
-    .container-fluid {
-      flex-grow: 1;
-      padding: 1rem;
-      max-width: 100vw !important;
-      width: 100vw !important;
-    }
-
-    .header-section {
-      background: linear-gradient(90deg, var(--primary-color), #3b82f6);
-      color: white;
-      font-weight: 600;
-      font-size: 1.5rem;
-      padding: 1rem;
-      text-align: center;
-      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
-      user-select: none;
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 100vw;
-      box-sizing: border-box;
-      display: none;
-    }
-
-    .menu-toggle {
-      position: absolute;
-      left: 1rem;
-      top: 50%;
-      transform: translateY(-50%);
-      cursor: pointer;
-      width: 28px;
-      height: 22px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      z-index: 1051;
-      display: none;
-    }
-
-    .menu-toggle span {
-      display: block;
-      height: 3.5px;
-      background: white;
-      border-radius: 2px;
-    }
-
-    #sidebarMenu {
-      position: fixed;
-      top: 0;
-      left: -250px;
-      width: 250px;
-      height: 100vh;
-      background: #1f2937;
-      color: white;
-      padding-top: 4rem;
-      transition: left 0.3s ease;
-      z-index: 1050;
-      box-shadow: 2px 0 8px rgba(0, 0, 0, 0.3);
-      overflow-y: auto;
-    }
-
-    #sidebarMenu.show {
-      left: 0;
-    }
-
-    #sidebarMenu ul {
-      list-style: none;
-      padding-left: 0;
-      margin: 0;
-    }
-
-    #sidebarMenu ul li {
-      padding: 1rem 1.5rem;
-      cursor: pointer;
-      font-weight: 500;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-      user-select: none;
-      transition: background-color 0.2s ease;
-    }
-
-    #sidebarMenu ul li:hover {
-      background-color: rgba(255, 255, 255, 0.1);
-    }
-
-    #sidebarOverlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background: rgba(0, 0, 0, 0.4);
-      opacity: 0;
-      visibility: hidden;
-      transition: opacity 0.3s ease;
-      z-index: 1049;
-    }
-
-    #sidebarOverlay.show {
-      opacity: 1;
-      visibility: visible;
-    }
-
-    .btn-primary-custom {
-      background-color: var(--primary-color);
-      border: none;
-      font-weight: 500;
-      transition: background-color 0.3s ease, box-shadow 0.3s ease;
-    }
-
-    .btn-primary-custom:hover {
-      background-color: #1d4ed8;
-      box-shadow: 0 2px 8px rgba(29, 78, 216, 0.3);
-    }
-
-    .btn-danger-custom {
-      background-color: var(--accent-color);
-      border: none;
-      font-weight: 500;
-      transition: background-color 0.3s ease, box-shadow 0.3s ease;
-    }
-
-    .btn-danger-custom:hover {
-      background-color: #b91c1c;
-      box-shadow: 0 2px 8px rgba(185, 28, 28, 0.3);
-    }
-
-    .btn-secondary-custom {
-      background-color: var(--secondary-color);
-      border: none;
-      font-weight: 500;
-      transition: background-color 0.3s ease, box-shadow 0.3s ease;
-    }
-
-    .btn-secondary-custom:hover {
-      background-color: #4b5563;
-      box-shadow: 0 2px 8px rgba(75, 85, 99, 0.3);
-    }
-
-    .table {
-      background: white;
-      border-radius: 0.5rem;
-      overflow: hidden;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-    }
-
-    .table thead th {
-      background-color: #f1f5f9;
-      color: var(--text-color);
-      font-weight: 600;
-      border-color: var(--border-color);
-      padding: 0.75rem;
-      white-space: nowrap;
-      text-align: center;
-    }
-
-    .table tbody td {
-      vertical-align: middle;
-      padding: 0.5rem;
-      border-color: var(--border-color);
-    }
-
-    .manual-entry-cell {
-      background-color: #eff6ff !important;
-    }
-
-    input.form-control, select.form-control {
-      font-size: 0.875rem;
-      padding: 0.375rem 0.75rem;
-      border-radius: 0.375rem;
-      border: 1px solid var(--border-color);
-      transition: border-color 0.2s ease, box-shadow 0.2s ease;
-    }
-
-    input.form-control:focus, select.form-control:focus {
-      border-color: var(--primary-color);
-      box-shadow: 0 0 0 0.2rem rgba(37, 99, 235, 0.1);
-    }
-
-    .due-payment-cell {
-      min-width: 140px;
-    }
-
-    @media (max-width: 768px) {
-      .table-responsive {
-        font-size: 0.75rem;
-      }
-      input.form-control, select.form-control {
-        font-size: 0.75rem;
-        padding: 0.25rem 0.5rem;
-      }
-    }
-
-    .table-responsive {
-      width: 100vw;
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-    }
-
-    .controls-container {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 1rem;
-      margin-bottom: 1.5rem;
-      padding: 1rem;
-      background: white;
-      border-radius: 0.5rem;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-    }
-
-    .action-buttons {
-      display: flex;
-      gap: 0.5rem;
-    }
-
-    .search-filter-group {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      margin-left: auto;
-    }
-
-    .search-group {
-      max-width: 250px;
-      width: 100%;
-    }
-
-    .filter-btn {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      background-color: var(--primary-color);
-      color: white;
-      font-weight: 500;
-      border: none;
-      padding: 0.375rem 1rem;
-      border-radius: 0.375rem;
-      transition: background-color 0.3s ease, box-shadow 0.3s ease;
-    }
-
-    .filter-btn:hover {
-      background-color: #1d4ed8;
-      box-shadow: 0 2px 8px rgba(29, 78, 216, 0.3);
-    }
-
-    .filter-options {
-      display: none;
-      position: absolute;
-      top: 100%;
-      right: 0;
-      background: white;
-      border-radius: 0.5rem;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-      padding: 1rem;
-      z-index: 1000;
-      min-width: 300px;
-    }
-
-    .filter-options.show {
-      display: block;
-    }
-
-    .filter-options .form-group {
-      margin-bottom: 1rem;
-    }
-
-    .filter-options label {
-      font-weight: 500;
-      margin-bottom: 0.5rem;
-      display: block;
-    }
-
-    #contextMenu {
-      position: absolute;
-      background: white;
-      border: 1px solid var(--border-color);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-      border-radius: 0.375rem;
-      z-index: 2000;
-      display: none;
-      min-width: 150px;
-      font-size: 0.9rem;
-    }
-
-    #contextMenu button {
-      width: 100%;
-      padding: 0.5rem 1rem;
-      border: none;
-      background: none;
-      text-align: left;
-      cursor: pointer;
-      color: var(--text-color);
-      border-bottom: 1px solid var(--border-color);
-      transition: background-color 0.15s ease;
-    }
-
-    #contextMenu button:last-child {
-      border-bottom: none;
-    }
-
-    #contextMenu button:hover, #contextMenu button:focus {
-      background-color: #f1f5f9;
-      outline: none;
-    }
-
-    .payment-full {
-      background-color: #d1fae5 !important;
-    }
-
-    .payment-partial {
-      background-color: #ffedd5 !important;
-    }
-
-    .payment-none {
-      background-color: #fee2e2 !important;
-    }
-
-    .sign-in-container, .add-client-container, .clients-container, .payments-container {
-      max-width: 600px;
-      margin: 2rem auto;
-      padding: 2rem;
-      background: white;
-      border-radius: 0.5rem;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-    }
-
-    .payments-container {
-      max-width: 100%;
-      margin: 2rem 1rem;
-      padding: 2rem;
-      background: white;
-      border-radius: 0.5rem;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-    }
-
-    #paymentsTableWrapper {
-      max-height: 60vh;
-      overflow-y: auto;
-      width: 100%;
-    }
-
-    #paymentsTable {
-      width: 100%;
-      min-width: 1200px; /* Ensures table doesn't shrink too much */
-    }
-
-    .sign-in-container h2, .add-client-container h2, .clients-container h2, .payments-container h2 {
-      font-size: 1.75rem;
-      font-weight: 600;
-      margin-bottom: 1.5rem;
-      text-align: center;
-      color: var(--text-color);
-    }
-
-    .btn-edit {
-      background-color: var(--primary-color) !important;
-      color: white !important;
-      margin-right: 0.5rem;
-    }
-
-    .btn-edit:hover {
-      background-color: #1d4ed8 !important;
-    }
-
-    .btn-delete {
-      background-color: var(--accent-color) !important;
-      color: white !important;
-    }
-
-    .btn-delete:hover {
-      background-color: #b91c1c !important;
-    }
-  </style>
-</head>
-<body>
-  <nav id="sidebarMenu" aria-label="Sidebar menu">
-    <ul>
-      <li id="dashboardLink">Dashboard</li>
-      <li id="clientsLink">Clients</li>
-      <li id="paymentsLink">Payments</li>
-      <li id="reportsLink">Reports</li>
-      <li>
-        <a href="#" id="logoutLink" class="text-white text-decoration-none fw-bold d-block">Logout</a>
-      </li>
-    </ul>
-  </nav>
-  <div id="sidebarOverlay"></div>
-
-  <div id="signInPage" class="sign-in-container">
-    <h2 class="text-center mb-4">Sign In</h2>
-    <div id="loginForm">
-      <div class="mb-3">
-        <label for="usernameInput" class="form-label">Username</label>
-        <input type="text" class="form-control" id="usernameInput" placeholder="Enter username">
-      </div>
-      <div class="mb-3">
-        <label for="passwordInput" class="form-label">Password</label>
-        <input type="password" class="form-control" id="passwordInput" placeholder="Enter password">
-      </div>
-      <button id="loginBtn" class="btn btn-primary-custom d-block mx-auto mb-3">Login</button>
-      <p class="text-center">
-        Don't have an account? <a href="#" id="showSignupLink">Sign Up</a>
-      </p>
-    </div>
-    <div id="signupForm" style="display: none;">
-      <div class="mb-3">
-        <label for="signupUsernameInput" class="form-label">Username</label>
-        <input type="text" class="form-control" id="signupUsernameInput" placeholder="Enter username">
-      </div>
-      <div class="mb-3">
-        <label for="signupPasswordInput" class="form-label">Password</label>
-        <input type="password" class="form-control" id="signupPasswordInput" placeholder="Enter password">
-      </div>
-      <div class="mb-3">
-        <label for="signupGmailInput" class="form-label">Gmail ID</label>
-        <input type="email" class="form-control" id="signupGmailInput" placeholder="Enter Gmail ID">
-      </div>
-      <button id="signupBtn" class="btn btn-primary-custom d-block mx-auto mb-3">Sign Up</button>
-      <p class="text-center">
-        Already have an account? <a href="#" id="showLoginLink">Login</a>
-      </p>
-    </div>
-  </div>
-
-  <div class="header-section" id="headerSection" role="banner" aria-label="Page header">
-    <div class="menu-toggle" id="menuToggle" aria-label="Toggle menu" role="button" tabindex="0" aria-expanded="false" aria-controls="sidebarMenu">
-      <span></span>
-      <span></span>
-      <span></span>
-    </div>
-    Payment Tracking App
-  </div>
-
-  <div id="homePage" style="display: none;">
-    <div class="controls-container">
-      <div class="action-buttons">
-        <button id="addClientBtn" class="btn btn-primary-custom px-3 py-2">+ Add Client</button>
-        <button id="importCsvBtn" class="btn btn-danger-custom px-3 py-2">Import CSV</button>
-        <input type="file" id="csvFileInput" accept=".csv" style="display: none;" />
-      </div>
-      <div class="search-filter-group">
-        <div class="search-group">
-          <div class="input-group">
-            <input id="searchInput" type="text" class="form-control" placeholder="Search Client Name" aria-label="Search Client Name" />
-            <button id="searchBtn" class="btn btn-outline-primary" type="button"><i class="bi bi-search"></i></button>
-            <button id="clearSearchBtn" class="btn btn-outline-secondary" type="button" title="Clear Search">×</button>
-          </div>
-        </div>
-        <div class="position-relative">
-          <button id="filterBtn" class="filter-btn">
-            <i class="bi bi-filter"></i> Filter
-          </button>
-          <div id="filterOptions" class="filter-options">
-            <div class="form-group">
-              <label for="monthFilter">Month</label>
-              <select id="monthFilter" class="form-control">
-                <option value="">Select Month</option>
-                <option value="january">January</option>
-                <option value="february">February</option>
-                <option value="march">March</option>
-                <option value="april">April</option>
-                <option value="may">May</option>
-                <option value="june">June</option>
-                <option value="july">July</option>
-                <option value="august">August</option>
-                <option value="september">September</option>
-                <option value="october">October</option>
-                <option value="november">November</option>
-                <option value="december">December</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="statusFilter">Payment Status</label>
-              <select id="statusFilter" class="form-control">
-                <option value="">Select Status</option>
-                <option value="paid">Paid</option>
-                <option value="unpaid">Unpaid</option>
-                <option value="partially-paid">Partially Paid</option>
-              </select>
-            </div>
-            <div class="d-flex justify-content-end gap-2">
-              <button id="clearFilterBtn" class="btn btn-secondary-custom">Clear</button>
-              <button id="applyFilterBtn" class="btn btn-primary-custom">Apply</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="table-responsive">
-      <table id="mainTable" class="table table-bordered align-middle text-center mb-0">
-        <thead>
-          <tr>
-            <th rowspan="2" class="align-middle" style="width: 40px;">Sr.No</th>
-            <th rowspan="2" class="align-middle">Client Name</th>
-            <th rowspan="2" class="align-middle">Type</th>
-            <th rowspan="2" class="align-middle">Amount To be Paid</th>
-            <th colspan="12">Jan - Dec</th>
-            <th rowspan="2" class="align-middle due-payment-cell">Due Payment</th>
-          </tr>
-          <tr>
-            <th class="manual-entry-cell">January</th>
-            <th class="manual-entry-cell">February</th>
-            <th class="manual-entry-cell">March</th>
-            <th class="manual-entry-cell">April</th>
-            <th class="manual-entry-cell">May</th>
-            <th class="manual-entry-cell">June</th>
-            <th>July</th>
-            <th>August</th>
-            <th>September</th>
-            <th>October</th>
-            <th>November</th>
-            <th>December</th>
-          </tr>
-        </thead>
-        <tbody id="tableBody">
-          <tr>
-            <td class="serial-cell"></td>
-            <td><span class="client-name-display"></span></td>
-            <td><span class="type-display"></span></td>
-            <td><span class="amount-display"></span></td>
-            <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="January" /></td>
-            <td class="manual-entry-cell"><input type="text" class="form-control"></td>
-            <td class="manual-entry-cell"><input type="text" class="form-control"></td>
-            <td class="manual-entry-cell"><input type="text" class="form-control"></td>
-            <td class="manual-entry-cell"><input type="text" class="form-control"></td>
-            <td class="manual-entry-cell"><input type="text" class="form-control"></td>
-            <td><input type="text" class="form-control"></td>
-            <td><input type="text" class="form-control"></td>
-            <td><input type="text" class="form-control"></td>
-            <td><input type="text" class="form-control"></td>
-            <td><input type="text" class="form-control"></td>
-            <td><input type="text" class="form-control"></td>
-            <td><input type="text" class="form-control due-payment-display" readonly value="0.00" /></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div id="contextMenu" role="menu" aria-hidden="true" tabindex="-1">
-      <button type="button" id="deleteRowBtn" role="menuitem">Delete This Row</button>
-    </div>
-  </div>
-
-  <div id="addClientPage" class="add-client-container" style="display: none;">
-    <h2>Add New Client</h2>
-    <div class="mb-3">
-      <label for="clientNameInput" class="form-label">Client Name</label>
-      <input type="text" class="form-control" id="clientNameInput" placeholder="Enter client name">
-    </div>
-    <div class="mb-3">
-      <label for="clientEmailInput" class="form-label">Client Email</label>
-      <input type="email" class="form-control" id="clientEmailInput" placeholder="Enter client email">
-    </div>
-    <div class="mb-3">
-      <label for="typeInput" class="form-label">Type</label>
-      <input type="text" class="form-control" id="typeInput" placeholder="Enter type">
-    </div>
-    <div class="mb-3">
-      <label for="monthlyPaymentInput" class="form-label">Monthly Payment Amount</label>
-      <input type="text" class="form-control" id="monthlyPaymentInput" placeholder="Enter amount">
-    </div>
-    <div class="d-flex justify-content-end gap-2">
-      <button id="cancelAddClientBtn" class="btn btn-secondary-custom px-3 py-2">Cancel</button>
-      <button id="saveClientBtn" class="btn btn-primary-custom px-3 py-2">Add Client</button>
-    </div>
-  </div>
-
-  <div id="clientsPage" class="clients-container" style="display: none;">
-    <h2>Clients</h2>
-    <div class="table-responsive">
-      <table id="clientsTable" class="table table-bordered align-middle text-center mb-0">
-        <thead>
-          <tr>
-            <th>Client Name</th>
-            <th>Email</th>
-            <th>Monthly Amount</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="clientsTableBody"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div id="paymentsPage" class="payments-container" style="display: none;">
-    <h2>Payments</h2>
-    <div class="table-responsive" id="paymentsTableWrapper">
-      <table id="paymentsTable" class="table table-bordered align-middle text-center mb-0">
-        <thead>
-          <tr>
-            <th>Client Name</th>
-            <th>Type</th>
-            <th>Amount To be Paid</th>
-            <th>January</th>
-            <th>February</th>
-            <th>March</th>
-            <th>April</th>
-            <th>May</th>
-            <th>June</th>
-            <th>July</th>
-            <th>August</th>
-            <th>September</th>
-            <th>October</th>
-            <th>November</th>
-            <th>December</th>
-            <th>Due Payment</th>
-          </tr>
-        </thead>
-        <tbody id="paymentsTableBody"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  <script>
-    let sessionToken = null;
-    let currentUser = null;
-
-    const addClientBtn = document.getElementById('addClientBtn');
-    const tableBody = document.getElementById('tableBody');
-    const searchInput = document.getElementById('searchInput');
-    const searchBtn = document.getElementById('searchBtn');
-    const clearSearchBtn = document.getElementById('clearSearchBtn');
-    const filterBtn = document.getElementById('filterBtn');
-    const filterOptions = document.getElementById('filterOptions');
-    const monthFilter = document.getElementById('monthFilter');
-    const statusFilter = document.getElementById('statusFilter');
-    const clearFilterBtn = document.getElementById('clearFilterBtn');
-    const applyFilterBtn = document.getElementById('applyFilterBtn');
-    const menuToggle = document.getElementById('menuToggle');
-    const sidebarMenu = document.getElementById('sidebarMenu');
-    const sidebarOverlay = document.getElementById('sidebarOverlay');
-    const contextMenu = document.getElementById('contextMenu');
-    const deleteRowBtn = document.getElementById('deleteRowBtn');
-    const signInPage = document.getElementById('signInPage');
-    const homePage = document.getElementById('homePage');
-    const addClientPage = document.getElementById('addClientPage');
-    const clientsPage = document.getElementById('clientsPage');
-    const paymentsPage = document.getElementById('paymentsPage');
-    const headerSection = document.getElementById('headerSection');
-    const dashboardLink = document.getElementById('dashboardLink');
-    const clientsLink = document.getElementById('clientsLink');
-    const paymentsLink = document.getElementById('paymentsLink');
-    const reportsLink = document.getElementById('reportsLink');
-    const logoutLink = document.getElementById('logoutLink');
-    const clientNameInput = document.getElementById('clientNameInput');
-    const clientEmailInput = document.getElementById('clientEmailInput');
-    const typeInput = document.getElementById('typeInput');
-    const monthlyPaymentInput = document.getElementById('monthlyPaymentInput');
-    const saveClientBtn = document.getElementById('saveClientBtn');
-    const cancelAddClientBtn = document.getElementById('cancelAddClientBtn');
-    const importCsvBtn = document.getElementById('importCsvBtn');
-    const csvFileInput = document.getElementById('csvFileInput');
-
-    const loginForm = document.getElementById('loginForm');
-    const signupForm = document.getElementById('signupForm');
-    const usernameInput = document.getElementById('usernameInput');
-    const passwordInput = document.getElementById('passwordInput');
-    const loginBtn = document.getElementById('loginBtn');
-    const signupUsernameInput = document.getElementById('signupUsernameInput');
-    const signupPasswordInput = document.getElementById('signupPasswordInput');
-    const signupGmailInput = document.getElementById('signupGmailInput');
-    const signupBtn = document.getElementById('signupBtn');
-    const showSignupLink = document.getElementById('showSignupLink');
-    const showLoginLink = document.getElementById('showLoginLink');
-
-    let contextTargetRow = null;
-    let clientsData = [];
-
-    function persistUserSession() {
-      localStorage.setItem('currentUser', currentUser);
-      localStorage.setItem('sessionToken', sessionToken);
-    }
-
-    function clearUserSession() {
-      localStorage.removeItem('currentUser');
-      localStorage.removeItem('sessionToken');
-      currentUser = null;
-      sessionToken = null;
-    }
-
-    function loadUserSession() {
-      currentUser = localStorage.getItem('currentUser');
-      sessionToken = localStorage.getItem('sessionToken');
-      if (currentUser && sessionToken) {
-        fetchClients();
-        fetchPayments();
-        showHomePage();
-      } else {
-        showSignInPage();
-      }
-    }
-
-    function showSignInPage() {
-      signInPage.style.display = 'block';
-      homePage.style.display = 'none';
-      addClientPage.style.display = 'none';
-      clientsPage.style.display = 'none';
-      paymentsPage.style.display = 'none';
-      headerSection.style.display = 'none';
-      sidebarMenu.style.display = 'none';
-      menuToggle.style.display = 'none';
-    }
-
-    function showHomePage() {
-      signInPage.style.display = 'none';
-      homePage.style.display = 'block';
-      addClientPage.style.display = 'none';
-      clientsPage.style.display = 'none';
-      paymentsPage.style.display = 'none';
-      headerSection.style.display = 'flex';
-      sidebarMenu.style.display = 'block';
-      menuToggle.style.display = 'flex';
-    }
-
-    function showAddClientPage() {
-      signInPage.style.display = 'none';
-      homePage.style.display = 'none';
-      addClientPage.style.display = 'block';
-      clientsPage.style.display = 'none';
-      paymentsPage.style.display = 'none';
-      headerSection.style.display = 'flex';
-      sidebarMenu.style.display = 'block';
-      menuToggle.style.display = 'flex';
-    }
-
-    function showClientsPage() {
-      signInPage.style.display = 'none';
-      homePage.style.display = 'none';
-      addClientPage.style.display = 'none';
-      clientsPage.style.display = 'block';
-      paymentsPage.style.display = 'none';
-      headerSection.style.display = 'flex';
-      sidebarMenu.style.display = 'block';
-      menuToggle.style.display = 'flex';
-      fetchClientsForDisplay();
-    }
-
-    function showPaymentsPage() {
-      signInPage.style.display = 'none';
-      homePage.style.display = 'none';
-      addClientPage.style.display = 'none';
-      clientsPage.style.display = 'none';
-      paymentsPage.style.display = 'block';
-      headerSection.style.display = 'flex';
-      sidebarMenu.style.display = 'block';
-      menuToggle.style.display = 'flex';
-      fetchPaymentsForDisplay();
-    }
-
-    showSignupLink.addEventListener('click', (e) => {
-      e.preventDefault();
-      loginForm.style.display = 'none';
-      signupForm.style.display = 'block';
-    });
-
-    showLoginLink.addEventListener('click', (e) => {
-      e.preventDefault();
-      loginForm.style.display = 'block';
-      signupForm.style.display = 'none';
-    });
-
-    signupBtn.addEventListener('click', () => {
-      const username = signupUsernameInput.value.trim();
-      const password = signupPasswordInput.value.trim();
-      const gmailId = signupGmailInput.value.trim();
-
-      if (!username || !password || !gmailId) {
-        alert('All fields are required.');
-        return;
-      }
-
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(gmailId) || !gmailId.endsWith('@gmail.com')) {
-        alert('Please enter a valid Gmail ID.');
-        return;
-      }
-
-      fetch('https://payment-tracker-aswa.onrender.com/api/signup', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ username, password, gmailId })
-      })
-        .then(res => {
-          if (!res.ok) {
-            return res.json().then(data => { throw new Error(data.error); });
-          }
-          return res.json();
-        })
-        .then(data => {
-          alert('Account created successfully! Please login.');
-          signupUsernameInput.value = '';
-          signupPasswordInput.value = '';
-          signupGmailInput.value = '';
-          loginForm.style.display = 'block';
-          signupForm.style.display = 'none';
-        })
-        .catch(error => {
-          console.error('Error signing up:', error);
-          alert(error.message);
-        });
-    });
-
-    loginBtn.addEventListener('click', () => {
-      const username = usernameInput.value.trim();
-      const password = passwordInput.value.trim();
-
-      if (!username || !password) {
-        alert('Username and password are required.');
-        return;
-      }
-
-      fetch('https://payment-tracker-aswa.onrender.com/api/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ username, password })
-      })
-        .then(res => {
-          if (!res.ok) {
-            return res.json().then(data => { throw new Error(data.error); });
-          }
-          return res.json();
-        })
-        .then(data => {
-          currentUser = data.username;
-          sessionToken = data.sessionToken;
-          persistUserSession();
-          fetchClients();
-          fetchPayments();
-          showHomePage();
-        })
-        .catch(error => {
-          console.error('Error logging in:', error);
-          alert(error.message);
-        });
-    });
-
-    logoutLink.addEventListener('click', (e) => {
-      e.preventDefault();
-      currentUser = null;
-      sessionToken = null;
-      clearUserSession();
-      clientsData = [];
-      tableBody.innerHTML = '';
-      showSignInPage();
-    });
-
-    document.addEventListener('DOMContentLoaded', () => {
-      loadUserSession();
-    });
-
-    function updateSerialNumbers() {
-      const rows = tableBody.querySelectorAll('tr');
-      rows.forEach((row, index) => {
-        const serialCell = row.querySelector('.serial-cell');
-        if (serialCell && row.style.display !== 'none') {
-          serialCell.textContent = index + 1;
-        }
-      });
-    }
-
-    function createEditableRow(clientName = '', type = '', amount = '') {
-      const tr = document.createElement('tr');
-      let td = document.createElement('td');
-      td.className = 'serial-cell';
-      tr.appendChild(td);
-
-      td = document.createElement('td');
-      let span = document.createElement('span');
-      span.className = 'client-name-display';
-      span.textContent = clientName || '';
-      td.appendChild(span);
-      tr.appendChild(td);
-
-      td = document.createElement('td');
-      span = document.createElement('span');
-      span.className = 'type-display';
-      span.textContent = type || '';
-      td.appendChild(span);
-      tr.appendChild(td);
-
-      td = document.createElement('td');
-      span = document.createElement('span');
-      span.className = 'amount-display';
-      span.textContent = amount || '';
-      td.appendChild(span);
-      tr.appendChild(td);
-
-      const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
-      months.forEach(month => {
-        td = document.createElement('td');
-        let input = document.createElement('input');
-        input.type = 'text';
-        input.placeholder = month.charAt(0).toUpperCase() + month.slice(1);
-        input.className = 'form-control';
-        td.appendChild(input);
-        tr.appendChild(td);
-      });
-
-      td = document.createElement('td');
-      td.className = 'due-payment-cell';
-      let input = document.createElement('input');
-      input.type = 'text';
-      input.className = 'form-control due-payment-display';
-      input.readOnly = true;
-      input.value = '0.00';
-      td.appendChild(input);
-      tr.appendChild(td);
-
-      return tr;
-    }
-
-    function updateDuePayment(row) {
-      const amountDisplay = row.querySelector('.amount-display').textContent;
-      const monthInputs = Array.from(row.cells).slice(4, 16).map(cell => cell.querySelector('input'));
-      const duePaymentDisplay = row.querySelector('.due-payment-display');
-
-      const amountToBePaidPerMonth = parseFloat(amountDisplay) || 0;
-      const activeMonths = monthInputs.filter(input => input.value.trim() !== '' && parseFloat(input.value) >= 0).length;
-
-      if (activeMonths === 0) {
-        duePaymentDisplay.value = '0.00';
-        row.querySelectorAll('td input').forEach(input => input.classList.remove('payment-full', 'payment-partial', 'payment-none'));
-        return;
-      }
-
-      const expectedPayment = amountToBePaidPerMonth * activeMonths;
-      const totalPayments = monthInputs.reduce((sum, input) => {
-        const value = parseFloat(input.value) || 0;
-        return sum + value;
-      }, 0);
-
-      const duePayment = Math.max(expectedPayment - totalPayments, 0);
-      duePaymentDisplay.value = duePayment.toFixed(2);
-
-      monthInputs.forEach(input => updatePaymentStatus(input));
-    }
-
-    function updatePaymentStatus(cellInput) {
-      const row = cellInput.closest('tr');
-      const amountDisplay = row.querySelector('.amount-display').textContent;
-      const amountToBePaid = parseFloat(amountDisplay) || 0;
-      const enteredValue = parseFloat(cellInput.value) || 0;
-
-      cellInput.classList.remove('payment-full', 'payment-partial', 'payment-none');
-
-      if (enteredValue === 0 || cellInput.value.trim() === '') {
-        cellInput.classList.add('payment-none');
-      } else if (enteredValue >= amountToBePaid && amountToBePaid > 0) {
-        cellInput.classList.add('payment-full');
-      } else if (enteredValue > 0 && enteredValue < amountToBePaid) {
-        cellInput.classList.add('payment-partial');
-      }
-    }
-
-    function saveToGoogleSheets() {
-      const rows = tableBody.querySelectorAll('tr');
-      const data = Array.from(rows).map(row => {
-        const clientName = row.querySelector('.client-name-display').textContent;
-        const type = row.querySelector('.type-display').textContent;
-        const amount = row.querySelector('.amount-display').textContent;
-        const inputs = row.querySelectorAll('.form-control');
-        return {
-          User: currentUser,
-          Client_Name: clientName,
-          Type: type,
-          Amount_To_Be_Paid: amount,
-          january: inputs[0].value,
-          february: inputs[1].value,
-          march: inputs[2].value,
-          april: inputs[3].value,
-          may: inputs[4].value,
-          june: inputs[5].value,
-          july: inputs[6].value,
-          august: inputs[7].value,
-          september: inputs[8].value,
-          october: inputs[9].value,
-          november: inputs[10].value,
-          december: inputs[11].value,
-          Due_Payment: inputs[12].value
-        };
-      });
-
-      if (!sessionToken) {
-        console.error('No sessionToken available. Redirecting to sign-in page.');
-        showSignInPage();
-        return;
-      }
-
-      fetch('https://payment-tracker-aswa.onrender.com/api/save-payments', {
-        method: 'POST',
-        headers: {
-          'user': currentUser,
-          'Authorization': `Bearer ${sessionToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(data)
-      })
-        .then(response => {
-          if (!response.ok) {
-            if (response.status === 401) {
-              console.error('Session token invalid. Redirecting to sign-in page.');
-              clearUserSession();
-              showSignInPage();
-              return;
-            }
-            throw new Error('Failed to save to Google Sheets');
-          }
-        })
-        .catch(error => {
-          console.error('Error saving to Google Sheets:', error);
-        });
-    }
-
-    tableBody.addEventListener('input', e => {
-      const cellInput = e.target;
-      const row = cellInput.closest('tr');
-      const cellIndex = cellInput.closest('td').cellIndex;
-
-      if (cellIndex >= 4 && cellIndex <= 15) {
-        const monthInputs = Array.from(row.cells).slice(4, 16).map(cell => cell.querySelector('input'));
-        const currentMonthIndex = cellIndex - 4;
-
-        if (cellInput.value.trim() !== '') {
-          for (let i = 0; i < currentMonthIndex; i++) {
-            if (monthInputs[i].value.trim() === '') {
-              monthInputs[i].value = '0';
-              updatePaymentStatus(monthInputs[i]);
-            }
-          }
-        }
-
-        updatePaymentStatus(cellInput);
-        updateDuePayment(row);
-        saveToGoogleSheets();
-      }
-    });
-
-    addClientBtn.addEventListener('click', () => {
-      showAddClientPage();
-    });
-
-    updateSerialNumbers();
-
-    function searchClients() {
-      const filter = searchInput.value.trim().toLowerCase();
-      const month = monthFilter.value;
-      const status = statusFilter.value;
-      const rows = tableBody.querySelectorAll('tr');
-      let anyVisible = false;
-
-      rows.forEach(row => {
-        const clientName = row.querySelector('.client-name-display').textContent.toLowerCase();
-        const nameMatches = clientName.includes(filter);
-
-        let filterMatches = true;
-        if (month && status) {
-          const monthInputs = Array.from(row.cells).slice(4, 16).map(cell => cell.querySelector('input'));
-          const monthIndex = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'].indexOf(month);
-          const paymentInput = monthInputs[monthIndex];
-          const amountToBePaid = parseFloat(row.querySelector('.amount-display').textContent) || 0;
-          const paymentValue = parseFloat(paymentInput.value) || 0;
-
-          if (status === 'paid') {
-            filterMatches = paymentValue >= amountToBePaid && amountToBePaid > 0;
-          } else if (status === 'unpaid') {
-            filterMatches = paymentValue === 0 || paymentInput.value.trim() === '';
-          } else if (status === 'partially-paid') {
-            filterMatches = paymentValue > 0 && paymentValue < amountToBePaid;
-          }
-        }
-
-        if (nameMatches && filterMatches) {
-          row.style.display = '';
-          anyVisible = true;
-        } else {
-          row.style.display = 'none';
-        }
-      });
-
-      updateSerialNumbers();
-      if (!filter && !month && !status) {
-        rows.forEach(row => (row.style.display = ''));
-        updateSerialNumbers();
-      }
-    }
-
-    searchBtn.addEventListener('click', searchClients);
-
-    searchInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        searchClients();
-      }
-    });
-
-    clearSearchBtn.addEventListener('click', () => {
-      searchInput.value = '';
-      searchClients();
-      searchInput.focus();
-    });
-
-    filterBtn.addEventListener('click', () => {
-      filterOptions.classList.toggle('show');
-    });
-
-    applyFilterBtn.addEventListener('click', () => {
-      searchClients();
-      filterOptions.classList.remove('show');
-    });
-
-    clearFilterBtn.addEventListener('click', () => {
-      monthFilter.value = '';
-      statusFilter.value = '';
-      searchClients();
-      filterOptions.classList.remove('show');
-    });
-
-    document.addEventListener('click', e => {
-      if (!filterBtn.contains(e.target) && !filterOptions.contains(e.target)) {
-        filterOptions.classList.remove('show');
-      }
-    });
-
-    tableBody.addEventListener('keydown', e => {
-      const arrowKeys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
-      if (!arrowKeys.includes(e.key)) return;
-
-      const inputs = Array.from(tableBody.querySelectorAll('.form-control'));
-      const currentInput = e.target;
-      const currentIndex = inputs.indexOf(currentInput);
-      if (currentIndex === -1) return;
-
-      e.preventDefault();
-
-      const inputsPerRow = 13;
-      const totalInputs = inputs.length;
-
-      let nextIndex = currentIndex;
-
-      switch (e.key) {
-        case 'ArrowRight':
-          nextIndex = currentIndex + 1;
-          if (nextIndex >= totalInputs) nextIndex = 0;
-          break;
-        case 'ArrowLeft':
-          nextIndex = currentIndex - 1;
-          if (nextIndex < 0) nextIndex = totalInputs - 1;
-          break;
-        case 'ArrowDown':
-          nextIndex = currentIndex + inputsPerRow;
-          if (nextIndex >= totalInputs) nextIndex = currentIndex % inputsPerRow;
-          break;
-        case 'ArrowUp':
-          nextIndex = currentIndex - inputsPerRow;
-          if (nextIndex < 0) {
-            const rowsCount = Math.floor(totalInputs / inputsPerRow);
-            nextIndex = currentIndex + inputsPerRow * (rowsCount - 1);
-            if (nextIndex >= totalInputs) nextIndex = totalInputs - 1;
-          }
-          break;
-      }
-
-      inputs[nextIndex].focus();
-      if (inputs[nextIndex].tagName === 'INPUT') {
-        inputs[nextIndex].select();
-      }
-    });
-
-    function openSidebar() {
-      sidebarMenu.classList.add('show');
-      sidebarOverlay.classList.add('show');
-      menuToggle.setAttribute('aria-expanded', 'true');
-    }
-
-    function closeSidebar() {
-      sidebarMenu.classList.remove('show');
-      sidebarOverlay.classList.remove('show');
-      menuToggle.setAttribute('aria-expanded', 'false');
-    }
-
-    menuToggle.addEventListener('click', () => {
-      if (sidebarMenu.classList.contains('show')) {
-        closeSidebar();
-      } else {
-        openSidebar();
-      }
-    });
-
-    sidebarOverlay.addEventListener('click', closeSidebar);
-
-    document.addEventListener('keydown', e => {
-      if (e.key === 'Escape' && sidebarMenu.classList.contains('show')) {
-        closeSidebar();
-        menuToggle.focus();
-      }
-      if (e.key === 'Escape' && contextMenu.style.display === 'block') {
-        hideContextMenu();
-      }
-    });
-
-    const sidebarItems = sidebarMenu.querySelectorAll('li');
-    sidebarItems.forEach(item => {
-      item.addEventListener('click', () => {
-        closeSidebar();
-        if (item.id === 'dashboardLink') {
-          showHomePage();
-        } else if (item.id === 'clientsLink') {
-          showClientsPage();
-        } else if (item.id === 'paymentsLink') {
-          showPaymentsPage();
-        } else if (item.id === 'reportsLink') {
-          alert(`Navigating to: ${item.textContent}`);
-        }
-      });
-      item.addEventListener('keydown', e => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          item.click();
-        }
-      });
-    });
-
-    function showContextMenu(x, y, targetRow) {
-      contextTargetRow = targetRow;
-      contextMenu.style.left = x + 'px';
-      contextMenu.style.top = y + 'px';
-      contextMenu.style.display = 'block';
-      contextMenu.setAttribute('aria-hidden', 'false');
-      contextMenu.focus();
-    }
-
-    function hideContextMenu() {
-      contextMenu.style.display = 'none';
-      contextMenu.setAttribute('aria-hidden', 'true');
-      contextTargetRow = null;
-    }
-
-    deleteRowBtn.addEventListener('click', () => {
-      if (!contextTargetRow) return;
-      if (tableBody.rows.length === 1) {
-        alert('Cannot delete the last row.');
-        hideContextMenu();
-        return;
-      }
-      const clientName = contextTargetRow.querySelector('.client-name-display').textContent;
-      const type = contextTargetRow.querySelector('.type-display').textContent;
-      contextTargetRow.remove();
-      updateSerialNumbers();
-      deleteClient(clientName, type);
-      hideContextMenu();
-    });
-
-    tableBody.addEventListener('contextmenu', e => {
-      if (e.target.tagName !== 'INPUT') return;
-      e.preventDefault();
-      const tr = e.target.closest('tr');
-      if (!tr) return;
-      showContextMenu(e.pageX, e.pageY, tr);
-    });
-
-    tableBody.addEventListener('keydown', e => {
-      if ((e.shiftKey && e.key === 'F10') || e.key === 'ContextMenu') {
-        if (e.target.tagName !== 'INPUT') return;
-        e.preventDefault();
-        const tr = e.target.closest('tr');
-        if (!tr) return;
-        const rect = e.target.getBoundingClientRect();
-        showContextMenu(rect.left + window.pageXOffset, rect.bottom + window.pageYOffset, tr);
-      }
-    });
-
-    document.addEventListener('click', e => {
-      if (!contextMenu.contains(e.target)) {
-        hideContextMenu();
-      }
-    });
-
-    window.addEventListener('scroll', () => {
-      if (contextMenu.style.display === 'block') {
-        hideContextMenu();
-      }
-    }, true);
-
-    function addRowToTable(rowData) {
-      const tableBody = document.querySelector('#mainTable tbody');
-      const newRow = createEditableRow(rowData.Client_Name || '', rowData.Type || '', rowData.Amount_To_Be_Paid || '');
-      const inputs = newRow.querySelectorAll('.form-control');
-      inputs[0].value = rowData.january || '';
-      inputs[1].value = rowData.february || '';
-      inputs[2].value = rowData.march || '';
-      inputs[3].value = rowData.april || '';
-      inputs[4].value = rowData.may || '';
-      inputs[5].value = rowData.june || '';
-      inputs[6].value = rowData.july || '';
-      inputs[7].value = rowData.august || '';
-      inputs[8].value = rowData.september || '';
-      inputs[9].value = rowData.october || '';
-      inputs[10].value = rowData.november || '';
-      inputs[11].value = rowData.december || '';
-      inputs[12].value = rowData.Due_Payment || '0.00';
-
-      tableBody.appendChild(newRow);
-      updateDuePayment(newRow);
-      const monthInputs = Array.from(inputs).slice(0, 12);
-      monthInputs.forEach(input => updatePaymentStatus(input));
-    }
-
-    function fetchClients() {
-      if (!sessionToken) {
-        console.error('No sessionToken available. Redirecting to sign-in page.');
-        showSignInPage();
-        return;
-      }
-
-      fetch('https://payment-tracker-aswa.onrender.com/api/get-clients', {
-        headers: {
-          'user': currentUser,
-          'Authorization': `Bearer ${sessionToken}`
-        }
-      })
-        .then(response => {
-          if (!response.ok) {
-            if (response.status === 401) {
-              console.error('Session token invalid. Redirecting to sign-in page.');
-              clearUserSession();
-              showSignInPage();
-              return;
-            }
-            throw new Error('Failed to fetch clients');
-          }
-          return response.json();
-        })
-        .then(data => {
-          clientsData = data;
-        })
-        .catch(error => {
-          console.error('Error fetching clients:', error);
-          alert('Failed to load client data from Google Sheets.');
-          clientsData = [{ User: currentUser, Client_Name: 'Test Client', Type: 'Test Type', monthly_payment: '100' }];
-        });
-    }
-
-    function fetchPayments() {
-      if (!sessionToken) {
-        console.error('No sessionToken available. Redirecting to sign-in page.');
-        showSignInPage();
-        return;
-      }
-
-      fetch('https://payment-tracker-aswa.onrender.com/api/get-payments', {
-        headers: {
-          'user': currentUser,
-          'Authorization': `Bearer ${sessionToken}`
-        }
-      })
-        .then(response => {
-          if (!response.ok) {
-            if (response.status === 401) {
-              console.error('Session token invalid. Redirecting to sign-in page.');
-              clearUserSession();
-              showSignInPage();
-              return;
-            }
-            throw new Error('Failed to fetch payments');
-          }
-          return response.json();
-        })
-        .then(data => {
-          const userPayments = data.filter(payment => payment.User === currentUser);
-          if (userPayments.length > 0) {
-            tableBody.innerHTML = '';
-            userPayments.forEach(row => addRowToTable(row));
-          }
-          updateSerialNumbers();
-          searchClients();
-        })
-        .catch(error => {
-          console.error('Error fetching payments:', error);
-          alert('Failed to load payments from Google Sheets.');
-        });
-    }
-
-    function fetchClientsForDisplay() {
-      if (!sessionToken) {
-        console.error('No sessionToken available. Redirecting to sign-in page.');
-        showSignInPage();
-        return;
-      }
-
-      fetch('https://payment-tracker-aswa.onrender.com/api/get-clients', {
-        headers: {
-          'user': currentUser,
-          'Authorization': `Bearer ${sessionToken}`
-        }
-      })
-        .then(response => {
-          if (!response.ok) {
-            if (response.status === 401) {
-              console.error('Session token invalid. Redirecting to sign-in page.');
-              clearUserSession();
-              showSignInPage();
-              return;
-            }
-            throw new Error('Failed to fetch clients');
-          }
-          return response.json();
-        })
-        .then(data => {
-          const clientsTableBody = document.getElementById('clientsTableBody');
-          clientsTableBody.innerHTML = '';
-          const userClients = data.filter(client => client.User === currentUser);
-          userClients.forEach(client => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-              <td>${client.Client_Name}</td>
-              <td>${client.Email || 'N/A'}</td>
-              <td>${client.monthly_payment}</td>
-              <td>
-                <button class="btn btn-edit btn-sm edit-client-btn" data-client="${client.Client_Name}" data-type="${client.Type}">Edit</button>
-                <button class="btn btn-delete btn-sm delete-client-btn" data-client="${client.Client_Name}" data-type="${client.Type}">Delete</button>
-              </td>
-            `;
-            clientsTableBody.appendChild(tr);
-          });
-
-          document.querySelectorAll('.edit-client-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-              const clientName = btn.dataset.client;
-              const type = btn.dataset.type;
-              const clientData = userClients.find(client => client.Client_Name === clientName && client.Type === type);
-              clientNameInput.value = clientData.Client_Name;
-              clientEmailInput.value = clientData.Email || '';
-              typeInput.value = clientData.Type;
-              monthlyPaymentInput.value = clientData.monthly_payment;
-              showAddClientPage();
-              saveClientBtn.textContent = 'Update Client';
-              saveClientBtn.dataset.client = clientName;
-              saveClientBtn.dataset.type = type;
-            });
-          });
-
-          document.querySelectorAll('.delete-client-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-              const clientName = btn.dataset.client;
-              const type = btn.dataset.type;
-              if (confirm(`Are you sure you want to delete ${clientName} (${type})?`)) {
-                deleteClient(clientName, type);
-              }
-            });
-          });
-        })
-        .catch(error => {
-          console.error('Error fetching clients:', error);
-          alert('Failed to load clients.');
-        });
-    }
-
-    function fetchPaymentsForDisplay() {
-      if (!sessionToken) {
-        console.error('No sessionToken available. Redirecting to sign-in page.');
-        showSignInPage();
-        return;
-      }
-
-      fetch('https://payment-tracker-aswa.onrender.com/api/get-payments', {
-        headers: {
-          'user': currentUser,
-          'Authorization': `Bearer ${sessionToken}`
-        }
-      })
-        .then(response => {
-          if (!response.ok) {
-            if (response.status === 401) {
-              console.error('Session token invalid. Redirecting to sign-in page.');
-              clearUserSession();
-              showSignInPage();
-              return;
-            }
-            throw new Error('Failed to fetch payments');
-          }
-          return response.json();
-        })
-        .then(data => {
-          const paymentsTableBody = document.getElementById('paymentsTableBody');
-          paymentsTableBody.innerHTML = '';
-          const userPayments = data.filter(payment => payment.User === currentUser);
-          userPayments.forEach(payment => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-              <td>${payment.Client_Name}</td>
-              <td>${payment.Type}</td>
-              <td>${payment.Amount_To_Be_Paid}</td>
-              <td>${payment.january || ''}</td>
-              <td>${payment.february || ''}</td>
-              <td>${payment.march || ''}</td>
-              <td>${payment.april || ''}</td>
-              <td>${payment.may || ''}</td>
-              <td>${payment.june || ''}</td>
-              <td>${payment.july || ''}</td>
-              <td>${payment.august || ''}</td>
-              <td>${payment.september || ''}</td>
-              <td>${payment.october || ''}</td>
-              <td>${payment.november || ''}</td>
-              <td>${payment.december || ''}</td>
-              <td>${payment.Due_Payment}</td>
-            `;
-            paymentsTableBody.appendChild(tr);
-          });
-        })
-        .catch(error => {
-          console.error('Error fetching payments:', error);
-          alert('Failed to load payments.');
-        });
-    }
-
-    function addNewClient() {
-      const clientName = clientNameInput.value.trim();
-      const clientEmail = clientEmailInput.value.trim();
-      const type = typeInput.value.trim();
-      const monthlyPayment = monthlyPaymentInput.value.trim();
-
-      if (!clientName || !clientEmail || !type || !monthlyPayment) {
-        alert('All fields are required.');
-        return;
-      }
-
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(clientEmail)) {
-        alert('Please enter a valid email address.');
-        return;
-      }
-
-      const paymentValue = parseFloat(monthlyPayment);
-      if (isNaN(paymentValue) || paymentValue <= 0) {
-        alert('Monthly payment must be a positive number.');
-        return;
-      }
-
-      const newClient = {
-        User: currentUser,
-        Client_Name: clientName,
-        Email: clientEmail,
-        Type: type,
-        monthly_payment: paymentValue
-      };
-
-      const isUpdate = saveClientBtn.textContent === 'Update Client';
-      const endpoint = isUpdate ? '/api/update-client' : '/api/add-client';
-      const method = isUpdate ? 'PUT' : 'POST';
-
-      if (isUpdate) {
-        newClient.Old_Client_Name = saveClientBtn.dataset.client;
-        newClient.Old_Type = saveClientBtn.dataset.type;
-      }
-
-      if (!sessionToken) {
-        console.error('No sessionToken available. Redirecting to sign-in page.');
-        showSignInPage();
-        return;
-      }
-
-      fetch(`https://payment-tracker-aswa.onrender.com${endpoint}`, {
-        method: method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${sessionToken}`
-        },
-        body: JSON.stringify(newClient)
-      })
-        .then(response => {
-          if (!response.ok) {
-            if (response.status === 401) {
-              console.error('Session token invalid. Redirecting to sign-in page.');
-              clearUserSession();
-              showSignInPage();
-              return;
-            }
-            throw new Error(`Failed to ${isUpdate ? 'update' : 'add'} client`);
-          }
-          return response.json();
-        })
-        .then(data => {
-          alert(`Client ${isUpdate ? 'updated' : 'added'} successfully!`);
-          resetAddClientForm();
-          // Refresh all views to ensure consistency
-          fetchClients();
-          fetchPayments();
-          fetchClientsForDisplay();
-          fetchPaymentsForDisplay();
-          showHomePage();
-        })
-        .catch(error => {
-          console.error(`Error ${isUpdate ? 'updating' : 'adding'} client:`, error);
-          alert(`Failed to ${isUpdate ? 'update' : 'add'} client to Google Sheets: ${error.message}`);
-          resetAddClientForm();
-          fetchClients();
-          fetchPayments();
-          fetchClientsForDisplay();
-          fetchPaymentsForDisplay();
-          showHomePage();
-        });
-    }
-
-    function deleteClient(clientName, type) {
-      if (!sessionToken) {
-        console.error('No sessionToken available. Redirecting to sign-in page.');
-        showSignInPage();
-        return;
-      }
-
-      fetch('https://payment-tracker-aswa.onrender.com/api/delete-client', {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${sessionToken}`
-        },
-        body: JSON.stringify({ User: currentUser, Client_Name: clientName, Type: type })
-      })
-        .then(response => {
-          if (!response.ok) {
-            if (response.status === 401) {
-              console.error('Session token invalid. Redirecting to sign-in page.');
-              clearUserSession();
-              showSignInPage();
-              return;
-            }
-            throw new Error('Failed to delete client');
-          }
-          return response.json();
-        })
-        .then(data => {
-          alert('Client deleted successfully!');
-          // Refresh all views to ensure consistency
-          fetchClients();
-          fetchPayments();
-          fetchClientsForDisplay();
-          fetchPaymentsForDisplay();
-        })
-        .catch(error => {
-          console.error('Error deleting client:', error);
-          alert('Failed to delete client from Google Sheets. Please try again.');
-          fetchClients();
-          fetchPayments();
-          fetchClientsForDisplay();
-          fetchPaymentsForDisplay();
-        });
-    }
-
-    function resetAddClientForm() {
-      clientNameInput.value = '';
-      clientEmailInput.value = '';
-      typeInput.value = '';
-      monthlyPaymentInput.value = '';
-      saveClientBtn.textContent = 'Add Client';
-      delete saveClientBtn.dataset.client;
-      delete saveClientBtn.dataset.type;
-    }
-
-    saveClientBtn.addEventListener('click', addNewClient);
-
-    cancelAddClientBtn.addEventListener('click', () => {
-      resetAddClientForm();
-      showHomePage();
-    });
-
-    importCsvBtn.addEventListener('click', () => {
-      csvFileInput.click();
-    });
-
-    csvFileInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = function(event) {
-        const text = event.target.result;
-        const rows = text.split('\n').map(row => row.trim()).filter(row => row);
-        if (rows.length === 0) {
-          alert('CSV file is empty.');
-          csvFileInput.value = '';
-          return;
-        }
-
-        const headers = rows[0].split(',').map(header => header.trim().replace(/\s+/g, ' '));
-        const expectedHeaders = ['Client Name', 'Type', 'Amount To Be Paid'].map(header => header.trim().replace(/\s+/g, ' '));
-        const headersMatch = expectedHeaders.every((header, index) => headers[index] === header);
-        if (!headersMatch || headers.length !== expectedHeaders.length) {
-          alert('CSV file must have headers: Client Name, Type, Amount To Be Paid');
-          csvFileInput.value = '';
-          return;
-        }
-
-        const data = rows.slice(1).map(row => {
-          const cols = row.split(',').map(col => col.trim());
-          if (cols.length < 3) return null;
-          const amount = parseFloat(cols[2]);
-          if (isNaN(amount) || amount <= 0) return null;
-          return {
-            User: currentUser,
-            Client_Name: cols[0],
-            Type: cols[1],
-            Amount_To_Be_Paid: amount,
-            january: '',
-            february: '',
-            march: '',
-            april: '',
-            may: '',
-            june: '',
-            july: '',
-            august: '',
-            september: '',
-            october: '',
-            november: '',
-            december: '',
-            Due_Payment: '0.00'
-          };
-        }).filter(row => row);
-
-        if (data.length === 0) {
-          alert('No valid data found in CSV file.');
-          csvFileInput.value = '';
-          return;
-        }
-
-        if (!sessionToken) {
-          console.error('No sessionToken available. Redirecting to sign-in page.');
-          showSignInPage();
-          csvFileInput.value = '';
-          return;
-        }
-
-        fetch('https://payment-tracker-aswa.onrender.com/api/import-csv', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${sessionToken}`
-          },
-          body: JSON.stringify(data)
-        })
-          .then(response => {
-            if (!response.ok) {
-              if (response.status === 401) {
-                console.error('Session token invalid. Redirecting to sign-in page.');
-                clearUserSession();
-                showSignInPage();
-                return;
-              }
-              throw new Error('Failed to import CSV data');
-            }
-            return response.json();
-          })
-          .then(() => {
-            alert('CSV data imported successfully!');
-            fetchClients();
-            fetchPayments();
-            fetchClientsForDisplay();
-            fetchPaymentsForDisplay();
-            csvFileInput.value = '';
-          })
-          .catch(error => {
-            console.error('Error importing CSV:', error);
-            alert('Failed to import CSV data: ' + error.message);
-            fetchClients();
-            fetchPayments();
-            fetchClientsForDisplay();
-            fetchPaymentsForDisplay();
-            csvFileInput.value = '';
-          });
-      };
-      reader.readAsText(file);
-    });
-  </script>
-</body>
-</html> -->
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1840,6 +23,7 @@
       --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.05);
       --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
       --border-radius: 0.5rem;
+      --header-height: 64px;
     }
 
     html, body {
@@ -1850,6 +34,15 @@
       background: var(--background-color);
       color: var(--text-color);
       overflow-x: hidden;
+      overflow-y: hidden;
+    }
+
+    body::-webkit-scrollbar {
+      display: none;
+    }
+    body {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
     }
 
     .main-wrapper {
@@ -1858,6 +51,7 @@
       min-height: 100vh;
       width: 100vw;
       overflow-x: hidden;
+      overflow-y: hidden;
     }
 
     .header-section {
@@ -1875,6 +69,7 @@
       justify-content: center;
       width: 100%;
       box-sizing: border-box;
+      height: var(--header-height);
     }
 
     .menu-toggle {
@@ -2049,6 +244,18 @@
       z-index: 10;
     }
 
+    #mainTable thead tr:nth-child(1) th {
+      position: sticky;
+      top: 0;
+      z-index: 11;
+    }
+
+    #mainTable thead tr:nth-child(2) th {
+      position: sticky;
+      top: 48px;
+      z-index: 10;
+    }
+
     .table tbody td {
       vertical-align: middle;
       padding: 0.5rem;
@@ -2081,8 +288,16 @@
       width: 100%;
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
-      max-height: 60vh;
-      position: relative;
+      height: calc(100vh - var(--header-height) - 150px);
+      overflow-y: auto;
+    }
+
+    .table-responsive::-webkit-scrollbar {
+      display: none;
+    }
+    .table-responsive {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
     }
 
     #mainTable {
@@ -2214,7 +429,7 @@
       background-color: #fee2e2 !important;
     }
 
-    .sign-in-container, .add-client-container, .clients-container, .payments-container {
+    .sign-in-container, .add-client-container {
       max-width: 600px;
       margin: 3rem auto;
       padding: 2rem;
@@ -2224,23 +439,42 @@
       transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
 
-    .sign-in-container:hover, .add-client-container:hover, .clients-container:hover, .payments-container:hover {
+    .sign-in-container:hover, .add-client-container:hover {
       transform: translateY(-2px);
       box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
     }
 
-    .payments-container {
+    .clients-container, .payments-container {
       max-width: 100%;
-      margin: 2rem 1rem;
+      margin: 1rem;
+      padding: 1rem;
+      background: white;
+      border-radius: var(--border-radius);
+      box-shadow: var(--shadow-sm);
     }
 
-    #paymentsTableWrapper {
-      max-height: 60vh;
+    .clients-container:hover, .payments-container:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+    }
+
+    #clientsTableWrapper, #paymentsTableWrapper {
+      height: calc(100vh - var(--header-height) - 100px);
       overflow-y: auto;
       width: 100%;
     }
 
-    #paymentsTable {
+    #clientsTableWrapper::-webkit-scrollbar,
+    #paymentsTableWrapper::-webkit-scrollbar {
+      display: none;
+    }
+    #clientsTableWrapper,
+    #paymentsTableWrapper {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    #clientsTable, #paymentsTable {
       width: 100%;
       min-width: 1200px;
     }
@@ -2285,6 +519,7 @@
       .header-section {
         font-size: 1.25rem;
         padding: 0.75rem;
+        height: var(--header-height);
       }
 
       .menu-toggle {
@@ -2301,7 +536,8 @@
         left: -240px;
       }
 
-      .table-responsive {
+      .table-responsive, #clientsTableWrapper, #paymentsTableWrapper {
+        height: calc(100vh - var(--header-height) - 120px);
         font-size: 0.75rem;
       }
 
@@ -2335,7 +571,8 @@
 </head>
 <body>
   <div id="signInPage" class="sign-in-container">
-    <h2 class="text-center mb-4"><i class="fas fa-sign-in-alt me-2"></i>Sign In</h2>
+    <h2 id="loginHeader" class="text-center mb-4"><i class="fas fa-sign-in-alt me-2"></i>Sign In</h2>
+    <h2 id="signupHeader" class="text-center mb-4" style="display: none;"><i class="fas fa-user-plus me-2"></i>Sign Up</h2>
     <div id="loginForm">
       <div class="mb-3">
         <label for="usernameInput" class="form-label"><i class="fas fa-user me-2"></i>Username</label>
@@ -2531,7 +768,7 @@
 
     <div id="clientsPage" class="clients-container" style="display: none;">
       <h2><i class="fas fa-users me-2"></i>Clients</h2>
-      <div class="table-responsive">
+      <div id="clientsTableWrapper">
         <table id="clientsTable" class="table table-bordered align-middle text-center">
           <thead>
             <tr>
@@ -2548,7 +785,7 @@
 
     <div id="paymentsPage" class="payments-container" style="display: none;">
       <h2><i class="fas fa-money-bill-wave me-2"></i>Payments</h2>
-      <div class="table-responsive" id="paymentsTableWrapper">
+      <div id="paymentsTableWrapper">
         <table id="paymentsTable" class="table table-bordered align-middle text-center">
           <thead>
             <tr>
@@ -2581,7 +818,6 @@
     let sessionToken = null;
     let currentUser = null;
 
-    // Variable declarations
     const mainWrapper = document.getElementById('mainWrapper');
     const signInPage = document.getElementById('signInPage');
     const homePage = document.getElementById('homePage');
@@ -2620,14 +856,12 @@
     const csvFileInput = document.getElementById('csvFileInput');
     const currentUserDisplay = document.getElementById('currentUserDisplay');
 
-    // Declare variables for sign-in elements (will be initialized after DOM loads)
-    let loginBtn, signupBtn, loginForm, signupForm, usernameInput, passwordInput, signupUsernameInput, signupPasswordInput, signupGmailInput, showSignupLink, showLoginLink;
+    let loginBtn, signupBtn, loginForm, signupForm, usernameInput, passwordInput, signupUsernameInput, signupPasswordInput, signupGmailInput, showSignupLink, showLoginLink, loginHeader, signupHeader;
 
     let contextTargetRow = null;
     let clientsData = [];
 
     document.addEventListener('DOMContentLoaded', () => {
-      // Initialize sign-in related variables
       loginBtn = document.getElementById('loginBtn');
       signupBtn = document.getElementById('signupBtn');
       loginForm = document.getElementById('loginForm');
@@ -2639,14 +873,14 @@
       signupGmailInput = document.getElementById('signupGmailInput');
       showSignupLink = document.getElementById('showSignupLink');
       showLoginLink = document.getElementById('showLoginLink');
+      loginHeader = document.getElementById('loginHeader');
+      signupHeader = document.getElementById('signupHeader');
 
-      // Debug logs to confirm elements are found
       console.log('loginBtn:', loginBtn);
       console.log('signupBtn:', signupBtn);
 
-      // Attach event listeners for signup and login
       signupBtn.addEventListener('click', () => {
-        console.log('Signup button clicked'); // Debug log
+        console.log('Signup button clicked');
         const username = signupUsernameInput.value.trim();
         const password = signupPasswordInput.value.trim();
         const gmailId = signupGmailInput.value.trim();
@@ -2670,7 +904,7 @@
           body: JSON.stringify({ username, password, gmailId })
         })
           .then(res => {
-            console.log('Signup fetch response:', res); // Debug log
+            console.log('Signup fetch response:', res);
             if (!res.ok) {
               return res.json().then(data => { throw new Error(data.error); });
             }
@@ -2683,6 +917,8 @@
             signupGmailInput.value = '';
             loginForm.style.display = 'block';
             signupForm.style.display = 'none';
+            loginHeader.style.display = 'block';
+            signupHeader.style.display = 'none';
           })
           .catch(error => {
             console.error('Error signing up:', error);
@@ -2691,7 +927,7 @@
       });
 
       loginBtn.addEventListener('click', () => {
-        console.log('Login button clicked'); // Debug log
+        console.log('Login button clicked');
         const username = usernameInput.value.trim();
         const password = passwordInput.value.trim();
 
@@ -2708,7 +944,7 @@
           body: JSON.stringify({ username, password })
         })
           .then(res => {
-            console.log('Login fetch response:', res); // Debug log
+            console.log('Login fetch response:', res);
             if (!res.ok) {
               return res.json().then(data => { throw new Error(data.error); });
             }
@@ -2733,15 +969,18 @@
         e.preventDefault();
         loginForm.style.display = 'none';
         signupForm.style.display = 'block';
+        loginHeader.style.display = 'none';
+        signupHeader.style.display = 'block';
       });
 
       showLoginLink.addEventListener('click', (e) => {
         e.preventDefault();
         loginForm.style.display = 'block';
         signupForm.style.display = 'none';
+        loginHeader.style.display = 'block';
+        signupHeader.style.display = 'none';
       });
 
-      // Rest of the existing event listeners and functions
       logoutLink.addEventListener('click', (e) => {
         e.preventDefault();
         currentUser = null;
@@ -2781,6 +1020,8 @@
       function showSignInPage() {
         signInPage.style.display = 'block';
         mainWrapper.style.display = 'none';
+        loginHeader.style.display = 'block';
+        signupHeader.style.display = 'none';
       }
 
       function showHomePage() {
@@ -3743,7 +1984,6 @@
         reader.readAsText(file);
       });
 
-      // Load user session after all event listeners are set up
       loadUserSession();
     });
   </script>
