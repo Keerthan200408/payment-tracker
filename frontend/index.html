@@ -14,6 +14,7 @@
 <body>
   <div id="root"></div>
   <script type="text/babel">
+    console.log('Starting React app...');
     const { useState, useEffect, useRef } = React;
 
     // Error Boundary Component
@@ -172,6 +173,7 @@
       };
 
       const importCsv = async (e) => {
+        console.log('App component rendering');
         const file = e.target.files[0];
         if (!file) return;
 
@@ -293,6 +295,7 @@
               </div>
             </div>
           )}
+          <div>Debug: App rendered, current page: {page}</div>
         </div>
       );
     };
@@ -714,7 +717,8 @@
       <ErrorBoundary>
         <App />
       </ErrorBoundary>,
-      document.getElementById('root')
+      document.getElementById('root'), 
+      () => console.log('ReactDOM.render completed')
     );
   </script>
 </body>
