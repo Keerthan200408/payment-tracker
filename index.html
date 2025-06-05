@@ -359,6 +359,26 @@
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
     }
 
+    .payments-container {
+      max-width: 100%;
+      margin: 2rem 1rem;
+      padding: 2rem;
+      background: white;
+      border-radius: 0.5rem;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    }
+
+    #paymentsTableWrapper {
+      max-height: 60vh;
+      overflow-y: auto;
+      width: 100%;
+    }
+
+    #paymentsTable {
+      width: 100%;
+      min-width: 1200px; /* Ensures table doesn't shrink too much */
+    }
+
     .sign-in-container h2, .add-client-container h2, .clients-container h2, .payments-container h2 {
       font-size: 1.75rem;
       font-weight: 600;
@@ -535,17 +555,17 @@
             <td><span class="type-display"></span></td>
             <td><span class="amount-display"></span></td>
             <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="January" /></td>
-            <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="February" /></td>
-            <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="March" /></td>
-            <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="April" /></td>
-            <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="May" /></td>
-            <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="June" /></td>
-            <td><input type="text" class="form-control" placeholder="July" /></td>
-            <td><input type="text" class="form-control" placeholder="August" /></td>
-            <td><input type="text" class="form-control" placeholder="September" /></td>
-            <td><input type="text" class="form-control" placeholder="October" /></td>
-            <td><input type="text" class="form-control" placeholder="November" /></td>
-            <td><input type="text" class="form-control" placeholder="December" /></td>
+            <td class="manual-entry-cell"><input type="text" class="form-control"></td>
+            <td class="manual-entry-cell"><input type="text" class="form-control"></td>
+            <td class="manual-entry-cell"><input type="text" class="form-control"></td>
+            <td class="manual-entry-cell"><input type="text" class="form-control"></td>
+            <td class="manual-entry-cell"><input type="text" class="form-control"></td>
+            <td><input type="text" class="form-control"></td>
+            <td><input type="text" class="form-control"></td>
+            <td><input type="text" class="form-control"></td>
+            <td><input type="text" class="form-control"></td>
+            <td><input type="text" class="form-control"></td>
+            <td><input type="text" class="form-control"></td>
             <td><input type="text" class="form-control due-payment-display" readonly value="0.00" /></td>
           </tr>
         </tbody>
@@ -600,7 +620,7 @@
 
   <div id="paymentsPage" class="payments-container" style="display: none;">
     <h2>Payments</h2>
-    <div class="table-responsive">
+    <div class="table-responsive" id="paymentsTableWrapper">
       <table id="paymentsTable" class="table table-bordered align-middle text-center mb-0">
         <thead>
           <tr>
@@ -1603,44 +1623,11 @@
         .then(data => {
           alert(`Client ${isUpdate ? 'updated' : 'added'} successfully!`);
           resetAddClientForm();
+          // Refresh all views to ensure consistency
           fetchClients();
-          if (!isUpdate) {
-            const newRowData = {
-              User: currentUser,
-              Client_Name: clientName,
-              Type: type,
-              Amount_To_Be_Paid: paymentValue,
-              january: '',
-              february: '',
-              march: '',
-              april: '',
-              may: '',
-              june: '',
-              july: '',
-              august: '',
-              september: '',
-              october: '',
-              november: '',
-              december: '',
-              Due_Payment: '0.00'
-            };
-            addRowToTable(newRowData);
-            updateSerialNumbers();
-            saveToGoogleSheets();
-          } else {
-            const rows = tableBody.querySelectorAll('tr');
-            rows.forEach(row => {
-              const rowClientName = row.querySelector('.client-name-display').textContent;
-              const rowType = row.querySelector('.type-display').textContent;
-              if (rowClientName === saveClientBtn.dataset.client && rowType === saveClientBtn.dataset.type) {
-                row.querySelector('.client-name-display').textContent = clientName;
-                row.querySelector('.type-display').textContent = type;
-                row.querySelector('.amount-display').textContent = paymentValue;
-                updateDuePayment(row);
-              }
-            });
-            saveToGoogleSheets();
-          }
+          fetchPayments();
+          fetchClientsForDisplay();
+          fetchPaymentsForDisplay();
           showHomePage();
         })
         .catch(error => {
@@ -1648,6 +1635,9 @@
           alert(`Failed to ${isUpdate ? 'update' : 'add'} client to Google Sheets: ${error.message}`);
           resetAddClientForm();
           fetchClients();
+          fetchPayments();
+          fetchClientsForDisplay();
+          fetchPaymentsForDisplay();
           showHomePage();
         });
     }
@@ -1681,13 +1671,19 @@
         })
         .then(data => {
           alert('Client deleted successfully!');
-          fetchClientsForDisplay();
+          // Refresh all views to ensure consistency
           fetchClients();
           fetchPayments();
+          fetchClientsForDisplay();
+          fetchPaymentsForDisplay();
         })
         .catch(error => {
           console.error('Error deleting client:', error);
           alert('Failed to delete client from Google Sheets. Please try again.');
+          fetchClients();
+          fetchPayments();
+          fetchClientsForDisplay();
+          fetchPaymentsForDisplay();
         });
     }
 
@@ -1798,11 +1794,17 @@
             alert('CSV data imported successfully!');
             fetchClients();
             fetchPayments();
+            fetchClientsForDisplay();
+            fetchPaymentsForDisplay();
             csvFileInput.value = '';
           })
           .catch(error => {
             console.error('Error importing CSV:', error);
             alert('Failed to import CSV data: ' + error.message);
+            fetchClients();
+            fetchPayments();
+            fetchClientsForDisplay();
+            fetchPaymentsForDisplay();
             csvFileInput.value = '';
           });
       };
