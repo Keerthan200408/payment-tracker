@@ -3,39 +3,51 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Editable Payment Table with Row Insert/Delete Feature</title>
+  <title>Payment Tracking App</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet" />
   <style>
+    :root {
+      --primary-color: #2563eb;
+      --secondary-color: #6b7280;
+      --accent-color: #dc2626;
+      --background-color: #f9fafb;
+      --text-color: #1f2937;
+      --border-color: #e5e7eb;
+    }
+
     html, body {
       height: 100%;
       margin: 0;
       padding: 0;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: #fff;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--background-color);
+      color: var(--text-color);
       overflow-x: hidden;
     }
+
     body {
       display: flex;
       flex-direction: column;
       min-height: 100vh;
     }
+
     .container-fluid {
       flex-grow: 1;
-      padding: 0 1rem 1rem 1rem;
+      padding: 1rem;
       max-width: 100vw !important;
       width: 100vw !important;
     }
+
     .header-section {
-      background: linear-gradient(90deg, #4f46e5, #3b82f6);
+      background: linear-gradient(90deg, var(--primary-color), #3b82f6);
       color: white;
-      font-weight: 1000;
+      font-weight: 600;
       font-size: 1.5rem;
-      padding: 1rem 0;
-      border-radius: 0;
+      padding: 1rem;
       text-align: center;
-      box-shadow: 0 4px 8px rgb(59 130 246 / 0.4);
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
       user-select: none;
-      margin-bottom: 1.5rem;
       position: relative;
       display: flex;
       align-items: center;
@@ -44,6 +56,7 @@
       box-sizing: border-box;
       display: none;
     }
+
     .menu-toggle {
       position: absolute;
       left: 1rem;
@@ -58,152 +71,252 @@
       z-index: 1051;
       display: none;
     }
+
     .menu-toggle span {
       display: block;
       height: 3.5px;
       background: white;
       border-radius: 2px;
     }
+
     #sidebarMenu {
       position: fixed;
       top: 0;
       left: -250px;
       width: 250px;
       height: 100vh;
-      background: #3b82f6;
+      background: #1f2937;
       color: white;
       padding-top: 4rem;
       transition: left 0.3s ease;
       z-index: 1050;
-      box-shadow: 2px 0 8px rgb(59 130 246 / 0.5);
+      box-shadow: 2px 0 8px rgba(0, 0, 0, 0.3);
       overflow-y: auto;
     }
+
     #sidebarMenu.show {
       left: 0;
     }
+
     #sidebarMenu ul {
       list-style: none;
       padding-left: 0;
       margin: 0;
     }
+
     #sidebarMenu ul li {
       padding: 1rem 1.5rem;
       cursor: pointer;
-      font-weight: 600;
-      border-bottom: 1px solid rgba(255,255,255,0.2);
+      font-weight: 500;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
       user-select: none;
       transition: background-color 0.2s ease;
     }
+
     #sidebarMenu ul li:hover {
-      background-color: rgba(255,255,255,0.2);
+      background-color: rgba(255, 255, 255, 0.1);
     }
+
     #sidebarOverlay {
       position: fixed;
       top: 0;
       left: 0;
       width: 100vw;
       height: 100vh;
-      background: rgba(0,0,0,0.3);
+      background: rgba(0, 0, 0, 0.4);
       opacity: 0;
       visibility: hidden;
       transition: opacity 0.3s ease;
       z-index: 1049;
     }
+
     #sidebarOverlay.show {
       opacity: 1;
       visibility: visible;
     }
-    .btn-add-new {
-      background-color: #dc2626 !important;
-      color: white !important;
-      font-weight: 600;
+
+    .btn-primary-custom {
+      background-color: var(--primary-color);
       border: none;
-      transition: background-color 0.3s ease;
-      white-space: nowrap;
+      font-weight: 500;
+      transition: background-color 0.3s ease, box-shadow 0.3s ease;
     }
-    .btn-add-new:hover, .btn-add-new:focus {
-      background-color: #b91c1c !important;
-      color: white !important;
-      box-shadow: 0 0 8px #b91c1c;
+
+    .btn-primary-custom:hover {
+      background-color: #1d4ed8;
+      box-shadow: 0 2px 8px rgba(29, 78, 216, 0.3);
     }
+
+    .btn-danger-custom {
+      background-color: var(--accent-color);
+      border: none;
+      font-weight: 500;
+      transition: background-color 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .btn-danger-custom:hover {
+      background-color: #b91c1c;
+      box-shadow: 0 2px 8px rgba(185, 28, 28, 0.3);
+    }
+
+    .btn-secondary-custom {
+      background-color: var(--secondary-color);
+      border: none;
+      font-weight: 500;
+      transition: background-color 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .btn-secondary-custom:hover {
+      background-color: #4b5563;
+      box-shadow: 0 2px 8px rgba(75, 85, 99, 0.3);
+    }
+
+    .table {
+      background: white;
+      border-radius: 0.5rem;
+      overflow: hidden;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    }
+
     .table thead th {
-      vertical-align: middle;
-      text-align: center;
-      background-color: #e9ecef;
+      background-color: #f1f5f9;
+      color: var(--text-color);
       font-weight: 600;
-      border-color: #dee2e6;
+      border-color: var(--border-color);
+      padding: 0.75rem;
       white-space: nowrap;
-      padding: 0.5rem 0.75rem;
+      text-align: center;
     }
+
     .table tbody td {
       vertical-align: middle;
-      padding: 0.3rem 0.5rem;
-      position: relative;
+      padding: 0.5rem;
+      border-color: var(--border-color);
     }
+
     .manual-entry-cell {
-      background-color: #dbeafe !important;
+      background-color: #eff6ff !important;
     }
+
     input.form-control, select.form-control {
       font-size: 0.875rem;
-      padding: 0.25rem 0.5rem;
-      height: 2rem;
-      min-width: 60px;
+      padding: 0.375rem 0.75rem;
+      border-radius: 0.375rem;
+      border: 1px solid var(--border-color);
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }
+
+    input.form-control:focus, select.form-control:focus {
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 0.2rem rgba(37, 99, 235, 0.1);
+    }
+
     .due-payment-cell {
       min-width: 140px;
     }
+
     @media (max-width: 768px) {
       .table-responsive {
         font-size: 0.75rem;
       }
       input.form-control, select.form-control {
-        height: 1.75rem;
         font-size: 0.75rem;
-        min-width: 40px;
+        padding: 0.25rem 0.5rem;
       }
     }
+
     .table-responsive {
       width: 100vw;
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
     }
-    .search-group {
-      max-width: 320px;
-      width: 100%;
-    }
-    .filter-group {
-      display: flex;
-      gap: 0.5rem;
-    }
+
     .controls-container {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      margin-bottom: 1rem;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      padding: 1rem;
+      background: white;
+      border-radius: 0.5rem;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    }
+
+    .action-buttons {
+      display: flex;
       gap: 0.5rem;
-      width: 100vw;
-      box-sizing: border-box;
-      padding: 0 1rem;
     }
-    .btn-add-new {
-      flex-shrink: 0;
-    }
-    .search-group, .filter-group {
-      flex-grow: 1;
-      max-width: 320px;
+
+    .search-filter-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
       margin-left: auto;
     }
+
+    .search-group {
+      max-width: 250px;
+      width: 100%;
+    }
+
+    .filter-btn {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background-color: var(--primary-color);
+      color: white;
+      font-weight: 500;
+      border: none;
+      padding: 0.375rem 1rem;
+      border-radius: 0.375rem;
+      transition: background-color 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .filter-btn:hover {
+      background-color: #1d4ed8;
+      box-shadow: 0 2px 8px rgba(29, 78, 216, 0.3);
+    }
+
+    .filter-options {
+      display: none;
+      position: absolute;
+      top: 100%;
+      right: 0;
+      background: white;
+      border-radius: 0.5rem;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+      padding: 1rem;
+      z-index: 1000;
+      min-width: 300px;
+    }
+
+    .filter-options.show {
+      display: block;
+    }
+
+    .filter-options .form-group {
+      margin-bottom: 1rem;
+    }
+
+    .filter-options label {
+      font-weight: 500;
+      margin-bottom: 0.5rem;
+      display: block;
+    }
+
     #contextMenu {
       position: absolute;
       background: white;
-      border: 1px solid #ccc;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-      border-radius: 0.25rem;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      border-radius: 0.375rem;
       z-index: 2000;
       display: none;
-      min-width: 140px;
+      min-width: 150px;
       font-size: 0.9rem;
     }
+
     #contextMenu button {
       width: 100%;
       padding: 0.5rem 1rem;
@@ -211,97 +324,64 @@
       background: none;
       text-align: left;
       cursor: pointer;
-      color: #212529;
-      border-bottom: 1px solid #eee;
+      color: var(--text-color);
+      border-bottom: 1px solid var(--border-color);
       transition: background-color 0.15s ease;
     }
+
     #contextMenu button:last-child {
       border-bottom: none;
     }
+
     #contextMenu button:hover, #contextMenu button:focus {
-      background-color: #e9ecef;
+      background-color: #f1f5f9;
       outline: none;
     }
+
     .payment-full {
       background-color: #d1fae5 !important;
     }
+
     .payment-partial {
       background-color: #ffedd5 !important;
     }
+
     .payment-none {
       background-color: #fee2e2 !important;
     }
-    .btn-add-client {
-      background-color: #4f46e5 !important;
-      color: white !important;
-      font-weight: 600;
-      border: none;
-      transition: background-color 0.3s ease;
-      white-space: nowrap;
-    }
-    .btn-add-client:hover, .btn-add-client:focus {
-      background-color: #3b82f6 !important;
-      color: white !important;
-      box-shadow: 0 0 8px #3b82f6;
-    }
-    .btn-cancel {
-      background-color: #6c757d !important;
-      color: white !important;
-      font-weight: 600;
-      border: none;
-      transition: background-color 0.3s ease;
-    }
-    .btn-cancel:hover, .btn-cancel:focus {
-      background-color: #5a6268 !important;
-      color: white !important;
-      box-shadow: 0 0 8px #5a6268;
-    }
-    .sign-in-container {
-      max-width: 400px;
-      margin: 50px auto;
+
+    .sign-in-container, .add-client-container, .clients-container, .payments-container {
+      max-width: 600px;
+      margin: 2rem auto;
       padding: 2rem;
-      border: 1px solid #dee2e6;
+      background: white;
       border-radius: 0.5rem;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
     }
-    .add-client-container {
-      max-width: 500px;
-      margin: 20px auto;
-      padding: 2rem;
-      border: 1px solid #dee2e6;
-      border-radius: 0.5rem;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    }
-    .add-client-container h2 {
+
+    .sign-in-container h2, .add-client-container h2, .clients-container h2, .payments-container h2 {
       font-size: 1.75rem;
+      font-weight: 600;
       margin-bottom: 1.5rem;
       text-align: center;
+      color: var(--text-color);
     }
-    .add-client-container .form-label {
-      font-weight: 500;
-    }
-    .clients-container, .payments-container {
-      max-width: 100%;
-      margin: 20px auto;
-      padding: 2rem;
-    }
-    .clients-container h2, .payments-container h2 {
-      font-size: 1.75rem;
-      margin-bottom: 1.5rem;
-      text-align: center;
-    }
+
     .btn-edit {
-      background-color: #4f46e5 !important;
+      background-color: var(--primary-color) !important;
       color: white !important;
       margin-right: 0.5rem;
     }
+
     .btn-edit:hover {
-      background-color: #3b82f6 !important;
+      background-color: #1d4ed8 !important;
     }
+
     .btn-delete {
-      background-color: #dc2626 !important;
+      background-color: var(--accent-color) !important;
       color: white !important;
     }
+
     .btn-delete:hover {
       background-color: #b91c1c !important;
     }
@@ -332,7 +412,7 @@
         <label for="passwordInput" class="form-label">Password</label>
         <input type="password" class="form-control" id="passwordInput" placeholder="Enter password">
       </div>
-      <button id="loginBtn" class="btn btn-primary d-block mx-auto mb-3">Login</button>
+      <button id="loginBtn" class="btn btn-primary-custom d-block mx-auto mb-3">Login</button>
       <p class="text-center">
         Don't have an account? <a href="#" id="showSignupLink">Sign Up</a>
       </p>
@@ -350,7 +430,7 @@
         <label for="signupGmailInput" class="form-label">Gmail ID</label>
         <input type="email" class="form-control" id="signupGmailInput" placeholder="Enter Gmail ID">
       </div>
-      <button id="signupBtn" class="btn btn-primary d-block mx-auto mb-3">Sign Up</button>
+      <button id="signupBtn" class="btn btn-primary-custom d-block mx-auto mb-3">Sign Up</button>
       <p class="text-center">
         Already have an account? <a href="#" id="showLoginLink">Login</a>
       </p>
@@ -368,39 +448,57 @@
 
   <div id="homePage" style="display: none;">
     <div class="controls-container">
-      <button id="addClientBtn" class="btn btn-add-client px-3 py-1">+ Add Client</button>
-      <button id="importCsvBtn" class="btn btn-add-new px-3 py-1">Import CSV</button>
-      <input type="file" id="csvFileInput" accept=".csv" style="display: none;" />
-      <div class="search-group">
-        <div class="input-group">
-          <input id="searchInput" type="text" class="form-control" placeholder="Search Client Name" aria-label="Search Client Name" />
-          <button id="searchBtn" class="btn btn-outline-primary" type="button">Search</button>
-          <button id="clearSearchBtn" class="btn btn-outline-secondary" type="button" title="Clear Search">×</button>
-        </div>
+      <div class="action-buttons">
+        <button id="addClientBtn" class="btn btn-primary-custom px-3 py-2">+ Add Client</button>
+        <button id="importCsvBtn" class="btn btn-danger-custom px-3 py-2">Import CSV</button>
+        <input type="file" id="csvFileInput" accept=".csv" style="display: none;" />
       </div>
-      <div class="filter-group">
-        <select id="monthFilter" class="form-control">
-          <option value="">Select Month</option>
-          <option value="january">January</option>
-          <option value="february">February</option>
-          <option value="march">March</option>
-          <option value="april">April</option>
-          <option value="may">May</option>
-          <option value="june">June</option>
-          <option value="july">July</option>
-          <option value="august">August</option>
-          <option value="september">September</option>
-          <option value="october">October</option>
-          <option value="november">November</option>
-          <option value="december">December</option>
-        </select>
-        <select id="statusFilter" class="form-control">
-          <option value="">Select Status</option>
-          <option value="paid">Paid</option>
-          <option value="unpaid">Unpaid</option>
-          <option value="partially-paid">Partially Paid</option>
-        </select>
-        <button id="clearFilterBtn" class="btn btn-outline-secondary" type="button" title="Clear Filter">×</button>
+      <div class="search-filter-group">
+        <div class="search-group">
+          <div class="input-group">
+            <input id="searchInput" type="text" class="form-control" placeholder="Search Client Name" aria-label="Search Client Name" />
+            <button id="searchBtn" class="btn btn-outline-primary" type="button"><i class="bi bi-search"></i></button>
+            <button id="clearSearchBtn" class="btn btn-outline-secondary" type="button" title="Clear Search">×</button>
+          </div>
+        </div>
+        <div class="position-relative">
+          <button id="filterBtn" class="filter-btn">
+            <i class="bi bi-filter"></i> Filter
+          </button>
+          <div id="filterOptions" class="filter-options">
+            <div class="form-group">
+              <label for="monthFilter">Month</label>
+              <select id="monthFilter" class="form-control">
+                <option value="">Select Month</option>
+                <option value="january">January</option>
+                <option value="february">February</option>
+                <option value="march">March</option>
+                <option value="april">April</option>
+                <option value="may">May</option>
+                <option value="june">June</option>
+                <option value="july">July</option>
+                <option value="august">August</option>
+                <option value="september">September</option>
+                <option value="october">October</option>
+                <option value="november">November</option>
+                <option value="december">December</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="statusFilter">Payment Status</label>
+              <select id="statusFilter" class="form-control">
+                <option value="">Select Status</option>
+                <option value="paid">Paid</option>
+                <option value="unpaid">Unpaid</option>
+                <option value="partially-paid">Partially Paid</option>
+              </select>
+            </div>
+            <div class="d-flex justify-content-end gap-2">
+              <button id="clearFilterBtn" class="btn btn-secondary-custom">Clear</button>
+              <button id="applyFilterBtn" class="btn btn-primary-custom">Apply</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -416,18 +514,18 @@
             <th rowspan="2" class="align-middle due-payment-cell">Due Payment</th>
           </tr>
           <tr>
-            <th class="manual-entry-cell">january</th>
-            <th class="manual-entry-cell">february</th>
-            <th class="manual-entry-cell">march</th>
-            <th class="manual-entry-cell">april</th>
-            <th class="manual-entry-cell">may</th>
-            <th class="manual-entry-cell">june</th>
-            <th>july</th>
-            <th>august</th>
-            <th>september</th>
-            <th>october</th>
-            <th>november</th>
-            <th>december</th>
+            <th class="manual-entry-cell">January</th>
+            <th class="manual-entry-cell">February</th>
+            <th class="manual-entry-cell">March</th>
+            <th class="manual-entry-cell">April</th>
+            <th class="manual-entry-cell">May</th>
+            <th class="manual-entry-cell">June</th>
+            <th>July</th>
+            <th>August</th>
+            <th>September</th>
+            <th>October</th>
+            <th>November</th>
+            <th>December</th>
           </tr>
         </thead>
         <tbody id="tableBody">
@@ -436,18 +534,18 @@
             <td><span class="client-name-display"></span></td>
             <td><span class="type-display"></span></td>
             <td><span class="amount-display"></span></td>
-            <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="january" /></td>
-            <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="february" /></td>
-            <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="march" /></td>
-            <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="april" /></td>
-            <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="may" /></td>
-            <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="june" /></td>
-            <td><input type="text" class="form-control" placeholder="july" /></td>
-            <td><input type="text" class="form-control" placeholder="august" /></td>
-            <td><input type="text" class="form-control" placeholder="september" /></td>
-            <td><input type="text" class="form-control" placeholder="october" /></td>
-            <td><input type="text" class="form-control" placeholder="november" /></td>
-            <td><input type="text" class="form-control" placeholder="december" /></td>
+            <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="January" /></td>
+            <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="February" /></td>
+            <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="March" /></td>
+            <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="April" /></td>
+            <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="May" /></td>
+            <td class="manual-entry-cell"><input type="text" class="form-control" placeholder="June" /></td>
+            <td><input type="text" class="form-control" placeholder="July" /></td>
+            <td><input type="text" class="form-control" placeholder="August" /></td>
+            <td><input type="text" class="form-control" placeholder="September" /></td>
+            <td><input type="text" class="form-control" placeholder="October" /></td>
+            <td><input type="text" class="form-control" placeholder="November" /></td>
+            <td><input type="text" class="form-control" placeholder="December" /></td>
             <td><input type="text" class="form-control due-payment-display" readonly value="0.00" /></td>
           </tr>
         </tbody>
@@ -478,8 +576,8 @@
       <input type="text" class="form-control" id="monthlyPaymentInput" placeholder="Enter amount">
     </div>
     <div class="d-flex justify-content-end gap-2">
-      <button id="cancelAddClientBtn" class="btn btn-cancel px-3 py-1">Cancel</button>
-      <button id="saveClientBtn" class="btn btn-add-client px-3 py-1">Add Client</button>
+      <button id="cancelAddClientBtn" class="btn btn-secondary-custom px-3 py-2">Cancel</button>
+      <button id="saveClientBtn" class="btn btn-primary-custom px-3 py-2">Add Client</button>
     </div>
   </div>
 
@@ -539,9 +637,12 @@
     const searchInput = document.getElementById('searchInput');
     const searchBtn = document.getElementById('searchBtn');
     const clearSearchBtn = document.getElementById('clearSearchBtn');
+    const filterBtn = document.getElementById('filterBtn');
+    const filterOptions = document.getElementById('filterOptions');
     const monthFilter = document.getElementById('monthFilter');
     const statusFilter = document.getElementById('statusFilter');
     const clearFilterBtn = document.getElementById('clearFilterBtn');
+    const applyFilterBtn = document.getElementById('applyFilterBtn');
     const menuToggle = document.getElementById('menuToggle');
     const sidebarMenu = document.getElementById('sidebarMenu');
     const sidebarOverlay = document.getElementById('sidebarOverlay');
@@ -810,7 +911,7 @@
         td = document.createElement('td');
         let input = document.createElement('input');
         input.type = 'text';
-        input.placeholder = month;
+        input.placeholder = month.charAt(0).toUpperCase() + month.slice(1);
         input.className = 'form-control';
         td.appendChild(input);
         tr.appendChild(td);
@@ -1019,13 +1120,26 @@
       searchInput.focus();
     });
 
-    monthFilter.addEventListener('change', searchClients);
-    statusFilter.addEventListener('change', searchClients);
+    filterBtn.addEventListener('click', () => {
+      filterOptions.classList.toggle('show');
+    });
+
+    applyFilterBtn.addEventListener('click', () => {
+      searchClients();
+      filterOptions.classList.remove('show');
+    });
 
     clearFilterBtn.addEventListener('click', () => {
       monthFilter.value = '';
       statusFilter.value = '';
       searchClients();
+      filterOptions.classList.remove('show');
+    });
+
+    document.addEventListener('click', e => {
+      if (!filterBtn.contains(e.target) && !filterOptions.contains(e.target)) {
+        filterOptions.classList.remove('show');
+      }
     });
 
     tableBody.addEventListener('keydown', e => {
@@ -1279,7 +1393,7 @@
             userPayments.forEach(row => addRowToTable(row));
           }
           updateSerialNumbers();
-          searchClients(); // Apply any existing filters on load
+          searchClients();
         })
         .catch(error => {
           console.error('Error fetching payments:', error);
