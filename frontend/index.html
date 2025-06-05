@@ -31,6 +31,26 @@
     .table-container table {
       min-width: 1200px;
     }
+    nav {
+  background-color: #ffffff;
+  width: 16rem; /* 64 units in Tailwind, equivalent to 256px */
+  padding: 1rem;
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100%;
+  transition: transform 0.3s ease-in-out;
+  border-right: 1px solid #e5e7eb;
+  z-index: 50;
+}
+
+nav.translate-x-0 {
+  transform: translateX(0);
+}
+
+nav.-translate-x-full {
+  transform: translateX(-100%);
+}
   </style>
 </head>
 <body className="bg-gray-50">
@@ -279,7 +299,7 @@
               </nav>
               {isSidebarOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={toggleSidebar}></div>}
 
-              <main className={`flex-1 p-6 overflow-y-auto transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-0'}`}>
+              <main className="flex-1 p-6 overflow-y-auto transition-all duration-300" style={{ marginLeft: isSidebarOpen ? '16rem' : '0' }}>
                 <header className="flex items-center justify-between mb-6">
                   <button onClick={toggleSidebar} className="focus:outline-none">
                     <i className={`fas fa-${isSidebarOpen ? 'times' : 'bars'} text-xl`}></i>
