@@ -11,17 +11,6 @@
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
   <style>
-    nav {
-      background-color: #ffffff;
-      width: 16rem;
-      padding: 1rem;
-      position: fixed;
-      top: 0;
-      left: 0;
-      height: 100%;
-      border-right: 1px solid #e5e7eb;
-      z-index: 50;
-    }
     .payment-full {
       background-color: #d1fae5 !important;
     }
@@ -42,6 +31,26 @@
     .table-container table {
       min-width: 1200px;
     }
+    nav {
+  background-color: #ffffff;
+  width: 16rem; /* 64 units in Tailwind, equivalent to 256px */
+  padding: 1rem;
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100%;
+  transition: transform 0.3s ease-in-out;
+  border-right: 1px solid #e5e7eb;
+  z-index: 50;
+}
+
+nav.translate-x-0 {
+  transform: translateX(0);
+}
+
+nav.-translate-x-full {
+  transform: translateX(-100%);
+}
   </style>
 </head>
 <body className="bg-gray-50">
@@ -85,6 +94,7 @@
       const [page, setPage] = useState('signIn');
       const [clientsData, setClientsData] = useState([]);
       const [paymentsData, setPaymentsData] = useState([]);
+      const [isSidebarOpen, setIsSidebarOpen] = useState(false);
       const [contextTargetRow, setContextTargetRow] = useState(null);
       const [searchQuery, setSearchQuery] = useState('');
       const [monthFilter, setMonthFilter] = useState('');
@@ -146,6 +156,8 @@
         setPage('signIn');
       };
 
+      const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
+
       const handleContextMenu = (e, rowIndex) => {
         e.preventDefault();
         setContextTargetRow({ rowIndex, x: e.pageX, y: e.pageY });
@@ -188,15 +200,38 @@
             return;
           }
 
-          const data = rows.map(row => {
+          const headers = rows[0].split(',').map(header => header.trim().replace(/\s+/g, ' '));
+          const expectedHeaders = ['Client Name', 'Type', 'Amount To Be Paid'];
+          const headersMatch = expectedHeaders.every((header, index) => headers[index] === header);
+          if (!headersMatch || headers.length !== expectedHeaders.length) {
+            alert('CSV file must have headers: Client Name, Type, Amount To Be Paid');
+            csvFileInputRef.current.value = '';
+            return;
+          }
+
+          const data = rows.slice(1).map(row => {
             const cols = row.split(',').map(col => col.trim());
             if (cols.length < 3) return null;
             const amount = parseFloat(cols[2]);
             if (isNaN(amount) || amount <= 0) return null;
             return {
+              User: currentUser,
               Client_Name: cols[0],
               Type: cols[1],
-              Amount_To_Be_Paid: amount
+              Amount_To_Be_Paid: amount,
+              january: '',
+              february: '',
+              march: '',
+              april: '',
+              may: '',
+              june: '',
+              july: '',
+              august: '',
+              september: '',
+              october: '',
+              november: '',
+              december: '',
+              Due_Payment: '0.00'
             };
           }).filter(row => row);
 
@@ -229,29 +264,29 @@
           {page === 'signIn' && <SignInPage setSessionToken={setSessionToken} setCurrentUser={setCurrentUser} setPage={setPage} />}
           {page !== 'signIn' && (
             <div className="flex h-screen">
-              <nav className="bg-white w-64 p-4 fixed top-0 h-full border-r border-gray-200 z-50">
+              <nav className={`bg-white w-64 p-4 fixed top-0 h-full transition-transform duration-300 border-r border-gray-200 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} z-50`}>
                 <div className="flex items-center mb-6">
                   <i className="fas fa-money-bill-wave text-2xl mr-2"></i>
                   <h1 className="text-xl font-semibold">Payment Tracker</h1>
                 </div>
                 <ul className="space-y-2">
                   <li>
-                    <button onClick={() => setPage('home')} className="w-full text-left p-2 hover:bg-gray-100 rounded-lg flex items-center">
+                    <button onClick={() => { setPage('home'); setIsSidebarOpen(false); }} className="w-full text-left p-2 hover:bg-gray-100 rounded-lg flex items-center">
                       <i className="fas fa-tachometer-alt mr-2"></i> Dashboard
                     </button>
                   </li>
                   <li>
-                    <button onClick={() => setPage('clients')} className="w-full text-left p-2 hover:bg-gray-100 rounded-lg flex items-center">
+                    <button onClick={() => { setPage('clients'); setIsSidebarOpen(false); }} className="w-full text-left p-2 hover:bg-gray-100 rounded-lg flex items-center">
                       <i className="fas fa-users mr-2"></i> Clients
                     </button>
                   </li>
                   <li>
-                    <button onClick={() => setPage('payments')} className="w-full text-left p-2 hover:bg-gray-100 rounded-lg flex items-center">
+                    <button onClick={() => { setPage('payments'); setIsSidebarOpen(false); }} className="w-full text-left p-2 hover:bg-gray-100 rounded-lg flex items-center">
                       <i className="fas fa-money-bill-wave mr-2"></i> Payments
                     </button>
                   </li>
                   <li>
-                    <button onClick={() => { alert('Reports coming soon!'); }} className="w-full text-left p-2 hover:bg-gray-100 rounded-lg flex items-center">
+                    <button onClick={() => { alert('Reports coming soon!'); setIsSidebarOpen(false); }} className="w-full text-left p-2 hover:bg-gray-100 rounded-lg flex items-center">
                       <i className="fas fa-chart-line mr-2"></i> Reports
                     </button>
                   </li>
@@ -262,9 +297,13 @@
                   </li>
                 </ul>
               </nav>
+              {isSidebarOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-40" onClick={toggleSidebar}></div>}
 
-              <main className="flex-1 p-6 overflow-y-auto" style={{ marginLeft: '16rem' }}>
+              <main className="flex-1 p-6 overflow-y-auto transition-all duration-300" style={{ marginLeft: isSidebarOpen ? '16rem' : '0' }}>
                 <header className="flex items-center justify-between mb-6">
+                  <button onClick={toggleSidebar} className="focus:outline-none">
+                    <i className={`fas fa-${isSidebarOpen ? 'times' : 'bars'} text-xl`}></i>
+                  </button>
                   <div className="flex items-center space-x-4">
                     <i className="fas fa-bell"></i>
                     <i className="fas fa-user-circle text-2xl"></i>
@@ -361,173 +400,99 @@
     };
 
     const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
-  const [isSignup, setIsSignup] = useState(false);
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [gmailId, setGmailId] = useState('');
+      const [isSignup, setIsSignup] = useState(false);
+      const [username, setUsername] = useState('');
+      const [password, setPassword] = useState('');
+      const [gmailId, setGmailId] = useState('');
 
-  const handleLogin = async () => {
-    // Validate inputs
-    if (!username.trim() || !password.trim()) {
-      alert('Please enter both username and password.');
-      return;
-    }
+      const handleLogin = async () => {
+        if (!username || !password) {
+          alert('Username and password are required.');
+          return;
+        }
+        try {
+          const response = await axios.post(`${BASE_URL}/api/login`, { username, password }, { timeout: 10000 });
+          setCurrentUser(response.data.username);
+          setSessionToken(response.data.sessionToken);
+          localStorage.setItem('currentUser', response.data.username);
+          localStorage.setItem('sessionToken', response.data.sessionToken);
+          setPage('home');
+        } catch (error) {
+          console.error('Login error:', error.response?.data);
+          alert(error.response?.data?.error || 'Error logging in');
+        }
+      };
 
-    try {
-      const response = await axios.post(
-        `${BASE_URL}/api/login`,
-        { username, password },
-        { timeout: 10000 }
-      );
-      console.log('Login success:', response.data);
-      setCurrentUser(response.data.username);
-      setSessionToken(response.data.sessionToken);
-      localStorage.setItem('currentUser', response.data.username);
-      localStorage.setItem('sessionToken', response.data.sessionToken);
-      setPage('home');
-    } catch (error) {
-      console.error('Login error:', error.response?.data, error.message);
-      const errorMsg = error.response?.data?.error || 'Failed to log in. Please check your credentials or try again later.';
-      alert(errorMsg);
-    }
-  };
+      const handleSignup = async () => {
+        if (!username || !password || !gmailId) {
+          alert('All fields are required.');
+          return;
+        }
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(gmailId) || !gmailId.endsWith('@gmail.com')) {
+          alert('Please enter a valid Gmail ID.');
+          return;
+        }
+        try {
+          await axios.post(`${BASE_URL}/api/signup`, { username, password, gmailId }, { timeout: 10000 });
+          alert('Account created successfully! Please login.');
+          setIsSignup(false);
+          setUsername('');
+          setPassword('');
+          setGmailId('');
+        } catch (error) {
+          console.error('Signup error:', error.response?.data);
+          alert(error.response?.data?.error || 'Error signing up');
+        }
+      };
 
-  const handleSignup = async () => {
-    // Validate inputs
-    if (!username.trim() || !password.trim() || !gmailId.trim()) {
-      alert('Please fill in all fields.');
-      return;
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(gmailId) || !gmailId.endsWith('@gmail.com')) {
-      alert('Please enter a valid Gmail address.');
-      return;
-    }
-
-    try {
-      const response = await axios.post(
-        `${BASE_URL}/api/signup`,
-        { username, password, gmailId },
-        { timeout: 10000 }
-      );
-      console.log('Signup success:', response.data);
-      alert('Account created successfully! Please log in.');
-      setIsSignup(false);
-      setUsername('');
-      setPassword('');
-      setGmailId('');
-    } catch (error) {
-      console.error('Signup error:', error.response?.data, error.message);
-      const errorMsg = error.response?.data?.error || 'Failed to sign up. Please check your details or try again later.';
-      alert(errorMsg);
-    }
-  };
-
-  return (
-    <div className="max-w-md mx-auto mt-20 p-6 bg-white rounded-lg shadow-lg">
-      <h2 className="text-2xl font-semibold text-center mb-4">
-        {isSignup ? 'Sign Up' : 'Sign In'}
-      </h2>
-      {isSignup ? (
-        <div>
-          <div className="mb-4">
-            <label className="block mb-1">Username</label>
-            <input
-              type="text"
-              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              value={username}
-              onChange={e => setUsername(e.target.value.trim())}
-              placeholder="Enter username"
-            />
-          </div>
-          <div className="mb-4">
-            <label className="block mb-1">Password</label>
-            <input
-              type="password"
-              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              value={password}
-              onChange={e => setPassword(e.target.value.trim())}
-              placeholder="Enter password"
-            />
-          </div>
-          <div className="mb-4">
-            <label className="block mb-1">Gmail ID</label>
-            <input
-              type="email"
-              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              value={gmailId}
-              onChange={e => setGmailId(e.target.value.trim())}
-              placeholder="Enter Gmail ID"
-            />
-          </div>
-          <div className="flex justify-end gap-2">
-            <button
-              onClick={() => setIsSignup(false)}
-              className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSignup}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-            >
-              Sign Up
-            </button>
-          </div>
-          <p className="text-center mt-2">
-            Already have an account?{' '}
-            <button
-              onClick={() => setIsSignup(false)}
-              className="text-blue-600 hover:underline"
-            >
-              Login
-            </button>
-          </p>
+      return (
+        <div className="max-w-md mx-auto mt-20 p-6 bg-white rounded-lg shadow-lg">
+          <h2 className="text-2xl font-semibold text-center mb-4">
+            {isSignup ? 'Sign Up' : 'Sign In'}
+          </h2>
+          {isSignup ? (
+            <div>
+              <div className="mb-4">
+                <label className="block mb-1">Username</label>
+                <input type="text" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={username} onChange={e => setUsername(e.target.value)} placeholder="Enter username" />
+              </div>
+              <div className="mb-4">
+                <label className="block mb-1">Password</label>
+                <input type="password" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter password" />
+              </div>
+              <div className="mb-4">
+                <label className="block mb-1">Gmail ID</label>
+                <input type="email" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={gmailId} onChange={e => setGmailId(e.target.value)} placeholder="Enter Gmail ID" />
+              </div>
+              <button onClick={handleSignup} className="w-full bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition duration-200">
+                Sign Up
+              </button>
+              <p className="text-center mt-2">
+                Already have an account? <button onClick={() => setIsSignup(false)} className="text-blue-600 hover:underline">Login</button>
+              </p>
+            </div>
+          ) : (
+            <div>
+              <div className="mb-4">
+                <label className="block mb-1">Username</label>
+                <input type="text" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={username} onChange={e => setUsername(e.target.value)} placeholder="Enter username" />
+              </div>
+              <div className="mb-4">
+                <label className="block mb-1">Password</label>
+                <input type="password" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter password" />
+              </div>
+              <button onClick={handleLogin} className="w-full bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition duration-200">
+                Login
+              </button>
+              <p className="text-center mt-2">
+                Don't have an account? <button onClick={() => setIsSignup(true)} className="text-blue-600 hover:underline">Sign Up</button>
+              </p>
+            </div>
+          )}
         </div>
-      ) : (
-        <div>
-          <div className="mb-4">
-            <label className="block mb-1">Username</label>
-            <input
-              type="text"
-              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              value={username}
-              onChange={e => setUsername(e.target.value.trim())}
-              placeholder="Enter username"
-            />
-          </div>
-          <div className="mb-4">
-            <label className="block mb-1">Password</label>
-            <input
-              type="password"
-              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              value={password}
-              onChange={e => setPassword(e.target.value.trim())}
-              placeholder="Enter password"
-            />
-          </div>
-          <div className="flex justify-end gap-2">
-            <button
-              onClick={handleLogin}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-            >
-              Login
-            </button>
-          </div>
-          <p className="text-center mt-2">
-            Don't have an account?{' '}
-            <button
-              onClick={() => setIsSignup(true)}
-              className="text-blue-600 hover:underline"
-            >
-              Sign Up
-            </button>
-          </p>
-        </div>
-      )}
-    </div>
-  );
-};
+      );
+    };
 
     const HomePage = ({
       paymentsData, setPaymentsData, searchQuery, setSearchQuery, monthFilter, setMonthFilter, statusFilter, setStatusFilter,
@@ -705,13 +670,13 @@
             <table className="w-full">
               <thead>
                 <tr className="bg-gray-100 text-left">
-                  <th rowSpan="2" className="p-2 text-center">Sr.</th>
-                  <th rowSpan="2" className="p-2 text-center">Client</th>
-                  <th rowSpan="2" className="p-2 text-center">Type</th>
-                  <th rowSpan="2" className="p-2 text-center">Amount To Be Paid</th>
+                  <th rowspan="2" className="p-2 text-center">Sr.</th>
+                  <th rowspan="2" className="p-2 text-center">Client</th>
+                  <th rowspan="2" className="p-2 text-center">Type</th>
+                  <th rowspan="2" className="p-2 text-center">Amount To Be Paid</th>
                   <th colSpan="12" className="p-2 text-center">Jan - Dec</th>
-                  <th rowSpan="2" className="p-2 text-center">Total Due</th>
-                  <th rowSpan="2" className="p-2 text-center">Actions</th>
+                  <th rowspan="2" className="p-2 text-center">Total Due</th>
+                  <th rowspan="2" className="p-2 text-center">Actions</th>
                 </tr>
                 <tr className="bg-gray-100">
                   {months.map((month, index) => (
