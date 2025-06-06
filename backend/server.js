@@ -165,7 +165,8 @@ app.post('/api/login', async (req, res) => {
 
 // [Rest of your server.js code remains unchanged: /api/get-clients, /api/add-client, /api/update-client, /api/delete-client, /api/get-payments, /api/save-payments, /api/import-csv]
 
-app.listen(5000, () => console.log('Server running on port 5000'));
+const port = process.env.PORT || 5000;
+app.listen(port, () => console.log(`Server running on port ${port}`));
 
 // Get Clients
 app.get('/api/get-clients', authenticateToken, async (req, res) => {
