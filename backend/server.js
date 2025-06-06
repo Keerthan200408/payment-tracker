@@ -137,28 +137,38 @@ app.post('/api/login', async (req, res) => {
   console.log('Login request:', { username }); // Debug log
 
   if (!username || !password) {
+    console.log('Missing credentials:', { username, password });
     return res.status(400).json({ error: 'Username and password are required' });
   }
 
   try {
     const users = await readSheet('Users', 'A2:C');
+    if (!users || users.length === 0) {
+      console.log('No users found in Users sheet');
+      return res.status(500).json({ error: 'No users registered. Contact support.' });
+    }
+
     const user = users.find(u => u[0] === username);
     if (!user) {
       console.log('User not found:', username);
-      return res.status(401).json({ error: 'Invalid credentials' });
+      return res.status(401).json({ error: 'Invalid username or password' });
     }
 
     const passwordMatch = await bcrypt.compare(password, user[1]);
     if (!passwordMatch) {
       console.log('Password mismatch for user:', username);
-      return res.status(401).json({ error: 'Invalid credentials' });
+      return res.status(401).json({ error: 'Invalid username or password' });
     }
 
     const token = jwt.sign({ username }, 'your-secret-key', { expiresIn: '1h' });
     console.log('Login successful:', username);
     res.json({ username, sessionToken: token });
   } catch (error) {
-    console.error('Login error:', error.message);
+    console.error('Login error:', {
+      message: error.message,
+      stack: error.stack,
+      username
+    });
     res.status(500).json({ error: `Failed to log in: ${error.message}` });
   }
 });
