@@ -37,7 +37,7 @@ const authenticateToken = (req, res, next) => {
   const token = authHeader && authHeader.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Access denied' });
 
-  jwt.verify(token, 'your-secret-key', (err, user) => {
+  jwt.verify(token, 'SECRET_KEY', (err, user) => {
     if (err) return res.status(403).json({ error: 'Invalid token' });
     req.user = user;
     next();
@@ -114,7 +114,7 @@ app.post('/api/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const token = jwt.sign({ username }, 'your-secret-key', { expiresIn: '1h' });
+    const token = jwt.sign({ username }, 'SECRET_KEY', { expiresIn: '1h' });
     res.json({ username, sessionToken: token });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -292,4 +292,4 @@ app.post('/api/import-csv', authenticateToken, async (req, res) => {
   }
 });
 
-app.listen(5000, () => console.log('Server running on port 5000'));
+app.listen(process.env.PORT || 5000, () => console.log('Server running on port 5000'));
