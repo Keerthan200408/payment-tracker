@@ -129,36 +129,43 @@ app.post('/api/signup', async (req, res) => {
   }
 });
 
-// Login
+// Login endpoint
 app.post('/api/login', async (req, res) => {
-  let { username, password } = req.body;
-  if (!username || !password) {
-    return res.status(400).json({ error: 'Username and password are required' });
-  }
-
-  // Sanitize inputs
-  username = sanitizeInput(username);
-
   try {
-    const users = await readSheet('Users', 'A2:C');
-    const user = users.find(u => u[0] === username);
-    if (!user || !(await bcrypt.compare(password, user[1]))) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    const token = jwt.sign({ username }, process.env.SECRET_KEY, { expiresIn: '1h' });
-    res.cookie('sessionToken', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 3600000, // 1 hour
-      sameSite: 'Strict',
+    // Authenticate with Google Sheets
+    const auth = new google.auth.JWT(
+      process.env.GOOGLE_CLIENT_EMAIL,
+      null,
+      process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      ['https://www.googleapis.com/auth/spreadsheets']
+    );
+
+    const sheets = google.sheets({ version: 'v4', auth });
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEETS_ID,
+      range: 'Users!A:B', // Adjust range if your sheet differs
     });
-    res.json({ username });
+
+    const users = response.data.values || [];
+    const user = users.find(u => u[0] === email && u[1] === password);
+
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    // Successful login (add session or token logic if needed)
+    res.status(200).json({ message: 'Login successful', user: { email } });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
 
 // Logout
 app.post('/api/logout', (req, res) => {
