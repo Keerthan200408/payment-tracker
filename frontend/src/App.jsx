@@ -514,6 +514,66 @@ const App = () => {
     }
   };
 
+  // const importCsv = async (e) => {
+  //   const file = e.target.files[0];
+  //   if (!file) return;
+
+  //   const reader = new FileReader();
+  //   reader.onload = async (event) => {
+  //     const text = event.target.result;
+  //     const rows = text.split('\n').map(row => row.trim()).filter(row => row);
+  //     if (rows.length === 0) {
+  //       alert('CSV file is empty.');
+  //       csvFileInputRef.current.value = '';
+  //       return;
+  //     }
+
+  //     const headers = rows[0].split(',').map(header => header.trim().replace(/\s+/g, ' '));
+  //     const expectedHeaders = ['Client Name', 'Type', 'Amount To Be Paid'];
+  //     const headersMatch = expectedHeaders.every((header, index) => headers[index] === header);
+  //     if (!headersMatch || headers.length !== expectedHeaders.length) {
+  //       alert('CSV file must have headers: Client Name, Type, Amount To Be Paid');
+  //       csvFileInputRef.current.value = '';
+  //       return;
+  //     }
+
+  //     const data = rows.slice(1).map(row => {
+  //       const cols = row.split(',').map(col => col.trim());
+  //       if (cols.length < 3) return null;
+  //       const amount = parseFloat(cols[2]);
+  //       if (isNaN(amount) || amount <= 0) return null;
+  //       return {
+  //         Client_Name: cols[0],
+  //         Type: cols[1],
+  //         Amount_To_Be_Paid: amount,
+  //       };
+  //     }).filter(row => row);
+
+  //     if (data.length === 0) {
+  //       alert('No valid data found in CSV file.');
+  //       csvFileInputRef.current.value = '';
+  //       return;
+  //     }
+
+  //     try {
+  //       console.log('Importing CSV data:', data);
+  //       await axios.post(`${BASE_URL}/import-csv`, data, {
+  //         headers: { Authorization: `Bearer ${sessionToken}` },
+  //       });
+  //       fetchClients(sessionToken);
+  //       fetchPayments(sessionToken);
+  //       alert('CSV data imported successfully!');
+  //       csvFileInputRef.current.value = '';
+  //     } catch (error) {
+  //       console.error('Import CSV error:', error.response?.data?.error || error.message);
+  //       handleSessionError(error);
+  //       alert('Failed to import CSV data: ' + error.message);
+  //       csvFileInputRef.current.value = '';
+  //     }
+  //   };
+  //   reader.readAsText(file);
+  // };
+  // changed
   const importCsv = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -528,23 +588,44 @@ const App = () => {
         return;
       }
 
-      const headers = rows[0].split(',').map(header => header.trim().replace(/\s+/g, ' '));
-      const expectedHeaders = ['Client Name', 'Type', 'Amount To Be Paid'];
-      const headersMatch = expectedHeaders.every((header, index) => headers[index] === header);
-      if (!headersMatch || headers.length !== expectedHeaders.length) {
-        alert('CSV file must have headers: Client Name, Type, Amount To Be Paid');
+      const headers = rows[0].split(',').map(header => header.trim().replace(/\s+/g, ' ').toLowerCase());
+      
+      // Define possible aliases for each required field
+      const fieldAliases = {
+        Client_Name: ['client name', 'clientname', 'name', 'client'],
+        Type: ['type', 'category', 'client type'],
+        Email: ['email', 'e-mail', 'email address'],
+        Amount_To_Be_Paid: ['amount to be paid', 'amount', 'monthly payment', 'payment', 'monthlypayment'],
+      };
+
+      // Map CSV headers to required fields
+      const headerMap = {};
+      Object.keys(fieldAliases).forEach((field) => {
+        const aliasIndex = headers.findIndex(header => fieldAliases[field].includes(header));
+        headerMap[field] = aliasIndex !== -1 ? aliasIndex : -1;
+      });
+
+      // Check for required fields (Email is optional)
+      const requiredFields = ['Client_Name', 'Type', 'Amount_To_Be_Paid'];
+      const missingRequiredFields = requiredFields.filter(field => headerMap[field] === -1);
+      if (missingRequiredFields.length > 0) {
+        alert(`Missing required fields in CSV: ${missingRequiredFields.join(', ')}. Expected fields (or aliases): Client Name, Type, Amount To Be Paid. Email is optional.`);
         csvFileInputRef.current.value = '';
         return;
       }
 
       const data = rows.slice(1).map(row => {
         const cols = row.split(',').map(col => col.trim());
-        if (cols.length < 3) return null;
-        const amount = parseFloat(cols[2]);
-        if (isNaN(amount) || amount <= 0) return null;
+        if (cols.length < headers.length) return null; // Skip rows with insufficient columns
+        const amount = parseFloat(cols[headerMap.Amount_To_Be_Paid] || 0);
+        if (isNaN(amount) || amount <= 0) return null; // Skip invalid amounts
+        const email = headerMap.Email !== -1 ? (cols[headerMap.Email] || '') : '';
+        // Validate email if provided
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null; // Skip rows with invalid email
         return {
-          Client_Name: cols[0],
-          Type: cols[1],
+          Client_Name: cols[headerMap.Client_Name] || 'Unknown Client',
+          Type: cols[headerMap.Type] || 'Unknown Type',
+          Email: email,
           Amount_To_Be_Paid: amount,
         };
       }).filter(row => row);
@@ -567,7 +648,7 @@ const App = () => {
       } catch (error) {
         console.error('Import CSV error:', error.response?.data?.error || error.message);
         handleSessionError(error);
-        alert('Failed to import CSV data: ' + error.message);
+        alert('Failed to import CSV data: ' + (error.response?.data?.error || error.message));
         csvFileInputRef.current.value = '';
       }
     };
@@ -575,42 +656,54 @@ const App = () => {
   };
 
   const updatePayment = async (rowIndex, month, value) => {
-    if (value && isNaN(parseFloat(value))) {
-      alert('Please enter a valid number');
-      return;
+  if (value && isNaN(parseFloat(value))) {
+    alert('Please enter a valid number');
+    return;
+  }
+  const updatedPayments = [...paymentsData];
+  const rowData = updatedPayments[rowIndex];
+  const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+  const monthIndex = months.indexOf(month);
+
+  rowData[month] = value;
+
+  // If a value is entered, set earlier empty months to '0'
+  if (value.trim() !== '') {
+    for (let i = 0; i < monthIndex; i++) {
+      if (!rowData[months[i]] || rowData[months[i]].trim() === '') {
+        rowData[months[i]] = '0';
+      }
     }
-    const updatedPayments = [...paymentsData];
-    const rowData = updatedPayments[rowIndex];
-    const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
-    const monthIndex = months.indexOf(month);
-
-    rowData[month] = value;
-
-    if (value.trim() !== '') {
+  } else {
+    // If the value is cleared, check if any later months have values
+    const hasLaterValues = months.slice(monthIndex + 1).some(m => rowData[m] && rowData[m].trim() !== '');
+    if (!hasLaterValues) {
+      // Clear zeros in earlier months if no later months have values
       for (let i = 0; i < monthIndex; i++) {
-        if (!rowData[months[i]] || rowData[months[i]].trim() === '') {
-          rowData[months[i]] = '0';
+        if (rowData[months[i]] === '0') {
+          rowData[months[i]] = '';
         }
       }
     }
+  }
 
-    const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
-    const activeMonths = months.filter(m => rowData[m] && parseFloat(rowData[m]) >= 0).length;
-    const expectedPayment = amountToBePaid * activeMonths;
-    const totalPayments = months.reduce((sum, m) => sum + (parseFloat(rowData[m]) || 0), 0);
-    rowData.Due_Payment = Math.max(expectedPayment - totalPayments, 0).toFixed(2);
+  const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
+  const activeMonths = months.filter(m => rowData[m] && parseFloat(rowData[m]) >= 0).length;
+  const expectedPayment = amountToBePaid * activeMonths;
+  const totalPayments = months.reduce((sum, m) => sum + (parseFloat(rowData[m]) || 0), 0);
+  rowData.Due_Payment = Math.max(expectedPayment - totalPayments, 0).toFixed(2);
 
-    setPaymentsData(updatedPayments);
-    try {
-      console.log('Saving payments for:', rowData.Client_Name, month, value);
-      await axios.post(`${BASE_URL}/save-payments`, updatedPayments, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      });
-    } catch (error) {
-      console.error('Save payments error:', error.response?.data?.error || error.message);
-      handleSessionError(error);
-    }
-  };
+  setPaymentsData(updatedPayments);
+  try {
+    console.log('Saving payments for:', rowData.Client_Name, month, value);
+    await axios.post(`${BASE_URL}/save-payments`, updatedPayments, {
+      headers: { Authorization: `Bearer ${sessionToken}` },
+    });
+  } catch (error) {
+    console.error('Save payments error:', error.response?.data?.error || error.message);
+    handleSessionError(error);
+  }
+};
 
   return (
     <ErrorBoundary>
@@ -684,7 +777,7 @@ const App = () => {
                     onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
                     className="focus:outline-none"
                   >
-                    <i className="fas fa-user-circle text-2xl"></i>
+                    <i className="fas fa-user-circle text-3xl"></i>
                   </button>
                   {isProfileMenuOpen && (
                     <div className="absolute right-0 mt-2 w-48 bg-white border rounded-lg shadow-lg z-50">

@@ -397,6 +397,43 @@ app.post('/api/save-payments', authenticateToken, async (req, res) => {
 });
 
 // Import CSV
+// app.post('/api/import-csv', authenticateToken, async (req, res) => {
+//   const csvData = req.body;
+//   if (!Array.isArray(csvData)) {
+//     return res.status(400).json({ error: 'CSV data must be an array' });
+//   }
+//   try {
+//     await ensureSheet('Clients', ['User', 'Client_Name', 'Email', 'Type', 'Monthly_Payment']);
+//     await ensureSheet('Payments', ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment']);
+//     let clients = await readSheet('Clients', 'A2:E');
+//     let payments = await readSheet('Payments', 'A2:R');
+//     for (const record of csvData) {
+//       let { Client_Name, Type, Amount_To_Be_Paid } = record;
+//       Client_Name = sanitizeInput(Client_Name || 'Unknown Client');
+//       Type = sanitizeInput(Type || 'Unknown Type');
+//       Amount_To_Be_Paid = parseFloat(Amount_To_Be_Paid);
+//       if (isNaN(Amount_To_Be_Paid) || Amount_To_Be_Paid <= 0) {
+//         continue;
+//       }
+//       const clientExists = clients.some(client => client[0] === req.user.username && client[1] === Client_Name && client[3] === Type);
+//       if (!clientExists) {
+//         await appendSheet('Clients', [[req.user.username, Client_Name, '', Type, Amount_To_Be_Paid]]);
+//         clients.push([req.user.username, Client_Name, '', Type, Amount_To_Be_Paid]);
+//       }
+//       const paymentExists = payments.some(payment => payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type);
+//       if (!paymentExists) {
+//         await appendSheet('Payments', [[req.user.username, Client_Name, Type, Amount_To_Be_Paid, '', '', '', '', '', '', '', '', '', '', '', '', '0']]);
+//         payments.push([req.user.username, Client_Name, Type, Amount_To_Be_Paid, '', '', '', '', '', '', '', '', '', '', '', '', '0']);
+//       }
+//     }
+//     res.status(200).json({ message: 'CSV data imported successfully' });
+//   } catch (error) {
+//     console.error('Import CSV error:', error);
+//     res.status(500).json({ error: 'Internal server error' });
+//   }
+// });
+
+// Import CSV
 app.post('/api/import-csv', authenticateToken, async (req, res) => {
   const csvData = req.body;
   if (!Array.isArray(csvData)) {
@@ -408,17 +445,21 @@ app.post('/api/import-csv', authenticateToken, async (req, res) => {
     let clients = await readSheet('Clients', 'A2:E');
     let payments = await readSheet('Payments', 'A2:R');
     for (const record of csvData) {
-      let { Client_Name, Type, Amount_To_Be_Paid } = record;
+      let { Client_Name, Type, Email, Amount_To_Be_Paid } = record;
       Client_Name = sanitizeInput(Client_Name || 'Unknown Client');
       Type = sanitizeInput(Type || 'Unknown Type');
+      Email = Email ? sanitizeInput(Email) : '';
       Amount_To_Be_Paid = parseFloat(Amount_To_Be_Paid);
       if (isNaN(Amount_To_Be_Paid) || Amount_To_Be_Paid <= 0) {
         continue;
       }
+      if (Email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(Email)) {
+        continue; // Skip rows with invalid email
+      }
       const clientExists = clients.some(client => client[0] === req.user.username && client[1] === Client_Name && client[3] === Type);
       if (!clientExists) {
-        await appendSheet('Clients', [[req.user.username, Client_Name, '', Type, Amount_To_Be_Paid]]);
-        clients.push([req.user.username, Client_Name, '', Type, Amount_To_Be_Paid]);
+        await appendSheet('Clients', [[req.user.username, Client_Name, Email, Type, Amount_To_Be_Paid]]);
+        clients.push([req.user.username, Client_Name, Email, Type, Amount_To_Be_Paid]);
       }
       const paymentExists = payments.some(payment => payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type);
       if (!paymentExists) {
