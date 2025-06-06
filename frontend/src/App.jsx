@@ -372,7 +372,7 @@ import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-d
 import axios from 'axios';
 import SignInPage from './components/SignInPage';
 import HomePage from './components/HomePage';
-import AddClient from './components/AddClient';
+import AddClient from './components/AddClientPage';
 import ImportCSV from './components/ImportCSV';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
