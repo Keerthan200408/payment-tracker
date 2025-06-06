@@ -11,46 +11,83 @@
   <link href="https://cdn.jsdelivr.net/npm/tailwind.min.css@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
   <style>
-    nav {
-      background-color: #ffffff;
-      width: 16rem;
-      padding: 1rem;
-      position: fixed;
-      top: 0;
-      left: 0;
-      height: 100%;
-      border-right: 1px solid #e5e7eb;
-      z-index: 50;
-    }
-    .payment-full {
-      background-color: #d1fae5 !important;
-    }
-    .payment-partial {
-      background-color: #ffedd5 !important;
-    }
-    .payment-none {
-      background-color: #fee2e2 !important;
-    }
-    .manual-entry-cell {
-      background-color: #eff6ff !important;
-    }
-    .table-container {
-      max-height: 60vh;
-      overflow-y: auto;
-      width: 100%;
-    }
-    .table-container table {
-      min-width: 1200px;
-    }
-    .fixed-heading {
-      position: sticky;
-      top: 0;
-      background-color: #f3f4f6;
-      z-index: 40;
-      padding: 0.5rem 0;
-      margin-bottom: 1rem;
-    }
-  </style>
+  /* Ensure navigation bar is fixed and doesn't overlap content */
+  nav {
+    background-color: #ffffff;
+    width: 16rem;
+    padding: 1rem;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    border-right: 1px solid #e5e7eb;
+    z-index: 50;
+    box-sizing: border-box;
+  }
+
+  /* Payment status background colors with high specificity */
+  .payment-full {
+    background-color: #d1fae5 !important; /* Green for fully paid */
+  }
+  .payment-partial {
+    background-color: #ffedd5 !important; /* Orange for partially paid */
+  }
+  .payment-none {
+    background-color: #fee2e2 !important; /* Red for unpaid */
+  }
+  .manual-entry-cell {
+    background-color: #eff6ff !important; /* Blue for manual entry cells */
+  }
+
+  /* Table container with scrollable content */
+  .table-container {
+    max-height: 60vh;
+    overflow-y: auto;
+    overflow-x: auto; /* Added to handle wide tables */
+    width: 100%;
+    position: relative;
+    box-sizing: border-box;
+  }
+
+  /* Ensure table width is responsive but respects min-width */
+  .table-container table {
+    width: 100%;
+    min-width: 1200px; /* Keeps table wide for content */
+    border-collapse: collapse;
+  }
+
+  /* Fixed heading for table */
+  .fixed-heading {
+    position: sticky;
+    top: 0;
+    background-color: #f3f4f6;
+    z-index: 40;
+    padding: 0.5rem 0;
+    margin-bottom: 1rem;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Ensure inputs in table cells are styled consistently */
+  .month-input {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #d1d5db; /* Tailwind's gray-300 */
+    border-radius: 0.375rem; /* Tailwind's rounded-md */
+    text-align: center;
+    box-sizing: border-box;
+  }
+
+  /* Prevent context menu from being cut off */
+  .context-menu {
+    position: absolute;
+    z-index: 100;
+    background-color: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.375rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+</style>
 </head>
 <body className="bg-gray-50">
   <div id="root"></div>
@@ -730,13 +767,13 @@
           </div>
 
           {contextTargetRow && (
-            <div
-              className="absolute bg-white border rounded-lg shadow-lg z-50"
-              style={{ left: contextTargetRow.x, top: contextTargetRow.y }}
-            >
-              <button onClick={deleteRow} className="w-full text-left p-2 hover:bg-gray-200">Delete This Row</button>
-            </div>
-          )}
+  <div
+    className="context-menu"
+    style={{ left: contextTargetRow.x, top: contextTargetRow.y }}
+  >
+    <button onClick={deleteRow} className="w-full text-left p-2 hover:bg-gray-200">Delete This Row</button>
+  </div>
+)}
         </div>
       );
     };
