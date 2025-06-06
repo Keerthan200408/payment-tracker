@@ -418,9 +418,15 @@ nav.-translate-x-full {
           localStorage.setItem('sessionToken', response.data.sessionToken);
           setPage('home');
         } catch (error) {
-          console.error('Login error:', error.response?.data);
-          alert(error.response?.data?.error || 'Error logging in');
-        }
+  console.error('Login error:', {
+    message: error.message,
+    response: error.response?.data,
+    status: error.response?.status,
+    headers: error.response?.headers,
+    config: error.config
+  });
+  alert(error.response?.data?.error || `Error logging in: ${error.message}`);
+}
       };
 
       const handleSignup = async () => {
@@ -440,10 +446,17 @@ nav.-translate-x-full {
           setUsername('');
           setPassword('');
           setGmailId('');
-        } catch (error) {
-          console.error('Signup error:', error.response?.data);
-          alert(error.response?.data?.error || 'Error signing up');
-        }
+        // In handleSignup
+} catch (error) {
+  console.error('Signup error:', {
+    message: error.message,
+    response: error.response?.data,
+    status: error.response?.status,
+    headers: error.response?.headers,
+    config: error.config
+  });
+  alert(error.response?.data?.error || `Error signing up: ${error.message}`);
+}
       };
 
       return (
