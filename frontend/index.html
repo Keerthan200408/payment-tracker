@@ -8,86 +8,41 @@
   <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.22.5/babel.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/axios@1.4.0/dist/axios.min.js"></script>
-  <link href="https://cdn.jsdelivr.net/npm/tailwind.min.css@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
   <style>
-  /* Ensure navigation bar is fixed and doesn't overlap content */
-  nav {
-    background-color: #ffffff;
-    width: 16rem;
-    padding: 1rem;
-    position: fixed;
-    top: 0;
-    left: 0;
-    height: 100vh;
-    border-right: 1px solid #e5e7eb;
-    z-index: 50;
-    box-sizing: border-box;
-  }
-
-  /* Payment status background colors with high specificity */
-  .payment-full {
-    background-color: #d1fae5 !important; /* Green for fully paid */
-  }
-  .payment-partial {
-    background-color: #ffedd5 !important; /* Orange for partially paid */
-  }
-  .payment-none {
-    background-color: #fee2e2 !important; /* Red for unpaid */
-  }
-  .manual-entry-cell {
-    background-color: #eff6ff !important; /* Blue for manual entry cells */
-  }
-
-  /* Table container with scrollable content */
-  .table-container {
-    max-height: 60vh;
-    overflow-y: auto;
-    overflow-x: auto; /* Added to handle wide tables */
-    width: 100%;
-    position: relative;
-    box-sizing: border-box;
-  }
-
-  /* Ensure table width is responsive but respects min-width */
-  .table-container table {
-    width: 100%;
-    min-width: 1200px; /* Keeps table wide for content */
-    border-collapse: collapse;
-  }
-
-  /* Fixed heading for table */
-  .fixed-heading {
-    position: sticky;
-    top: 0;
-    background-color: #f3f4f6;
-    z-index: 40;
-    padding: 0.5rem 0;
-    margin-bottom: 1rem;
-    width: 100%;
-    box-sizing: border-box;
-  }
-
-  /* Ensure inputs in table cells are styled consistently */
-  .month-input {
-    width: 100%;
-    padding: 0.5rem;
-    border: 1px solid #d1d5db; /* Tailwind's gray-300 */
-    border-radius: 0.375rem; /* Tailwind's rounded-md */
-    text-align: center;
-    box-sizing: border-box;
-  }
-
-  /* Prevent context menu from being cut off */
-  .context-menu {
-    position: absolute;
-    z-index: 100;
-    background-color: #ffffff;
-    border: 1px solid #e5e7eb;
-    border-radius: 0.375rem;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  }
-</style>
+    nav {
+      background-color: #ffffff;
+      width: 16rem;
+      padding: 1rem;
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100%;
+      border-right: 1px solid #e5e7eb;
+      z-index: 50;
+    }
+    .payment-full {
+      background-color: #d1fae5 !important;
+    }
+    .payment-partial {
+      background-color: #ffedd5 !important;
+    }
+    .payment-none {
+      background-color: #fee2e2 !important;
+    }
+    .manual-entry-cell {
+      background-color: #eff6ff !important;
+    }
+    .table-container {
+      max-height: 60vh;
+      overflow-y: auto;
+      width: 100%;
+    }
+    .table-container table {
+      min-width: 1200px;
+    }
+  </style>
 </head>
 <body className="bg-gray-50">
   <div id="root"></div>
@@ -235,15 +190,12 @@
 
           const data = rows.map(row => {
             const cols = row.split(',').map(col => col.trim());
-            if (cols.length < 4) return null;
-            const amount = parseFloat(cols[3]);
+            if (cols.length < 3) return null;
+            const amount = parseFloat(cols[2]);
             if (isNaN(amount) || amount <= 0) return null;
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(cols[2])) return null;
             return {
               Client_Name: cols[0],
               Type: cols[1],
-              Email: cols[2],
               Amount_To_Be_Paid: amount
             };
           }).filter(row => row);
@@ -312,8 +264,11 @@
               </nav>
 
               <main className="flex-1 p-6 overflow-y-auto" style={{ marginLeft: '16rem' }}>
-                <header className="mb-6">
-                  {/* Removed bell and profile icons */}
+                <header className="flex items-center justify-between mb-6">
+                  <div className="flex items-center space-x-4">
+                    <i className="fas fa-bell"></i>
+                    <i className="fas fa-user-circle text-2xl"></i>
+                  </div>
                 </header>
 
                 {page === 'home' && (
@@ -471,7 +426,7 @@
                 <label className="block mb-1">Gmail ID</label>
                 <input type="email" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={gmailId} onChange={e => setGmailId(e.target.value)} placeholder="Enter Gmail ID" />
               </div>
-              <div className="flex justify-end gap-2">
+'opposition: <div className="flex justify-end gap-2">
                 <button onClick={() => setIsSignup(false)} className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600">
                   Cancel
                 </button>
@@ -609,8 +564,8 @@
 
       return (
         <div>
-          <h1 className="text-2xl font-semibold fixed-heading">Client Payment Tracker</h1>
-          <div className="flex justify-between items-center mb-4 pt-12">
+          <h1 className="text-2xl font-semibold mb-4">Client Payment Tracker</h1>
+          <div className="flex justify-between items-center mb-4">
             <div className="flex space-x-2">
               <button onClick={() => setPage('addClient')} className="bg-blue-800 text-white px-4 py-2 rounded-lg hover:bg-blue-900 flex items-center">
                 <i className="fas fa-user-plus mr-2"></i> Add Client
@@ -767,13 +722,13 @@
           </div>
 
           {contextTargetRow && (
-  <div
-    className="context-menu"
-    style={{ left: contextTargetRow.x, top: contextTargetRow.y }}
-  >
-    <button onClick={deleteRow} className="w-full text-left p-2 hover:bg-gray-200">Delete This Row</button>
-  </div>
-)}
+            <div
+              className="absolute bg-white border rounded-lg shadow-lg z-50"
+              style={{ left: contextTargetRow.x, top: contextTargetRow.y }}
+            >
+              <button onClick={deleteRow} className="w-full text-left p-2 hover:bg-gray-200">Delete This Row</button>
+            </div>
+          )}
         </div>
       );
     };
@@ -892,8 +847,8 @@
 
       return (
         <div>
-          <h1 className="text-2xl font-semibold fixed-heading">Clients</h1>
-          <div className="flex justify-between items-center mb-4 pt-12">
+          <h1 className="text-2xl font-semibold mb-4">Clients</h1>
+          <div className="flex justify-between items-center mb-4">
             <div className="flex space-x-2">
               <button onClick={() => setPage('addClient')} className="bg-blue-800 text-white px-4 py-2 rounded-lg hover:bg-blue-900 flex items-center">
                 <i className="fas fa-user-plus mr-2"></i> Add Client
@@ -914,6 +869,9 @@
             <table className="w-full">
               <thead>
                 <tr className="bg-gray-100 text-left">
+                  <th className="p-2">
+                    <input type="checkbox" />
+                  </th>
                   <th className="p-2">Client</th>
                   <th className="p-2">Email</th>
                   <th className="p-2">Monthly Amount</th>
@@ -924,6 +882,9 @@
               <tbody>
                 {paginatedData.map((client, index) => (
                   <tr key={index} className="border-t">
+                    <td className="p-2">
+                      <input type="checkbox" />
+                    </td>
                     <td className="p-2 flex items-center">
                       <i className="fas fa-user-circle mr-2"></i>
                       {client.Client_Name}
@@ -990,8 +951,8 @@
 
       return (
         <div>
-          <h1 className="text-2xl font-semibold fixed-heading">Payments</h1>
-          <div className="table-container bg-white rounded-lg shadow pt-12">
+          <h1 className="text-2xl font-semibold mb-4">Payments</h1>
+          <div className="table-container bg-white rounded-lg shadow">
             <table className="w-full">
               <thead>
                 <tr className="bg-gray-100 text-left">
