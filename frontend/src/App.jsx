@@ -474,7 +474,7 @@ export default App; */
    import axios from 'axios';
    import SignInPage from './components/SignInPage';
    import HomePage from './components/HomePage';
-   import AddClient from './components/AddClientPage';
+   import AddClient from './components/AddClient';
    import ImportCSV from './components/ImportCSV';
 
    const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
@@ -575,4 +575,4 @@ export default App; */
    }
 
    export default App;
-   
+  
