@@ -1,13 +1,13 @@
-/* import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import SignInPage from './SignInPage.jsx';
-import HomePage from './HomePage.jsx';
-import AddClientPage from './AddClientPage.jsx';
-import ClientsPage from './ClientsPage.jsx';
-import PaymentsPage from './PaymentsPage.jsx';
-import ErrorBoundary from './ErrorBoundary.jsx';
+import SignInPage from './components/SignInPage.jsx';
+import HomePage from './components/HomePage.jsx';
+import AddClientPage from './components/AddClientPage.jsx';
+import ClientsPage from './components/ClientsPage.jsx';
+import PaymentsPage from './components/PaymentsPage.jsx';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+const BASE_URL = 'https://payment-tracker-aswa.onrender.com/api';
 
 const App = () => {
   const [sessionToken, setSessionToken] = useState(null);
@@ -15,78 +15,93 @@ const App = () => {
   const [page, setPage] = useState('signIn');
   const [clientsData, setClientsData] = useState([]);
   const [paymentsData, setPaymentsData] = useState([]);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [contextTargetRow, setContextTargetRow] = useState(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [contextMenu, setContextMenu] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [monthFilter, setMonthFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [editClient, setEditClient] = useState(null);
   const csvFileInputRef = useRef(null);
 
+  // Initialize axios with default headers
+  axios.defaults.withCredentials = true;
+
   useEffect(() => {
     const storedUser = localStorage.getItem('currentUser');
     const storedToken = localStorage.getItem('sessionToken');
     if (storedUser && storedToken) {
+      console.log('Restoring session for user:', storedUser);
       setCurrentUser(storedUser);
       setSessionToken(storedToken);
+      setPage('home');
       fetchClients(storedToken);
       fetchPayments(storedToken);
-      setPage('home');
     }
   }, []);
 
   const fetchClients = async (token) => {
     try {
-      const response = await axios.get(`${BASE_URL}/api/get-clients`, {
+      console.log('Fetching clients with token:', token.substring(0, 10) + '...');
+      const response = await axios.get(`${BASE_URL}/get-clients`, {
         headers: { Authorization: `Bearer ${token}` },
-        withCredentials: true,
       });
+      console.log('Clients fetched:', response.data);
       setClientsData(response.data);
     } catch (error) {
-      console.error('Error fetching clients:', error);
+      console.error('Fetch clients error:', error.response?.data?.error || error.message);
       handleSessionError(error);
     }
   };
 
   const fetchPayments = async (token) => {
     try {
-      const response = await axios.get(`${BASE_URL}/api/get-payments`, {
+      console.log('Fetching payments with token:', token.substring(0, 10) + '...');
+      const response = await axios.get(`${BASE_URL}/get-payments`, {
         headers: { Authorization: `Bearer ${token}` },
-        withCredentials: true,
       });
+      console.log('Payments fetched:', response.data);
       setPaymentsData(response.data);
     } catch (error) {
-      console.error('Error fetching payments:', error);
+      console.error('Fetch payments error:', error.response?.data?.error || error.message);
       handleSessionError(error);
     }
   };
 
   const handleSessionError = (error) => {
-    if (error.response && error.response.status === 401) {
+    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+      console.log('Session invalid, logging out');
       logout();
+    } else {
+      console.log('Non-auth error:', error.message);
     }
   };
 
   const logout = () => {
+    console.log('Logging out user:', currentUser);
     setCurrentUser(null);
     setSessionToken(null);
     localStorage.removeItem('currentUser');
     localStorage.removeItem('sessionToken');
+    localStorage.removeItem('gmailId');
     setClientsData([]);
     setPaymentsData([]);
     setPage('signIn');
   };
 
-  const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
+  const toggleSidebar = () => {
+    setIsSidebarOpen(!isSidebarOpen);
+  };
 
   const handleContextMenu = (e, rowIndex) => {
     e.preventDefault();
     const x = Math.min(e.pageX, window.innerWidth - 150);
     const y = Math.min(e.pageY, window.innerHeight - 100);
-    setContextTargetRow({ rowIndex, x, y });
+    setContextMenu({ rowIndex, x, y });
   };
 
-  const hideContextMenu = () => setContextTargetRow(null);
+  const hideContextMenu = () => {
+    setContextMenu(null);
+  };
 
   const deleteRow = async () => {
     if (paymentsData.length <= 1) {
@@ -94,18 +109,18 @@ const App = () => {
       hideContextMenu();
       return;
     }
-    const rowData = paymentsData[contextTargetRow.rowIndex];
+    const rowData = paymentsData[contextMenu.rowIndex];
     try {
-      await axios.delete(`${BASE_URL}/api/delete-client`, {
+      console.log('Deleting row:', rowData.Client_Name, rowData.Type);
+      await axios.delete(`${BASE_URL}/delete-client`, {
         headers: { Authorization: `Bearer ${sessionToken}` },
-        withCredentials: true,
         data: { Client_Name: rowData.Client_Name, Type: rowData.Type },
       });
-      setPaymentsData(paymentsData.filter((_, i) => i !== contextTargetRow.rowIndex));
+      setPaymentsData(paymentsData.filter((_, i) => i !== contextMenu.rowIndex));
       setClientsData(clientsData.filter(client => client.Client_Name !== rowData.Client_Name || client.Type !== rowData.Type));
       hideContextMenu();
     } catch (error) {
-      console.error('Error deleting row:', error);
+      console.error('Delete row error:', error.response?.data?.error || error.message);
       handleSessionError(error);
     }
   };
@@ -152,16 +167,16 @@ const App = () => {
       }
 
       try {
-        await axios.post(`${BASE_URL}/api/import-csv`, data, {
+        console.log('Importing CSV data:', data);
+        await axios.post(`${BASE_URL}/import-csv`, data, {
           headers: { Authorization: `Bearer ${sessionToken}` },
-          withCredentials: true,
         });
         fetchClients(sessionToken);
         fetchPayments(sessionToken);
         alert('CSV data imported successfully!');
         csvFileInputRef.current.value = '';
       } catch (error) {
-        console.error('Error importing CSV:', error);
+        console.error('Import CSV error:', error.response?.data?.error || error.message);
         handleSessionError(error);
         alert('Failed to import CSV data: ' + error.message);
         csvFileInputRef.current.value = '';
@@ -198,12 +213,12 @@ const App = () => {
 
     setPaymentsData(updatedPayments);
     try {
-      await axios.post(`${BASE_URL}/api/save-payments`, updatedPayments, {
+      console.log('Saving payments for:', rowData.Client_Name, month, value);
+      await axios.post(`${BASE_URL}/save-payments`, updatedPayments, {
         headers: { Authorization: `Bearer ${sessionToken}` },
-        withCredentials: true,
       });
     } catch (error) {
-      console.error('Error saving payments:', error);
+      console.error('Save payments error:', error.response?.data?.error || error.message);
       handleSessionError(error);
     }
   };
@@ -290,7 +305,6 @@ const App = () => {
                 onClick={toggleSidebar}
               ></div>
             )}
-
             <main
               className="flex-1 p-6 overflow-y-auto transition-all duration-300"
               style={{ marginLeft: isSidebarOpen ? '16rem' : '0' }}
@@ -306,7 +320,6 @@ const App = () => {
                   <i className="fas fa-user-circle text-2xl"></i>
                 </div>
               </header>
-
               {page === 'home' && (
                 <HomePage
                   paymentsData={paymentsData}
@@ -319,7 +332,7 @@ const App = () => {
                   setStatusFilter={setStatusFilter}
                   updatePayment={updatePayment}
                   handleContextMenu={handleContextMenu}
-                  contextTargetRow={contextTargetRow}
+                  contextMenu={contextMenu}
                   hideContextMenu={hideContextMenu}
                   deleteRow={deleteRow}
                   setPage={setPage}
@@ -364,219 +377,4 @@ const App = () => {
   );
 };
 
-export default App; */
-
-
-// import { useState, useEffect } from 'react';
-// import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
-// import axios from 'axios';
-// import SignInPage from './components/SignInPage';
-// import HomePage from './components/HomePage';
-// import AddClient from './components/AddClientPage';
-// import ImportCSV from './components/ImportCSV';
-
-// const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
-
-// function App() {
-//   const [currentUser, setCurrentUser] = useState(localStorage.getItem('currentUser') || '');
-//   const [sessionToken, setSessionToken] = useState(localStorage.getItem('sessionToken') || '');
-//   const [gmailId, setGmailId] = useState('');
-//   const [showProfileMenu, setShowProfileMenu] = useState(false);
-
-//   useEffect(() => {
-//     if (currentUser && sessionToken) {
-//       axios.get(`${BASE_URL}/api/login`, { withCredentials: true })
-//         .then(response => setGmailId(response.data.gmailId))
-//         .catch(() => {
-//           setCurrentUser('');
-//           setSessionToken('');
-//           localStorage.removeItem('currentUser');
-//           localStorage.removeItem('sessionToken');
-//         });
-//     }
-//   }, [currentUser, sessionToken]);
-
-//   const handleLogout = async () => {
-//     try {
-//       await axios.post(`${BASE_URL}/api/logout`, {}, { withCredentials: true });
-//       setCurrentUser('');
-//       setSessionToken('');
-//       setGmailId('');
-//       localStorage.removeItem('currentUser');
-//       localStorage.removeItem('sessionToken');
-//     } catch (error) {
-//       console.error('Logout error:', error);
-//     }
-//   };
-
-//   return (
-//     <Router>
-//       <div className="flex min-h-screen">
-//         {currentUser && (
-//           <aside className="w-64 bg-gray-800 text-white fixed top-0 left-0 h-full z-10">
-//             <div className="p-4 text-2xl font-bold">Payment Tracker</div>
-//             <nav className="mt-4">
-//               <ul>
-//                 <li className="p-4 hover:bg-gray-700"><a href="/home">Home</a></li>
-//                 <li className="p-4 hover:bg-gray-700"><a href="/add-client">Add Client</a></li>
-//                 <li className="p-4 hover:bg-gray-700"><a href="/import-csv">Import CSV</a></li>
-//               </ul>
-//             </nav>
-//           </aside>
-//         )}
-//         <div className={`flex-1 ${currentUser ? 'ml-64' : ''}`}>
-//           {currentUser && (
-//             <header className="bg-white shadow p-4 flex justify-end fixed top-0 right-0 left-64 z-10">
-//               <div className="relative">
-//                 <button
-//                   onClick={() => setShowProfileMenu(!showProfileMenu)}
-//                   className="text-gray-600 hover:text-gray-800"
-//                 >
-//                   {currentUser}
-//                 </button>
-//                 {showProfileMenu && (
-//                   <div className="absolute right-0 mt-2 w-48 bg-white border rounded shadow-lg">
-//                     <div className="p-4">
-//                       <p><strong>Username:</strong> {currentUser}</p>
-//                       <p><strong>Gmail ID:</strong> {gmailId}</p>
-//                     </div>
-//                     <button
-//                       onClick={handleLogout}
-//                       className="w-full text-left p-4 text-red-600 hover:bg-gray-100"
-//                     >
-//                       Logout
-//                     </button>
-//                   </div>
-//                 )}
-//               </div>
-//             </header>
-//           )}
-//           <main className="pt-16">
-//             <Routes>
-//               <Route path="/" element={currentUser ? <Navigate to="/home" /> : <SignInPage setSessionToken={setSessionToken} setCurrentUser={setCurrentUser} setPage={() => {}} />} />
-//               <Route path="/home" element={currentUser ? <HomePage /> : <Navigate to="/" />} />
-//               <Route path="/add-client" element={currentUser ? <AddClient /> : <Navigate to="/" />} />
-//               <Route path="/import-csv" element={currentUser ? <ImportCSV /> : <Navigate to="/" />} />
-//             </Routes>
-//           </main>
-//         </div>
-//       </div>
-//     </Router>
-//   );
-// }
-
-// export default App;
-
-
-
-  import { useState, useEffect } from 'react';
-  import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
-  import axios from 'axios';
-  import SignInPage from './components/SignInPage';
-  import HomePage from './components/HomePage';
-  import AddClientPage from './components/AddClientPage';
-  import ImportCSV from './components/ImportCSV';
-
-  const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
-
-  function App() {
-    const [currentUser, setCurrentUser] = useState(localStorage.getItem('currentUser') || '');
-    const [sessionToken, setSessionToken] = useState(localStorage.getItem('sessionToken') || '');
-    const [gmailId, setGmailId] = useState(localStorage.getItem('gmailId') || '');
-    const [showProfileMenu, setShowProfileMenu] = useState(false);
-
-    useEffect(() => {
-      if (currentUser && sessionToken) {
-        console.log('Verifying session with token:', sessionToken);
-        axios.get(`${BASE_URL}/api/get-clients`, { withCredentials: true })
-          .then(response => {
-            console.log('Session valid, clients:', response.data);
-          })
-          .catch(error => {
-            console.error('Session verification error:', error.response?.data?.error || error.message);
-            if (error.response?.status === 401 || error.response?.status === 403) {
-              console.log('Invalid or expired token, logging out');
-              setCurrentUser('');
-              setSessionToken('');
-              setGmailId('');
-              localStorage.removeItem('currentUser');
-              localStorage.removeItem('sessionToken');
-              localStorage.removeItem('gmailId');
-            } else {
-              console.log('Non-auth error, keeping session');
-            }
-          });
-      }
-    }, [currentUser, sessionToken]);
-
-    const handleLogout = async () => {
-      try {
-        await axios.post(`${BASE_URL}/api/logout`, {}, { withCredentials: true });
-        setCurrentUser('');
-        setSessionToken('');
-        setGmailId('');
-        localStorage.removeItem('currentUser');
-        localStorage.removeItem('sessionToken');
-        localStorage.removeItem('gmailId');
-      } catch (error) {
-        console.error('Logout error:', error);
-      }
-    };
-
-    return (
-      <Router>
-        <div className="flex min-h-screen">
-          {currentUser && (
-            <aside className="w-64 bg-gray-800 text-white fixed top-0 left-0 h-full z-10">
-              <div className="p-4 text-2xl font-bold">Payment Tracker</div>
-              <nav className="mt-4">
-                <ul>
-                  <li className="p-4 hover:bg-gray-700"><a href="/home">Home</a></li>
-                  <li className="p-4 hover:bg-gray-700"><a href="/add-client">Add Client</a></li>
-                  <li className="p-4 hover:bg-gray-700"><a href="/import-csv">Import CSV</a></li>
-                </ul>
-              </nav>
-            </aside>
-          )}
-          <div className={`flex-1 ${currentUser ? 'ml-64' : ''}`}>
-            {currentUser && (
-              <header className="bg-white shadow p-4 flex justify-end fixed top-0 right-0 left-64 z-10">
-                <div className="relative">
-                  <button
-                    onClick={() => setShowProfileMenu(!showProfileMenu)}
-                    className="text-gray-600 hover:text-gray-800"
-                  >
-                    {currentUser}
-                  </button>
-                  {showProfileMenu && (
-                    <div className="absolute right-0 mt-2 w-48 bg-white border rounded shadow-lg">
-                      <div className="p-4">
-                        <p><strong>Username:</strong> {currentUser}</p>
-                        <p><strong>Gmail ID:</strong> {gmailId}</p>
-                      </div>
-                      <button
-                        onClick={handleLogout}
-                        className="w-full text-left p-4 text-red-600 hover:bg-gray-100"
-                      >
-                        Logout
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </header>
-            )}
-            <main className="pt-16">
-              <Routes>
-                <Route path="/" element={currentUser ? <Navigate to="/home" /> : <SignInPage setSessionToken={setSessionToken} setCurrentUser={setCurrentUser} />} />
-                <Route path="/home" element={currentUser ? <HomePage /> : <Navigate to="/" />} />
-                <Route path="/add-client" element={currentUser ? <AddClientPage /> : <Navigate to="/" />} />
-                <Route path="/import-csv" element={currentUser ? <ImportCSV /> : <Navigate to="/" />} />
-              </Routes>
-            </main>
-          </div>
-        </div>
-      </Router>
-    );
-  }
-
-  export default App;
+export default App;
