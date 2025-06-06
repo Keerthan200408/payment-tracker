@@ -1,3 +1,4 @@
+
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
@@ -246,7 +247,9 @@ app.get('/api/get-clients', authenticateToken, async (req, res) => {
       Client_Name: client[1],
       Email: client[2] || '',
       Type: client[3],
-      monthly_payment: parseFloat(client[4]) || 0,
+      // monthly_payment: parseFloat(client[4]) || 0,
+      // changed
+      Amount_To_Be_Paid: parseFloat(client[4]) || 0,
     })));
   } catch (error) {
     console.error('Get clients error:', error);
@@ -278,45 +281,6 @@ app.post('/api/add-client', authenticateToken, async (req, res) => {
     res.status(201).json({ message: 'Client added successfully' });
   } catch (error) {
     console.error('Add client error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Update Client
-app.put('/api/update-client', authenticateToken, async (req, res) => {
-  let { clientName, email, type, monthlyPayment, Old_Client_Name, Old_Type } = req.body;
-  if (!clientName || !type || !monthlyPayment || !Old_Client_Name || !Old_Type) {
-    return res.status(400).json({ error: 'All required fields must be provided' });
-  }
-  clientName = sanitizeInput(clientName);
-  type = sanitizeInput(type);
-  Old_Client_Name = sanitizeInput(Old_Client_Name);
-  Old_Type = sanitizeInput(Old_Type);
-  email = email ? sanitizeInput(email) : '';
-  const paymentValue = parseFloat(monthlyPayment);
-  if (isNaN(paymentValue) || paymentValue <= 0) {
-    return res.status(400).json({ error: 'Monthly payment must be a positive number' });
-  }
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return res.status(400).json({ error: 'Invalid email address' });
-  }
-  try {
-    await ensureSheet('Clients', ['User', 'Client_Name', 'Email', 'Type', 'Monthly_Payment']);
-    await ensureSheet('Payments', ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment']);
-    let clients = await readSheet('Clients', 'A2:E');
-    let payments = await readSheet('Payments', 'A2:R');
-    const clientIndex = clients.findIndex(client => client[0] === req.user.username && client[1] === Old_Client_Name && client[3] === Old_Type);
-    const paymentIndex = payments.findIndex(payment => payment[0] === req.user.username && payment[1] === Old_Client_Name && payment[2] === Old_Type);
-    if (clientIndex === -1 || paymentIndex === -1) {
-      return res.status(404).json({ error: 'Client not found' });
-    }
-    clients[clientIndex] = [req.user.username, clientName, email, type, paymentValue];
-    payments[paymentIndex] = [req.user.username, clientName, type, paymentValue, ...payments[paymentIndex].slice(4, 17)];
-    await writeSheet('Clients', 'A2:E', clients);
-    await writeSheet('Payments', 'A2:R', payments);
-    res.json({ message: 'Client updated successfully' });
-  } catch (error) {
-    console.error('Update client error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -465,6 +429,48 @@ app.post('/api/import-csv', authenticateToken, async (req, res) => {
     res.status(200).json({ message: 'CSV data imported successfully' });
   } catch (error) {
     console.error('Import CSV error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update Client
+app.put('/api/update-client', authenticateToken, async (req, res) => {
+  const { oldClient, newClient } = req.body;
+  if (!oldClient || !newClient || !oldClient.Client_Name || !oldClient.Type || !newClient.Client_Name || !newClient.Type || !newClient.Amount_To_Be_Paid) {
+    return res.status(400).json({ error: 'All required fields must be provided' });
+  }
+  let { Client_Name: oldClientName, Type: oldType } = oldClient;
+  let { Client_Name: newClientName, Type: newType, Amount_To_Be_Paid: newAmount } = newClient;
+  oldClientName = sanitizeInput(oldClientName);
+  oldType = sanitizeInput(oldType);
+  newClientName = sanitizeInput(newClientName);
+  newType = sanitizeInput(newType);
+  const paymentValue = parseFloat(newAmount);
+  if (isNaN(paymentValue) || paymentValue <= 0) {
+    return res.status(400).json({ error: 'Amount to be paid must be a positive number' });
+  }
+  try {
+    await ensureSheet('Clients', ['User', 'Client_Name', 'Email', 'Type', 'Monthly_Payment']);
+    await ensureSheet('Payments', ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment']);
+    let clients = await readSheet('Clients', 'A2:E');
+    let payments = await readSheet('Payments', 'A2:R');
+    const clientIndex = clients.findIndex(client => client[0] === req.user.username && client[1] === oldClientName && client[3] === oldType);
+    const paymentIndex = payments.findIndex(payment => payment[0] === req.user.username && payment[1] === oldClientName && payment[2] === oldType);
+    if (clientIndex === -1 || paymentIndex === -1) {
+      return res.status(404).json({ error: 'Client not found' });
+    }
+    // Preserve email from existing client record
+    const email = clients[clientIndex][2] || '';
+    // Preserve monthly payment data
+    const monthlyPayments = payments[paymentIndex].slice(4, 16); // January to December
+    const duePayment = payments[paymentIndex][16] || '0'; // Due_Payment
+    clients[clientIndex] = [req.user.username, newClientName, email, newType, paymentValue];
+    payments[paymentIndex] = [req.user.username, newClientName, newType, paymentValue, ...monthlyPayments, duePayment];
+    await writeSheet('Clients', 'A2:E', clients);
+    await writeSheet('Payments', 'A2:R', payments);
+    res.json({ message: 'Client updated successfully' });
+  } catch (error) {
+    console.error('Update client error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
