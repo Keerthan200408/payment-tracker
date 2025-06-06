@@ -201,8 +201,9 @@ app.delete('/api/delete-client', authenticateToken, async (req, res) => {
     clients = clients.filter(client => !(client[0] === req.user.username && client[1] === Client_Name && client[3] === Type));
     payments = payments.filter(payment => !(payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type));
 
-    await writeSheet('Clients', 'A2:F', clients);
-    await writeSheet('Payments', 'A2:R', payments);
+    await writeSheet('Clients', 'A2:F', clients.length > 0 ? clients : [['']]);
+    await writeSheet('Payments', 'A2:R', payments.length > 0 ? payments : [['']]);
+
     res.json({ message: 'Client deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -213,26 +214,23 @@ app.delete('/api/delete-client', authenticateToken, async (req, res) => {
 app.get('/api/get-payments', authenticateToken, async (req, res) => {
   try {
     const payments = await readSheet('Payments', 'A2:R');
-    const userPayments = payments.filter(payment => payment[0] === req.user.username);
-    res.json(userPayments.map(payment => ({
-      User: payment[0],
-      Client_Name: payment[1],
-      Type: payment[2],
-      Amount_To_Be_Paid: payment[3],
-      january: payment[4] || '',
-      february: payment[5] || '',
-      march: payment[6] || '',
-      april: payment[7] || '',
-      may: payment[8] || '',
-      june: payment[9] || '',
-      july: payment[10] || '',
-      august: payment[11] || '',
-      september: payment[12] || '',
-      october: payment[13] || '',
-      november: payment[14] || '',
-      december: payment[15] || '',
-      Due_Payment: payment[16] || '0',
-    })));
+    const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+    const userPayments = payments
+      .filter(payment => payment[0] === req.user.username)
+      .map(payment => {
+        const paymentObj = {
+          User: payment[0],
+          Client_Name: payment[1],
+          Type: payment[2],
+          Amount_To_Be_Paid: payment[3],
+          Due_Payment: payment[17] || '0',
+        };
+        months.forEach((month, index) => {
+          paymentObj[month] = payment[4 + index] || '';
+        });
+        return paymentObj;
+      });
+    res.json(userPayments);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -240,22 +238,20 @@ app.get('/api/get-payments', authenticateToken, async (req, res) => {
 
 // Save Payments
 app.post('/api/save-payments', authenticateToken, async (req, res) => {
+  const paymentsData = req.body;
   try {
-    const paymentsData = req.body;
-    let payments = await readSheet('Payments', 'A2:R');
-    for (const data of paymentsData) {
-      const { Client_Name, Type, Amount_To_Be_Paid, january, february, march, april, may, june, july, august, september, october, november, december, Due_Payment } = data;
-      const index = payments.findIndex(payment => payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type);
-      if (index !== -1) {
-        payments[index] = [
-          req.user.username, Client_Name, Type, Amount_To_Be_Paid,
-          january, february, march, april, may, june, july, august, september, october, november, december,
-          Due_Payment
-        ];
-      }
-    }
-    await writeSheet('Payments', 'A2:R', payments);
-    res.status(200).json({ message: 'Payments saved successfully' });
+    const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+    const formattedPayments = paymentsData.map(payment => [
+      req.user.username,
+      payment.Client_Name,
+      payment.Type,
+      payment.Amount_To_Be_Paid,
+      ...months.map(month => payment[month] || ''),
+      payment.Due_Payment || '0',
+    ]);
+
+    await writeSheet('Payments', 'A2:R', formattedPayments);
+    res.json({ message: 'Payments saved successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -263,120 +259,38 @@ app.post('/api/save-payments', authenticateToken, async (req, res) => {
 
 // Import CSV (Flexible Mapping with Auto-Correction)
 app.post('/api/import-csv', authenticateToken, async (req, res) => {
+  const data = req.body;
+  if (!Array.isArray(data) || data.length === 0) {
+    return res.status(400).json({ error: 'No valid data provided' });
+  }
+
   try {
-    const csvData = req.body;
-    if (!csvData || !Array.isArray(csvData) || csvData.length === 0) {
-      return res.status(400).json({ error: 'No valid CSV data provided' });
-    }
+    const clientsValues = data.map(row => [
+      req.user.username,
+      row.Client_Name,
+      row.Email,
+      row.Type,
+      row.Amount_To_Be_Paid,
+    ]);
 
-    const records = csvData;
-    const processedRecords = [];
+    const paymentsValues = data.map(row => [
+      req.user.username,
+      row.Client_Name,
+      row.Type,
+      row.Amount_To_Be_Paid,
+      '', '', '', '', '', '', '', '', '', '', '', '', '0',
+    ]);
 
-    const clientNameAliases = ['client name', 'client_name', 'client', 'name', 'customer'];
-    const typeAliases = ['type', 'category', 'service', 'product'];
-    const emailAliases = ['email', 'gmail', 'mail', 'contact'];
-    const amountAliases = ['amount to be paid', 'amount_to_be_paid', 'amount', 'payment', 'monthly payment', 'monthly_payment', 'price'];
+    await appendSheet('Clients', clientsValues);
+    await appendSheet('Payments', paymentsValues);
 
-    for (const record of records) {
-      const normalizedRecord = Object.fromEntries(
-        Object.entries(record).map(([key, value]) => [key.toLowerCase().replace(/\s+/g, '_'), value])
-      );
-
-      const clientNameKey = Object.keys(normalizedRecord).find(key =>
-        clientNameAliases.some(alias => key.includes(alias.toLowerCase().replace(/\s+/g, '_')))
-      ) || Object.keys(normalizedRecord)[0];
-      const typeKey = Object.keys(normalizedRecord).find(key =>
-        typeAliases.some(alias => key.includes(alias.toLowerCase().replace(/\s+/g, '_')))
-      ) || Object.keys(normalizedRecord)[1] || 'Default_Type';
-      const emailKey = Object.keys(normalizedRecord).find(key =>
-        emailAliases.some(alias => key.includes(alias.toLowerCase().replace(/\s+/g, '_')))
-      ) || Object.keys(normalizedRecord)[2];
-      const amountKey = Object.keys(normalizedRecord).find(key =>
-        amountAliases.some(alias => key.includes(alias.toLowerCase().replace(/\s+/g, '_')))
-      ) || Object.keys(normalizedRecord)[3];
-
-      let clientName = normalizedRecord[clientNameKey] || 'Unknown_Client_' + Math.random().toString(36).substr(2, 5);
-      let type = normalizedRecord[typeKey] || 'Default_Type';
-      let email = normalizedRecord[emailKey] || '';
-      let amountToBePaid = parseFloat(normalizedRecord[amountKey] || '0');
-
-      clientName = clientName.toString().trim().replace(/[^a-zA-Z0-9\s]/g, '');
-      if (!clientName) clientName = 'Unknown_Client_' + Math.random().toString(36).substr(2, 5);
-      type = type.toString().trim().replace(/[^a-zA-Z0-9\s]/g, '');
-      if (!type) type = 'Default_Type';
-      email = email.toString().trim();
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!email || !emailRegex.test(email)) {
-        console.warn(`Invalid email for record: ${JSON.stringify(record)}. Skipping.`);
-        continue;
-      }
-
-      if (isNaN(amountToBePaid) || amountToBePaid <= 0) {
-        console.warn(`Invalid amount for record: ${JSON.stringify(record)}. Skipping.`);
-        continue;
-      } else {
-        amountToBePaid = Math.round(amountToBePaid * 100) / 100;
-      }
-
-      processedRecords.push({
-        User: req.user.username,
-        Client_Name: clientName,
-        Email: email,
-        Type: type,
-        Amount_To_Be_Paid: amountToBePaid,
-        january: '',
-        february: '',
-        march: '',
-        april: '',
-        may: '',
-        june: '',
-        july: '',
-        august: '',
-        september: '',
-        october: '',
-        november: '',
-        december: '',
-        Due_Payment: '0'
-      });
-    }
-
-    if (processedRecords.length === 0) {
-      return res.status(400).json({ error: 'No valid records found in CSV data' });
-    }
-
-    let clients = await readSheet('Clients', 'A2:F');
-    let payments = await readSheet('Payments', 'A2:R');
-
-    for (const record of processedRecords) {
-      const { Client_Name, Email, Type, Amount_To_Be_Paid } = record;
-
-      const clientExists = clients.some(client => 
-        client[0] === req.user.username && 
-        client[1].toLowerCase() === Client_Name.toLowerCase() && 
-        client[3].toLowerCase() === Type.toLowerCase()
-      );
-      if (!clientExists) {
-        await appendSheet('Clients', [[req.user.username, Client_Name, Email, Type, Amount_To_Be_Paid]]);
-      }
-
-      const paymentExists = payments.some(payment => 
-        payment[0] === req.user.username && 
-        payment[1].toLowerCase() === Client_Name.toLowerCase() && 
-        payment[2].toLowerCase() === Type.toLowerCase()
-      );
-      if (!paymentExists) {
-        await appendSheet('Payments', [[
-          req.user.username, Client_Name, Type, Amount_To_Be_Paid,
-          '', '', '', '', '', '', '', '', '', '', '', '', '0'
-        ]]);
-      }
-    }
-
-    res.status(200).json({ message: 'CSV data imported successfully' });
+    res.json({ message: 'CSV data imported successfully' });
   } catch (error) {
-    console.error('Error importing CSV:', error);
-    res.status(500).json({ error: 'Failed to import CSV: ' + error.message });
+    res.status(500).json({ error: error.message });
   }
 });
 
-app.listen(5000, () => console.log('Server running on port 5000'));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
