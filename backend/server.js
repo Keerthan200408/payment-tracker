@@ -45,12 +45,17 @@ const authenticateToken = (req, res, next) => {
 
 // Helper to read data from a sheet
 async function readSheet(sheetName, range) {
-  const sheets = await getSheetsClient();
-  const response = await sheets.spreadsheets.values.get({
-    spreadsheetId,
-    range: `${sheetName}!${range}`,
-  });
-  return response.data.values || [];
+  try {
+    const sheets = await getSheetsClient();
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${sheetName}!${range}`,
+    });
+    return response.data.values || [];
+  } catch (error) {
+    console.error(`Error reading ${sheetName} ${range}:`, error.message);
+    throw error;
+  }
 }
 
 // Helper to write data to a sheet
@@ -75,34 +80,7 @@ async function appendSheet(sheetName, values) {
   });
 }
 
-async function initializeUsersSheet() {
-  try {
-    const sheets = await getSheetsClient();
-    const sheetMetadata = await sheets.spreadsheets.get({
-      spreadsheetId,
-      ranges: ['Users!A1:C1'],
-      includeGridData: true,
-    });
-    const sheetsList = sheetMetadata.data.sheets.map(s => s.properties.title);
-    if (!sheetsList.includes('Users')) {
-      await sheets.spreadsheets.batchUpdate({
-        spreadsheetId,
-        resource: {
-          requests: [{
-            addSheet: { properties: { title: 'Users' } },
-          }],
-        },
-      });
-    }
-    const headers = await readSheet('Users', 'A1:C1');
-    if (!headers.length || headers[0].join() !== ['Username', 'Password', 'Gmail ID'].join()) {
-      await writeSheet('Users', 'A1:C1', [['Username', 'Password', 'Gmail ID']]);
-    }
-  } catch (error) {
-    console.error('Error initializing Users sheet:', error);
-    throw new Error('Failed to initialize Users sheet');
-  }
-}
+
 
 // Signup
 app.post('/api/signup', async (req, res) => {
@@ -136,27 +114,26 @@ app.post('/api/signup', async (req, res) => {
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) {
-    return res.status(400).json({ error: 'Username and password are required' });
+    return res.status(400).json({ error: 'Username and password required' });
   }
-
   try {
-    await initializeUsersSheet();
     const users = await readSheet('Users', 'A2:C');
-    console.log('Users read for login:', users.length);
+    console.log(`Login attempt for ${username}, users found: ${users.length}`);
     const user = users.find(u => u[0] === username);
-    if (!user) {
+    if (!user || !user[0]) {
+      console.log(`User ${username} not found`);
       return res.status(401).json({ error: 'Invalid username' });
     }
-    if (!(await bcrypt.compare(password, user[1]))) {
+    if (!user[1] || !(await bcrypt.compare(password, user[1]))) {
+      console.log(`Invalid password for ${username}`);
       return res.status(401).json({ error: 'Invalid password' });
     }
-
-    const token = jwt.sign({ username }, 'your-secret-key', { expiresIn: '1h' });
+    const token = jwt.sign({ username }, process.env.JWT_SECRET || 'your-secret-key', { expiresIn: '1h' });
     console.log(`User ${username} logged in successfully`);
     res.json({ username, sessionToken: token });
   } catch (error) {
-    console.error('Login error:', error.message);
-    res.status(500).json({ error: `Failed to login: ${error.message}` });
+    console.error(`Login error for ${username}:`, error.message);
+    res.status(500).json({ error: 'Login failed: Server error' });
   }
 });
 
