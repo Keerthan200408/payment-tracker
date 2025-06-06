@@ -1,4 +1,3 @@
-
 const express = require('express');
 const { google } = require('googleapis');
 const cors = require('cors');
@@ -6,12 +5,23 @@ const csv = require('csv-parse');
 const { Readable } = require('stream');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
+const sanitizeHtml = require('sanitize-html');
 
 const app = express();
+
 app.use(cors({
   origin: 'https://reliable-eclair-abf03c.netlify.app',
+  credentials: true,
 }));
 app.use(express.json());
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per window
+});
+app.use(limiter);
 
 // Add root route for debugging
 app.get('/', (req, res) => {
@@ -30,19 +40,6 @@ async function getSheetsClient() {
   const client = await auth.getClient();
   return google.sheets({ version: 'v4', auth: client });
 }
-
-// Middleware to verify JWT
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Access denied' });
-
-  jwt.verify(token, process.env.SECRET_KEY, (err, user) => {
-    if (err) return res.status(403).json({ error: 'Invalid token' });
-    req.user = user;
-    next();
-  });
-};
 
 // Helper to read data from a sheet
 async function readSheet(sheetName, range) {
@@ -76,14 +73,45 @@ async function appendSheet(sheetName, values) {
   });
 }
 
+// Middleware to verify JWT
+const authenticateToken = (req, res, next) => {
+  const token = req.cookies.sessionToken;
+  if (!token) return res.status(401).json({ error: 'Access denied' });
+
+  jwt.verify(token, process.env.SECRET_KEY, (err, user) => {
+    if (err) return res.status(403).json({ error: 'Invalid token' });
+    req.user = user;
+    next();
+  });
+};
+
+// Input sanitization helper
+const sanitizeInput = (input) => {
+  return sanitizeHtml(input, {
+    allowedTags: [],
+    allowedAttributes: {},
+  });
+};
+
 // Signup
 app.post('/api/signup', async (req, res) => {
-  const { username, password, gmailId } = req.body;
+  let { username, password, gmailId } = req.body;
   if (!username || !password || !gmailId) {
     return res.status(400).json({ error: 'All fields are required' });
   }
+
+  // Sanitize inputs
+  username = sanitizeInput(username);
+  gmailId = sanitizeInput(gmailId);
+
   if (!gmailId.endsWith('@gmail.com')) {
     return res.status(400).json({ error: 'Please enter a valid Gmail ID' });
+  }
+  if (username.length < 3 || username.length > 50) {
+    return res.status(400).json({ error: 'Username must be between 3 and 50 characters' });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
   }
 
   try {
@@ -96,16 +124,20 @@ app.post('/api/signup', async (req, res) => {
     await appendSheet('Users', [[username, hashedPassword, gmailId]]);
     res.status(201).json({ message: 'Account created successfully' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Signup error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // Login
 app.post('/api/login', async (req, res) => {
-  const { username, password } = req.body;
+  let { username, password } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password are required' });
   }
+
+  // Sanitize inputs
+  username = sanitizeInput(username);
 
   try {
     const users = await readSheet('Users', 'A2:C');
@@ -115,10 +147,23 @@ app.post('/api/login', async (req, res) => {
     }
 
     const token = jwt.sign({ username }, process.env.SECRET_KEY, { expiresIn: '1h' });
-    res.json({ username, sessionToken: token });
+    res.cookie('sessionToken', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 3600000, // 1 hour
+      sameSite: 'Strict',
+    });
+    res.json({ username });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
+});
+
+// Logout
+app.post('/api/logout', (req, res) => {
+  res.clearCookie('sessionToken');
+  res.json({ message: 'Logged out successfully' });
 });
 
 // Get Clients
@@ -134,25 +179,63 @@ app.get('/api/get-clients', authenticateToken, async (req, res) => {
       monthly_payment: client[4],
     })));
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Get clients error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // Add Client
 app.post('/api/add-client', authenticateToken, async (req, res) => {
-  const { clientName, email, type, monthlyPayment } = req.body;
+  let { clientName, email, type, monthlyPayment } = req.body;
+  if (!clientName || !type || !monthlyPayment) {
+    return res.status(400).json({ error: 'Client name, type, and monthly payment are required' });
+  }
+
+  // Sanitize inputs
+  clientName = sanitizeInput(clientName);
+  type = sanitizeInput(type);
+  email = email ? sanitizeInput(email) : '';
+
+  const paymentValue = parseFloat(monthlyPayment);
+  if (isNaN(paymentValue) || paymentValue <= 0) {
+    return res.status(400).json({ error: 'Monthly payment must be a positive number' });
+  }
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Invalid email address' });
+  }
+
   try {
-    await appendSheet('Clients', [[req.user.username, clientName, email, type, monthlyPayment]]);
-    await appendSheet('Payments', [[req.user.username, clientName, type, monthlyPayment, '', '', '', '', '', '', '', '', '', '', '', '', '0']]);
+    await appendSheet('Clients', [[req.user.username, clientName, email, type, paymentValue]]);
+    await appendSheet('Payments', [[req.user.username, clientName, type, paymentValue, '', '', '', '', '', '', '', '', '', '', '', '', '0']]);
     res.status(201).json({ message: 'Client added successfully' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Add client error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // Update Client
 app.put('/api/update-client', authenticateToken, async (req, res) => {
-  const { clientName, email, type, monthlyPayment, Old_Client_Name, Old_Type } = req.body;
+  let { clientName, email, type, monthlyPayment, Old_Client_Name, Old_Type } = req.body;
+  if (!clientName || !type || !monthlyPayment || !Old_Client_Name || !Old_Type) {
+    return res.status(400).json({ error: 'All required fields must be provided' });
+  }
+
+  // Sanitize inputs
+  clientName = sanitizeInput(clientName);
+  type = sanitizeInput(type);
+  Old_Client_Name = sanitizeInput(Old_Client_Name);
+  Old_Type = sanitizeInput(Old_Type);
+  email = email ? sanitizeInput(email) : '';
+
+  const paymentValue = parseFloat(monthlyPayment);
+  if (isNaN(paymentValue) || paymentValue <= 0) {
+    return res.status(400).json({ error: 'Monthly payment must be a positive number' });
+  }
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Invalid email address' });
+  }
+
   try {
     let clients = await readSheet('Clients', 'A2:E');
     let payments = await readSheet('Payments', 'A2:R');
@@ -160,30 +243,43 @@ app.put('/api/update-client', authenticateToken, async (req, res) => {
     const clientIndex = clients.findIndex(client => client[0] === req.user.username && client[1] === Old_Client_Name && client[3] === Old_Type);
     const paymentIndex = payments.findIndex(payment => payment[0] === req.user.username && payment[1] === Old_Client_Name && payment[2] === Old_Type);
 
-    if (clientIndex !== -1) {
-      clients[clientIndex] = [req.user.username, clientName, email, type, monthlyPayment];
-      await writeSheet('Clients', 'A2:E', clients);
+    if (clientIndex === -1 || paymentIndex === -1) {
+      return res.status(404).json({ error: 'Client not found' });
     }
 
-    if (paymentIndex !== -1) {
-      payments[paymentIndex][1] = clientName;
-      payments[paymentIndex][2] = type;
-      payments[paymentIndex][3] = monthlyPayment;
-      await writeSheet('Payments', 'A2:R', payments);
-    }
+    clients[clientIndex] = [req.user.username, clientName, email, type, paymentValue];
+    payments[paymentIndex][1] = clientName;
+    payments[paymentIndex][2] = type;
+    payments[paymentIndex][3] = paymentValue;
 
+    await writeSheet('Clients', 'A2:E', clients);
+    await writeSheet('Payments', 'A2:R', payments);
     res.json({ message: 'Client updated successfully' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Update client error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // Delete Client
 app.delete('/api/delete-client', authenticateToken, async (req, res) => {
-  const { Client_Name, Type } = req.body;
+  let { Client_Name, Type } = req.body;
+  if (!Client_Name || !Type) {
+    return res.status(400).json({ error: 'Client name and type are required' });
+  }
+
+  // Sanitize inputs
+  Client_Name = sanitizeInput(Client_Name);
+  Type = sanitizeInput(Type);
+
   try {
     let clients = await readSheet('Clients', 'A2:E');
     let payments = await readSheet('Payments', 'A2:R');
+
+    const clientExists = clients.some(client => client[0] === req.user.username && client[1] === Client_Name && client[3] === Type);
+    if (!clientExists) {
+      return res.status(404).json({ error: 'Client not found' });
+    }
 
     clients = clients.filter(client => !(client[0] === req.user.username && client[1] === Client_Name && client[3] === Type));
     payments = payments.filter(payment => !(payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type));
@@ -192,14 +288,15 @@ app.delete('/api/delete-client', authenticateToken, async (req, res) => {
     await writeSheet('Payments', 'A2:R', payments);
     res.json({ message: 'Client deleted successfully' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Delete client error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // Get Payments
 app.get('/api/get-payments', authenticateToken, async (req, res) => {
   try {
-    const payments = await readSheet('Payments', 'A2:R');
+    const payments = await readSheet('Payments', {});
     const userPayments = payments.filter(payment => payment[0] === req.user.username);
     res.json(userPayments.map(payment => ({
       User: payment[0],
@@ -221,75 +318,97 @@ app.get('/api/get-payments', authenticateToken, async (req, res) => {
       Due_Payment: payment[16] || '0',
     })));
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Get payments error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // Save Payments
 app.post('/api/save-payments', authenticateToken, async (req, res) => {
+  const paymentsData = req.body;
+  if (!Array.isArray(paymentsData)) {
+    return res.status(400).json({ error: 'Payments data must be an array' });
+  }
+
   try {
-    const paymentsData = req.body;
     let payments = await readSheet('Payments', 'A2:R');
     for (const data of paymentsData) {
-      const { Client_Name, Type, Amount_To_Be_Paid, january, february, march, april, may, june, july, august, september, october, november, december, Due_Payment } = data;
+      let { Client_Name, Type, Amount_To_Be_Paid, january, february, march, april, may, june, july, august, september, october, november, december, Due_Payment } = data;
+      
+      // Sanitize inputs
+      Client_Name = sanitizeInput(Client_Name);
+      Type = sanitizeInput(Type);
+      Amount_To_Be_Paid = parseFloat(Amount_To_Be_Paid);
+      Due_Payment = parseFloat(Due_Payment);
+      
+      const months = [january, february, march, april, may, june, july, august, september, october, november, december];
+      const sanitizedMonths = months.map(month => month ? sanitizeInput(month.toString()) : '');
+
+      if (isNaN(Amount_To_Be_Paid) || Amount_To_Be_Paid <= 0) {
+        continue;
+      }
+      if (isNaN(Due_Payment)) {
+        Due_Payment = 0;
+      }
+
       const index = payments.findIndex(payment => payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type);
       if (index !== -1) {
         payments[index] = [
-          req.user.username, Client_Name, Type, Amount_To_Be_Paid,
-          january, february, march, april, may, june, july, august, september, october, november, december,
-          Due_Payment
+          req.user.username,
+          Client_Name,
+          Type,
+          Amount_To_Be_Paid,
+          ...sanitizedMonths,
+          Due_Payment.toFixed(2)
         ];
       }
     }
     await writeSheet('Payments', 'A2:R', payments);
     res.status(200).json({ message: 'Payments saved successfully' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Save payments error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// Import CSV (Flexible Mapping)
+// Import CSV
 app.post('/api/import-csv', authenticateToken, async (req, res) => {
+  const csvData = req.body;
+  if (!Array.isArray(csvData)) {
+    return res.status(400).json({ error: 'CSV data must be an array' });
+  }
+
   try {
-    const csvData = req.body;
-    const buffer = Buffer.from(JSON.stringify(csvData));
-    const readable = Readable.from(buffer);
+    for (const record of csvData) {
+      let { Client_Name, Type, Amount_To_Be_Paid } = record;
+      
+      // Sanitize inputs
+      Client_Name = sanitizeInput(Client_Name || 'Unknown Client');
+      Type = sanitizeInput(Type || 'Unknown Type');
+      Amount_To_Be_Paid = parseFloat(Amount_To_Be_Paid);
 
-    const parser = readable.pipe(csv.parse({ columns: true, trim: true }));
-    const records = [];
-
-    for await (const record of parser) {
-      records.push(record);
-    }
-
-    if (records.length === 0) {
-      return res.status(400).json({ error: 'CSV file is empty' });
-    }
-
-    for (const record of records) {
-      const clientName = record['Client Name'] || record['Client_Name'] || record['client_name'] || Object.values(record)[0] || 'Unknown Client';
-      const type = record['Type'] || record['type'] || Object.values(record)[1] || 'Unknown Type';
-      const amountToBePaid = parseFloat(record['Amount To Be Paid'] || record['Amount_To_Be_Paid'] || Object.values(record)[2] || 0);
-
-      if (isNaN(amountToBePaid) || amountToBePaid <= 0) continue;
+      if (isNaN(Amount_To_Be_Paid) || Amount_To_Be_Paid <= 0) {
+        continue;
+      }
 
       let clients = await readSheet('Clients', 'A2:E');
-      const clientExists = clients.some(client => client[0] === req.user.username && client[1] === clientName && client[3] === type);
+      const clientExists = clients.some(client => client[0] === req.user.username && client[1] === Client_Name && client[3] === Type);
       if (!clientExists) {
-        await appendSheet('Clients', [[req.user.username, clientName, '', type, amountToBePaid]]);
+        await appendSheet('Clients', [[req.user.username, Client_Name, '', Type, Amount_To_Be_Paid]]);
       }
 
       let payments = await readSheet('Payments', 'A2:R');
-      const paymentExists = payments.some(payment => payment[0] === req.user.username && payment[1] === clientName && payment[2] === type);
+      const paymentExists = payments.some(payment => payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type);
       if (!paymentExists) {
-        await appendSheet('Payments', [[req.user.username, clientName, type, amountToBePaid, '', '', '', '', '', '', '', '', '', '', '', '', '0']]);
+        await appendSheet('Payments', [[req.user.username, Client_Name, Type, Amount_To_Be_Paid, '', '', '', '', '', '', '', '', '', '', '', '', '0']]);
       }
     }
-
     res.status(200).json({ message: 'CSV data imported successfully' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Import CSV error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-app.listen(process.env.PORT || 5000, () => console.log('Server running on port 5000'));
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
