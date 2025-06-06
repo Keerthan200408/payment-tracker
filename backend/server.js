@@ -75,6 +75,35 @@ async function appendSheet(sheetName, values) {
   });
 }
 
+async function initializeUsersSheet() {
+  try {
+    const sheets = await getSheetsClient();
+    const sheetMetadata = await sheets.spreadsheets.get({
+      spreadsheetId,
+      ranges: ['Users!A1:C1'],
+      includeGridData: true,
+    });
+    const sheetsList = sheetMetadata.data.sheets.map(s => s.properties.title);
+    if (!sheetsList.includes('Users')) {
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        resource: {
+          requests: [{
+            addSheet: { properties: { title: 'Users' } },
+          }],
+        },
+      });
+    }
+    const headers = await readSheet('Users', 'A1:C1');
+    if (!headers.length || headers[0].join() !== ['Username', 'Password', 'Gmail ID'].join()) {
+      await writeSheet('Users', 'A1:C1', [['Username', 'Password', 'Gmail ID']]);
+    }
+  } catch (error) {
+    console.error('Error initializing Users sheet:', error);
+    throw new Error('Failed to initialize Users sheet');
+  }
+}
+
 // Signup
 app.post('/api/signup', async (req, res) => {
   const { username, password, gmailId } = req.body;
@@ -86,16 +115,20 @@ app.post('/api/signup', async (req, res) => {
   }
 
   try {
+    await initializeUsersSheet();
     const users = await readSheet('Users', 'A2:C');
+    console.log('Users read from sheet:', users.length);
     if (users.some(user => user[0] === username || user[2] === gmailId)) {
       return res.status(400).json({ error: 'Username or Gmail ID already exists' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
     await appendSheet('Users', [[username, hashedPassword, gmailId]]);
+    console.log(`User ${username} signed up successfully`);
     res.status(201).json({ message: 'Account created successfully' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Signup error:', error.message);
+    res.status(500).json({ error: `Failed to sign up: ${error.message}` });
   }
 });
 
@@ -107,16 +140,23 @@ app.post('/api/login', async (req, res) => {
   }
 
   try {
+    await initializeUsersSheet();
     const users = await readSheet('Users', 'A2:C');
+    console.log('Users read for login:', users.length);
     const user = users.find(u => u[0] === username);
-    if (!user || !(await bcrypt.compare(password, user[1]))) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid username' });
+    }
+    if (!(await bcrypt.compare(password, user[1]))) {
+      return res.status(401).json({ error: 'Invalid password' });
     }
 
     const token = jwt.sign({ username }, 'your-secret-key', { expiresIn: '1h' });
+    console.log(`User ${username} logged in successfully`);
     res.json({ username, sessionToken: token });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Login error:', error.message);
+    res.status(500).json({ error: `Failed to login: ${error.message}` });
   }
 });
 
