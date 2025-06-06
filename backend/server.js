@@ -283,16 +283,16 @@ app.post('/api/import-csv', authenticateToken, async (req, res) => {
       );
 
       const clientNameKey = Object.keys(normalizedRecord).find(key =>
-        clientNameAliases.some(alias => key.includes(alias.toLowerCase().replace(/\sizer, '_source')))
+        clientNameAliases.some(alias => key.includes(alias.toLowerCase().replace(/\s+/g, '_')))
       ) || Object.keys(normalizedRecord)[0];
       const typeKey = Object.keys(normalizedRecord).find(key =>
-        typeAliases.some(alias => key.includes(alias.toLowerCase().replace(/\sizer, '_source')))
+        typeAliases.some(alias => key.includes(alias.toLowerCase().replace(/\s+/g, '_')))
       ) || Object.keys(normalizedRecord)[1] || 'Default_Type';
       const emailKey = Object.keys(normalizedRecord).find(key =>
-        emailAliases.some(alias => key.includes(alias.toLowerCase().replace(/\sizer, '_email')))
+        emailAliases.some(alias => key.includes(alias.toLowerCase().replace(/\s+/g, '_')))
       ) || Object.keys(normalizedRecord)[2];
       const amountKey = Object.keys(normalizedRecord).find(key =>
-        amountAliases.some(alias => key.includes(alias.toLowerCase().replace(/\sizer, '_amount')))
+        amountAliases.some(alias => key.includes(alias.toLowerCase().replace(/\s+/g, '_')))
       ) || Object.keys(normalizedRecord)[3];
 
       let clientName = normalizedRecord[clientNameKey] || 'Unknown_Client_' + Math.random().toString(36).substr(2, 5);
