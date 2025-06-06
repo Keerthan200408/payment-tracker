@@ -411,7 +411,7 @@ nav.-translate-x-full {
           return;
         }
         try {
-          const response = await axios.post(`${BASE_URL}/api/login`, { username, password }, { timeout: 0000 });
+          const response = await axios.post(`${BASE_URL}/api/login`, { username, password }, { timeout: 20000 });
           setCurrentUser(response.data.username);
           setSessionToken(response.data.sessionToken);
           localStorage.setItem('currentUser', response.data.username);
