@@ -8,23 +8,20 @@
   <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.22.5/babel.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/axios@1.4.0/dist/axios.min.js"></script>
-  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css?v=2.2.19" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/tailwind.min.css@2.2.19/dist/tailwind.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
   <style>
-    /* Navigation sidebar */
     nav {
-      background-color: #ffffff !important;
-      width: 16rem !important;
-      padding: 1rem !important;
-      position: fixed !important;
-      top: 0 !important;
-      left: 0 !important;
-      height: 100% !important;
-      border-right: 1px solid #e5e7eb !important;
-      z-index: 50 !important;
+      background-color: #ffffff;
+      width: 16rem;
+      padding: 1rem;
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100%;
+      border-right: 1px solid #e5e7eb;
+      z-index: 50;
     }
-
-    /* Payment status colors */
     .payment-full {
       background-color: #d1fae5 !important;
     }
@@ -34,30 +31,24 @@
     .payment-none {
       background-color: #fee2e2 !important;
     }
-
-    /* Manual entry cell highlight */
     .manual-entry-cell {
       background-color: #eff6ff !important;
     }
-
-    /* Table container with scroll */
     .table-container {
-      max-height: 60vh !important;
-      overflow-y: auto !important;
-      width: 100% !important;
-      position: relative !important;
+      max-height: 60vh;
+      overflow-y: auto;
+      width: 100%;
     }
     .table-container table {
-      min-width: 1200px !important;
+      min-width: 1200px;
     }
-
-    /* Sticky heading */
     .fixed-heading {
-      position: sticky !important;
-      top: 0 !important;
-      background-color: #f3f4f6 !important;
-      z-index: 40 !important;
-      padding: 0.5rem 0 !important;
+      position: sticky;
+      top: 0;
+      background-color: #f3f4f6;
+      z-index: 40;
+      padding: 0.5rem 0;
+      margin-bottom: 1rem;
     }
   </style>
 </head>
@@ -66,6 +57,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
 
+    // Error Boundary Component
     class ErrorBoundary extends React.Component {
       constructor(props) {
         super(props);
@@ -116,16 +108,16 @@
         if (storedUser && storedToken) {
           setCurrentUser(storedUser);
           setSessionToken(storedToken);
-          fetchClients();
-          fetchPayments();
+          fetchClients(storedToken);
+          fetchPayments(storedToken);
           setPage('home');
         }
       }, []);
 
-      const fetchClients = async () => {
+      const fetchClients = async (token) => {
         try {
           const response = await axios.get(`${BASE_URL}/api/get-clients`, {
-            headers: { Authorization: `Bearer ${sessionToken}` },
+            headers: { Authorization: `Bearer ${token}` },
           });
           setClientsData(response.data);
         } catch (error) {
@@ -134,10 +126,10 @@
         }
       };
 
-      const fetchPayments = async () => {
+      const fetchPayments = async (token) => {
         try {
           const response = await axios.get(`${BASE_URL}/api/get-payments`, {
-            headers: { Authorization: `Bearer ${sessionToken}` },
+            headers: { Authorization: `Bearer ${token}` },
           });
           setPaymentsData(response.data);
         } catch (error) {
@@ -229,8 +221,8 @@
             await axios.post(`${BASE_URL}/api/import-csv`, data, {
               headers: { Authorization: `Bearer ${sessionToken}` },
             });
-            fetchClients();
-            fetchPayments();
+            fetchClients(sessionToken);
+            fetchPayments(sessionToken);
             alert('CSV data imported successfully!');
             csvFileInputRef.current.value = '';
           } catch (error) {
@@ -242,39 +234,6 @@
         };
         reader.readAsText(file);
       };
-
-      async function updatePayment(rowIndex, month, value) {
-        const updatedPayments = [...paymentsData];
-        const rowData = updatedPayments[rowIndex];
-        const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
-        const monthIndex = months.indexOf(month);
-
-        rowData[month] = value;
-
-        if (value.trim() !== '') {
-          for (let i = 0; i < monthIndex; i++) {
-            if (!rowData[months[i]] || rowData[months[i]].trim() === '') {
-              rowData[months[i]] = '0';
-            }
-          }
-        }
-
-        const amountToBePaidPerMonth = parseFloat(rowData.Amount_To_Be_Paid) || 0;
-        const activeMonths = months.filter(m => rowData[m] && parseFloat(rowData[m]) >= 0).length;
-        const expectedPayment = amountToBePaidPerMonth * activeMonths;
-        const totalPayments = months.reduce((sum, m) => sum + (parseFloat(rowData[m]) || 0), 0);
-        rowData.Due_Payment = Math.max(expectedPayment - totalPayments, 0).toFixed(2);
-
-        setPaymentsData(updatedPayments);
-        try {
-          await axios.post(`${BASE_URL}/api/save-payments`, updatedPayments, {
-            headers: { Authorization: `Bearer ${sessionToken}` },
-          });
-        } catch (error) {
-          console.error('Error saving payments:', error);
-          handleSessionError(error);
-        }
-      }
 
       return (
         <div className="min-h-screen bg-gray-50">
@@ -303,7 +262,7 @@
                     </button>
                   </li>
                   <li>
-                    <button onClick={() => alert('Reports coming soon!')} className="w-full text-left p-2 hover:bg-gray-100 rounded-lg flex items-center">
+                    <button onClick={() => { alert('Reports coming soon!'); }} className="w-full text-left p-2 hover:bg-gray-100 rounded-lg flex items-center">
                       <i className="fas fa-chart-line mr-2"></i> Reports
                     </button>
                   </li>
@@ -316,6 +275,10 @@
               </nav>
 
               <main className="flex-1 p-6 overflow-y-auto" style={{ marginLeft: '16rem' }}>
+                <header className="mb-6">
+                  {/* Removed bell and profile icons */}
+                </header>
+
                 {page === 'home' && (
                   <HomePage
                     paymentsData={paymentsData}
@@ -370,6 +333,39 @@
           )}
         </div>
       );
+
+      async function updatePayment(rowIndex, month, value) {
+        const updatedPayments = [...paymentsData];
+        const rowData = updatedPayments[rowIndex];
+        const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+        const monthIndex = months.indexOf(month);
+
+        rowData[month] = value;
+
+        if (value.trim() !== '') {
+          for (let i = 0; i < monthIndex; i++) {
+            if (!rowData[months[i]] || rowData[months[i]].trim() === '') {
+              rowData[months[i]] = '0';
+            }
+          }
+        }
+
+        const amountToBePaidPerMonth = parseFloat(rowData.Amount_To_Be_Paid) || 0;
+        const activeMonths = months.filter(m => rowData[m] && parseFloat(rowData[m]) >= 0).length;
+        const expectedPayment = amountToBePaidPerMonth * activeMonths;
+        const totalPayments = months.reduce((sum, m) => sum + (parseFloat(rowData[m]) || 0), 0);
+        rowData.Due_Payment = Math.max(expectedPayment - totalPayments, 0).toFixed(2);
+
+        setPaymentsData(updatedPayments);
+        try {
+          await axios.post(`${BASE_URL}/api/save-payments`, updatedPayments, {
+            headers: { Authorization: `Bearer ${sessionToken}` },
+          });
+        } catch (error) {
+          console.error('Error saving payments:', error);
+          handleSessionError(error);
+        }
+      }
     };
 
     const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
@@ -384,14 +380,14 @@
           return;
         }
         try {
-          const response = await axios.post(`${BASE_URL}/api/login`, { username, password });
+          const response = await axios.post(`${BASE_URL}/api/login`, { username, password }, { timeout: 10000 });
           setCurrentUser(response.data.username);
           setSessionToken(response.data.sessionToken);
           localStorage.setItem('currentUser', response.data.username);
           localStorage.setItem('sessionToken', response.data.sessionToken);
           setPage('home');
         } catch (error) {
-          console.error('Login error:', error);
+          console.error('Login error:', error.response?.data);
           alert(error.response?.data?.error || 'Error logging in');
         }
       };
@@ -407,14 +403,14 @@
           return;
         }
         try {
-          await axios.post(`${BASE_URL}/api/signup`, { username, password, gmailId });
+          await axios.post(`${BASE_URL}/api/signup`, { username, password, gmailId }, { timeout: 10000 });
           alert('Account created successfully! Please login.');
           setIsSignup(false);
           setUsername('');
           setPassword('');
           setGmailId('');
         } catch (error) {
-          console.error('Signup error:', error);
+          console.error('Signup error:', error.response?.data);
           alert(error.response?.data?.error || 'Error signing up');
         }
       };
@@ -428,96 +424,45 @@
             <div>
               <div className="mb-4">
                 <label className="block mb-1">Username</label>
-                <input
-                  type="text"
-                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                  value={username}
-                  onChange={e => setUsername(e.target.value)}
-                  placeholder="Enter username"
-                />
+                <input type="text" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={username} onChange={e => setUsername(e.target.value)} placeholder="Enter username" />
               </div>
               <div className="mb-4">
                 <label className="block mb-1">Password</label>
-                <input
-                  type="password"
-                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="Enter password"
-                />
+                <input type="password" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter password" />
               </div>
               <div className="mb-4">
                 <label className="block mb-1">Gmail ID</label>
-                <input
-                  type="email"
-                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                  value={gmailId}
-                  onChange={e => setGmailId(e.target.value)}
-                  placeholder="Enter Gmail ID"
-                />
+                <input type="email" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={gmailId} onChange={e => setGmailId(e.target.value)} placeholder="Enter Gmail ID" />
               </div>
               <div className="flex justify-end gap-2">
-                <button
-                  onClick={() => setIsSignup(false)}
-                  className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600"
-                >
+                <button onClick={() => setIsSignup(false)} className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600">
                   Cancel
                 </button>
-                <button
-                  onClick={handleSignup}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-                >
+                <button onClick={handleSignup} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
                   Sign Up
                 </button>
               </div>
               <p className="text-center mt-2">
-                Already have an account?{' '}
-                <button
-                  onClick={() => setIsSignup(false)}
-                  className="text-blue-600 hover:underline"
-                >
-                  Login
-                </button>
+                Already have an account? <button onClick={() => setIsSignup(false)} className="text-blue-600 hover:underline">Login</button>
               </p>
             </div>
           ) : (
             <div>
               <div className="mb-4">
                 <label className="block mb-1">Username</label>
-                <input
-                  type="text"
-                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                  value={username}
-                  onChange={e => setUsername(e.target.value)}
-                  placeholder="Enter username"
-                />
+                <input type="text" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={username} onChange={e => setUsername(e.target.value)} placeholder="Enter username" />
               </div>
               <div className="mb-4">
                 <label className="block mb-1">Password</label>
-                <input
-                  type="password"
-                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="Enter password"
-                />
+                <input type="password" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter password" />
               </div>
               <div className="flex justify-end gap-2">
-                <button
-                  onClick={handleLogin}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-                >
+                <button onClick={handleLogin} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
                   Login
                 </button>
               </div>
               <p className="text-center mt-2">
-                Don't have an account?{' '}
-                <button
-                  onClick={() => setIsSignup(true)}
-                  className="text-blue-600 hover:underline"
-                >
-                  Sign Up
-                </button>
+                Don't have an account? <button onClick={() => setIsSignup(true)} className="text-blue-600 hover:underline">Sign Up</button>
               </p>
             </div>
           )}
@@ -526,32 +471,18 @@
     };
 
     const HomePage = ({
-      paymentsData,
-      setPaymentsData,
-      searchQuery,
-      setSearchQuery,
-      monthFilter,
-      setMonthFilter,
-      statusFilter,
-      setStatusFilter,
-      updatePayment,
-      handleContextMenu,
-      contextTargetRow,
-      hideContextMenu,
-      deleteRow,
-      setPage,
-      csvFileInputRef,
-      importCsv,
+      paymentsData, setPaymentsData, searchQuery, setSearchQuery, monthFilter, setMonthFilter, statusFilter, setStatusFilter,
+      updatePayment, handleContextMenu, contextTargetRow, hideContextMenu, deleteRow, setPage, csvFileInputRef, importCsv
     }) => {
       const [currentPage, setCurrentPage] = useState(1);
-      const [filterOptionsVisible, setFilterOptionsVisible] = useState(false);
       const entriesPerPage = 10;
       const tableRef = useRef(null);
+      const [filterOptionsVisible, setFilterOptionsVisible] = useState(false);
 
       const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
 
       const filteredData = paymentsData.filter(row => {
-        const clientName = row.Client_Name?.toLowerCase() || '';
+        const clientName = row.Client_Name.toLowerCase();
         const nameMatches = clientName.includes(searchQuery.toLowerCase());
         let filterMatches = true;
 
@@ -577,7 +508,7 @@
       const getPaymentStatusClass = (row, month) => {
         const amountToBePaid = parseFloat(row.Amount_To_Be_Paid) || 0;
         const enteredValue = parseFloat(row[month]) || 0;
-        console.log(`Status for ${month}: amount=${amountToBePaid}, entered=${enteredValue}`);
+
         if (enteredValue === 0 || !row[month]) {
           return 'payment-none';
         } else if (enteredValue >= amountToBePaid && amountToBePaid > 0) {
@@ -593,35 +524,42 @@
         if (!arrowKeys.includes(e.key)) return;
 
         const inputs = Array.from(document.querySelectorAll('.month-input'));
-        const currentIndex = inputs.indexOf(e.target);
+        const currentInput = e.target;
+        const currentIndex = inputs.indexOf(currentInput);
         if (currentIndex === -1) return;
 
         e.preventDefault();
 
         const inputsPerRow = 12;
-        let nextIndex;
+        const totalInputs = inputs.length;
+
+        let nextIndex = currentIndex;
 
         switch (e.key) {
           case 'ArrowRight':
             nextIndex = currentIndex + 1;
+            if (nextIndex >= totalInputs) nextIndex = 0;
             break;
           case 'ArrowLeft':
             nextIndex = currentIndex - 1;
+            if (nextIndex < 0) nextIndex = totalInputs - 1;
             break;
           case 'ArrowDown':
             nextIndex = currentIndex + inputsPerRow;
+            if (nextIndex >= totalInputs) nextIndex = currentIndex % inputsPerRow;
             break;
           case 'ArrowUp':
             nextIndex = currentIndex - inputsPerRow;
+            if (nextIndex < 0) {
+              const rowsCount = Math.floor(totalInputs / inputsPerRow);
+              nextIndex = currentIndex + inputsPerRow * (rowsCount - 1);
+              if (nextIndex >= totalInputs) nextIndex = totalInputs - 1;
+            }
             break;
-          default:
-            return;
         }
 
-        if (nextIndex >= 0 && nextIndex < inputs.length) {
-          inputs[nextIndex].focus();
-          inputs[nextIndex].select();
-        }
+        inputs[nextIndex].focus();
+        inputs[nextIndex].select();
       };
 
       const handleContextKeyDown = (e, rowIndex) => {
@@ -637,80 +575,53 @@
           <h1 className="text-2xl font-semibold fixed-heading">Client Payment Tracker</h1>
           <div className="flex justify-between items-center mb-4 pt-12">
             <div className="flex space-x-2">
-              <button
-                onClick={() => setPage('addClient')}
-                className="bg-blue-800 text-white px-4 py-2 rounded-lg hover:bg-blue-900 flex items-center"
-              >
+              <button onClick={() => setPage('addClient')} className="bg-blue-800 text-white px-4 py-2 rounded-lg hover:bg-blue-900 flex items-center">
                 <i className="fas fa-user-plus mr-2"></i> Add Client
               </button>
-              <button
-                onClick={() => csvFileInputRef.current.click()}
-                className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 flex items-center"
-              >
-                <i className="fas fa-file-import mr-2"></i> Import CSV
+              <button onClick={() => csvFileInputRef.current.click()} className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 flex items-center">
+                <i className="fas fa-file-import mr-2"></i> Import-CSV
               </button>
-              <input
-                type="file"
-                ref={csvFileInputRef}
-                accept=".csv"
-                className="hidden"
-                onChange={importCsv}
-              />
+              <input type="file" ref={csvFileInputRef} accept=".csv" className="hidden" onChange={importCsv} />
             </div>
             <div className="flex space-x-2 relative">
-              <div className="flex space-x-1">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && setSearchQuery(e.target.value)}
-                  placeholder="Search clients..."
-                  className="p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-                <button
-                  onClick={() => setSearchQuery(searchQuery)}
-                  className="bg-blue-500 text-white px-3 py-2 rounded-lg hover:bg-blue-600"
-                >
-                  <i className="fas fa-search"></i>
-                </button>
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="bg-gray-500 text-white px-3 py-2 rounded-lg hover:bg-gray-600"
-                >
-                  ×
-                </button>
-              </div>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && setSearchQuery(searchQuery)}
+                placeholder="Search clients..."
+                className="p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                onClick={() => setSearchQuery(searchQuery)}
+                className="bg-blue-500 text-white px-3 py-2 rounded-lg hover:bg-blue-600"
+              >
+                <i className="fas fa-search"></i>
+              </button>
+              <button
+                onClick={() => setSearchQuery('')}
+                className="bg-gray-500 text-white px-3 py-2 rounded-lg hover:bg-gray-600"
+              >
+                ×
+              </button>
               <div className="relative">
-                <button
-                  onClick={() => setFilterOptionsVisible(!filterOptionsVisible)}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center"
-                >
+                <button onClick={() => setFilterOptionsVisible(!filterOptionsVisible)} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center">
                   <i className="fas fa-filter mr-2"></i> Filter
                 </button>
                 {filterOptionsVisible && (
                   <div className="absolute right-0 mt-2 bg-white border rounded-lg shadow-lg p-4 z-50 min-w-[300px]">
                     <div className="mb-4">
                       <label className="block mb-1">Month</label>
-                      <select
-                        value={monthFilter}
-                        onChange={e => setMonthFilter(e.target.value)}
-                        className="w-full p-2 border rounded-lg"
-                      >
+                      <select value={monthFilter} onChange={e => setMonthFilter(e.target.value)} className="w-full p-2 border rounded-lg">
                         <option value="">Select Month</option>
                         {months.map(month => (
-                          <option key={month} value={month}>
-                            {month.charAt(0).toUpperCase() + month.slice(1)}
-                          </option>
+                          <option key={month} value={month}>{month.charAt(0).toUpperCase() + month.slice(1)}</option>
                         ))}
                       </select>
                     </div>
                     <div className="mb-4">
                       <label className="block mb-1">Payment Status</label>
-                      <select
-                        value={statusFilter}
-                        onChange={e => setStatusFilter(e.target.value)}
-                        className="w-full p-2 border rounded-lg"
-                      >
+                      <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="w-full p-2 border rounded-lg">
                         <option value="">Select Status</option>
                         <option value="paid">Paid</option>
                         <option value="unpaid">Unpaid</option>
@@ -718,21 +629,10 @@
                       </select>
                     </div>
                     <div className="flex justify-end gap-2">
-                      <button
-                        onClick={() => {
-                          setMonthFilter('');
-                          setStatusFilter('');
-                          setFilterOptionsVisible(false);
-                          setSearchQuery('');
-                        }}
-                        className="bg-gray-500 text-white px-3 py-2 rounded-lg hover:bg-gray-600"
-                      >
+                      <button onClick={() => { setMonthFilter(''); setStatusFilter(''); setFilterOptionsVisible(false); setSearchQuery(''); }} className="bg-gray-500 text-white px-3 py-2 rounded-lg hover:bg-gray-600">
                         Clear
                       </button>
-                      <button
-                        onClick={() => setFilterOptionsVisible(false)}
-                        className="bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700"
-                      >
+                      <button onClick={() => setFilterOptionsVisible(false)} className="bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700">
                         Apply
                       </button>
                     </div>
@@ -742,7 +642,7 @@
             </div>
           </div>
 
-          <div className="table-container bg-white rounded-lg shadow-lg" ref={tableRef}>
+          <div className="table-container bg-white rounded-lg shadow" ref={tableRef}>
             <table className="w-full">
               <thead>
                 <tr className="bg-gray-100 text-left">
@@ -754,12 +654,9 @@
                   <th rowSpan="2" className="p-2 text-center">Total Due</th>
                   <th rowSpan="2" className="p-2 text-center">Actions</th>
                 </tr>
-                <tr>
+                <tr className="bg-gray-100">
                   {months.map((month, index) => (
-                    <th
-                      key={month}
-                      className={`p-2 text-center ${index < 6 ? 'manual-entry-cell' : ''}`}
-                    >
+                    <th key={month} className={`p-2 text-center ${index < 6 ? 'manual-entry-cell' : ''}`}>
                       {month.charAt(0).toUpperCase() + month.slice(1)}
                     </th>
                   ))}
@@ -767,53 +664,33 @@
               </thead>
               <tbody>
                 {paginatedData.map((row, index) => (
-                  <tr
-                    key={index}
-                    onContextMenu={e => handleContextMenu(e, index)}
-                    className="border-t"
-                  >
-                    <td className="p-2 text-center">
-                      {(currentPage - 1) * entriesPerPage + index + 1}
-                    </td>
+                  <tr key={index} onContextMenu={(e) => handleContextMenu(e, index)} className="border-t">
+                    <td className="p-2 text-center">{(currentPage - 1) * entriesPerPage + index + 1}</td>
                     <td className="p-2 flex items-center">
-                      <span className="fas fa-user-circle mr-2"></span>
-                      {row.Client_Name || 'N/A'}
+                      <i className="fas fa-user-circle mr-2"></i>
+                      {row.Client_Name}
                     </td>
                     <td className="p-2 text-center">{row.Type || 'N/A'}</td>
-                    <td className="p-2 text-center">${row.Amount_To_Be_Paid || '0'}</td>
+                    <td className="p-2 text-center">${row.Amount_To_Be_Paid}</td>
                     {months.map((month, monthIndex) => (
-                      <td
-                        key={month}
-                        className={`p-2 text-center ${monthIndex < 6 ? 'manual-entry-cell' : ''}`}
-                      >
+                      <td key={month} className={`p-2 text-center ${monthIndex < 6 ? 'manual-entry-cell' : ''}`}>
                         <input
                           type="text"
                           className={`month-input w-full p-1 border rounded-lg text-center ${getPaymentStatusClass(row, month)}`}
                           value={row[month] || ''}
-                          onChange={e => updatePayment(index, month, e.target.value)}
-                          onKeyDown={e => handleKeyDown(e, index, monthIndex)}
-                          onContextMenu={e => handleContextMenu(e, index)}
+                          onChange={(e) => updatePayment(index, month, e.target.value)}
+                          onKeyDown={(e) => handleKeyDown(e, index, monthIndex)}
+                          onContextMenu={(e) => handleContextMenu(e, index)}
+                          onKeyDownCapture={(e) => handleContextKeyDown(e, index)}
                         />
                       </td>
                     ))}
-                    <td className="p-2 text-center">${row.Due_Payment || '0'}</td>
+                    <td className="p-2 text-center">${row.Due_Payment}</td>
                     <td className="p-2 text-center">
-                      <button
-                        onClick={() => {
-                          setEditClient(row);
-                          setPage('addClient');
-                        }}
-                        className="text-gray-500 hover:text-gray-600 mr-2"
-                      >
+                      <button onClick={() => { setEditClient(row); setPage('addClient'); }} className="text-gray-500 hover:text-gray-700 mr-2">
                         <i className="fas fa-edit"></i>
                       </button>
-                      <button
-                        onClick={() => {
-                          setContextTargetRow({ rowIndex: index });
-                          deleteRow();
-                        }}
-                        className="text-gray-500 hover:text-gray-600"
-                      >
+                      <button onClick={() => { setContextTargetRow({ rowIndex: index }); deleteRow(); }} className="text-gray-500 hover:text-gray-700">
                         <i className="fas fa-trash-alt"></i>
                       </button>
                     </td>
@@ -824,15 +701,12 @@
           </div>
 
           <div className="flex justify-between items-center mt-4">
-            <p>
-              Showing {(currentPage - 1) * entriesPerPage + 1} to{' '}
-              {Math.min(currentPage * entriesPerPage, totalEntries)} of {totalEntries} entries
-            </p>
+            <p>Showing {(currentPage - 1) * entriesPerPage + 1} to {Math.min(currentPage * entriesPerPage, totalEntries)} of {totalEntries} entries</p>
             <div className="flex space-x-2">
               <button
                 onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                 disabled={currentPage === 1}
-                className="px-4 py-2 border rounded-lg disabled:opacity-50"
+                className="px-4 py-2 border rounded-lg"
               >
                 Previous
               </button>
@@ -848,7 +722,7 @@
               <button
                 onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                 disabled={currentPage === totalPages}
-                className="px-4 py-2 border rounded-lg disabled:opacity-50"
+                className="px-4 py-2 border rounded-lg"
               >
                 Next
               </button>
@@ -860,12 +734,7 @@
               className="absolute bg-white border rounded-lg shadow-lg z-50"
               style={{ left: contextTargetRow.x, top: contextTargetRow.y }}
             >
-              <button
-                onClick={deleteRow}
-                className="w-full text-left p-2 hover:bg-gray-200"
-              >
-                Delete This Row
-              </button>
+              <button onClick={deleteRow} className="w-full text-left p-2 hover:bg-gray-200">Delete This Row</button>
             </div>
           )}
         </div>
@@ -876,7 +745,7 @@
       const [clientName, setClientName] = useState(editClient?.Client_Name || '');
       const [email, setEmail] = useState(editClient?.Email || '');
       const [type, setType] = useState(editClient?.Type || '');
-      const [monthlyPayment, setMonthlyPayment] = useState(editClient?.Amount_To_Be_Paid || '');
+      const [monthlyPayment, setMonthlyPayment] = useState(editClient?.monthly_payment || '');
 
       const saveClient = async () => {
         if (!clientName || !email || !type || !monthlyPayment) {
@@ -918,13 +787,14 @@
             });
             alert('Client added successfully!');
           }
-          fetchClients();
-          fetchPayments();
+          fetchClients(sessionToken);
+          fetchPayments(sessionToken);
           setEditClient(null);
           setPage('home');
         } catch (error) {
           console.error('Error saving client:', error);
           alert('Failed to save client: ' + error.message);
+          setPage('home');
         }
       };
 
@@ -933,55 +803,25 @@
           <h2 className="text-xl font-semibold mb-4">{editClient ? 'Edit Client' : 'Add New Client'}</h2>
           <div className="mb-4">
             <label className="block mb-1">Client Name</label>
-            <input
-              type="text"
-              value={clientName}
-              onChange={e => setClientName(e.target.value)}
-              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter client name"
-            />
+            <input type="text" value={clientName} onChange={e => setClientName(e.target.value)} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Enter client name" />
           </div>
           <div className="mb-4">
             <label className="block mb-1">Client Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter client email"
-            />
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Enter client email" />
           </div>
           <div className="mb-4">
             <label className="block mb-1">Type</label>
-            <input
-              type="text"
-              value={type}
-              onChange={e => setType(e.target.value)}
-              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter type"
-            />
+            <input type="text" value={type} onChange={e => setType(e.target.value)} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Enter type" />
           </div>
           <div className="mb-4">
             <label className="block mb-1">Monthly Payment Amount</label>
-            <input
-              type="text"
-              value={monthlyPayment}
-              onChange={e => setMonthlyPayment(e.target.value)}
-              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter amount"
-            />
+            <input type="text" value={monthlyPayment} onChange={e => setMonthlyPayment(e.target.value)} className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Enter amount" />
           </div>
           <div className="flex justify-end gap-2">
-            <button
-              onClick={() => { setEditClient(null); setPage('home'); }}
-              className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600"
-            >
+            <button onClick={() => { setEditClient(null); setPage('home'); }} className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600">
               Cancel
             </button>
-            <button
-              onClick={saveClient}
-              className="bg-blue-800 text-white px-4 py-2 rounded-lg hover:bg-blue-900"
-            >
+            <button onClick={saveClient} className="bg-blue-800 text-white px-4 py-2 rounded-lg hover:bg-blue-900">
               {editClient ? 'Update Client' : 'Add Client'}
             </button>
           </div>
@@ -1004,8 +844,8 @@
             headers: { Authorization: `Bearer ${sessionToken}` },
             data: { Client_Name: client.Client_Name, Type: client.Type },
           });
-          fetchClients();
-          fetchPayments();
+          fetchClients(sessionToken);
+          fetchPayments(sessionToken);
           alert('Client deleted successfully!');
         } catch (error) {
           console.error('Error deleting client:', error);
@@ -1018,27 +858,16 @@
           <h1 className="text-2xl font-semibold fixed-heading">Clients</h1>
           <div className="flex justify-between items-center mb-4 pt-12">
             <div className="flex space-x-2">
-              <button
-                onClick={() => setPage('addClient')}
-                className="bg-blue-800 text-white px-4 py-2 rounded-lg hover:bg-blue-900 flex items-center"
-              >
+              <button onClick={() => setPage('addClient')} className="bg-blue-800 text-white px-4 py-2 rounded-lg hover:bg-blue-900 flex items-center">
                 <i className="fas fa-user-plus mr-2"></i> Add Client
               </button>
-              <button
-                className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 flex items-center"
-              >
+              <button className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 flex items-center">
                 <i className="fas fa-file-import mr-2"></i> Bulk Import
               </button>
             </div>
             <div className="flex space-x-2">
-              <input
-                type="text"
-                placeholder="Search clients..."
-                className="p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-              <button
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center"
-              >
+              <input type="text" placeholder="Search clients..." className="p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" />
+              <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center">
                 <i className="fas fa-filter mr-2"></i> Filters
               </button>
             </div>
@@ -1065,19 +894,13 @@
                       <span className="text-sm text-gray-500">Client ID: #{client.Client_Name.slice(-4)}</span>
                     </td>
                     <td className="p-2">{client.Email || 'N/A'}</td>
-                    <td className="p-2">${client.monthly_payment || '0'}</td>
+                    <td className="p-2">${client.monthly_payment}</td>
                     <td className="p-2">Active</td>
                     <td className="p-2">
-                      <button
-                        onClick={() => { setEditClient(client); setPage('addClient'); }}
-                        className="text-gray-500 hover:text-gray-700 mr-2"
-                      >
+                      <button onClick={() => { setEditClient(client); setPage('addClient'); }} className="text-gray-500 hover:text-gray-700 mr-2">
                         <i className="fas fa-edit"></i>
                       </button>
-                      <button
-                        onClick={() => deleteClient(client)}
-                        className="text-gray-500 hover:text-gray-700"
-                      >
+                      <button onClick={() => deleteClient(client)} className="text-gray-500 hover:text-gray-700">
                         <i className="fas fa-trash-alt"></i>
                       </button>
                     </td>
@@ -1088,15 +911,12 @@
           </div>
 
           <div className="flex justify-between items-center mt-4">
-            <p>
-              Showing {(currentPage - 1) * entriesPerPage + 1} to{' '}
-              {Math.min(currentPage * entriesPerPage, totalEntries)} of {totalEntries} entries
-            </p>
+            <p>Showing {(currentPage - 1) * entriesPerPage + 1} to {Math.min(currentPage * entriesPerPage, totalEntries)} of {totalEntries} entries</p>
             <div className="flex space-x-2">
               <button
                 onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                 disabled={currentPage === 1}
-                className="px-4 py-2 border rounded-lg disabled:opacity-50"
+                className="px-4 py-2 border rounded-lg"
               >
                 Previous
               </button>
@@ -1112,7 +932,7 @@
               <button
                 onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                 disabled={currentPage === totalPages}
-                className="px-4 py-2 border rounded-lg disabled:opacity-50"
+                className="px-4 py-2 border rounded-lg"
               >
                 Next
               </button>
@@ -1142,9 +962,7 @@
                   <th className="p-2 text-center">Type</th>
                   <th className="p-2 text-center">Amount To Be Paid</th>
                   {months.map(month => (
-                    <th key={month} className="p-2 text-center">
-                      {month.charAt(0).toUpperCase() + month.slice(1)}
-                    </th>
+                    <th key={month} className="p-2 text-center">{month.charAt(0).toUpperCase() + month.slice(1)}</th>
                   ))}
                   <th className="p-2 text-center">Total Due</th>
                 </tr>
@@ -1154,16 +972,14 @@
                   <tr key={index} className="border-t">
                     <td className="p-2 flex items-center">
                       <i className="fas fa-user-circle mr-2"></i>
-                      {payment.Client_Name || 'N/A'}
+                      {payment.Client_Name}
                     </td>
                     <td className="p-2 text-center">{payment.Type || 'N/A'}</td>
-                    <td className="p-2 text-center">${payment.Amount_To_Be_Paid || '0'}</td>
+                    <td className="p-2 text-center">${payment.Amount_To_Be_Paid}</td>
                     {months.map(month => (
-                      <td key={month} className="p-2 text-center">
-                        {payment[month] || '—'}
-                      </td>
+                      <td key={month} className="p-2 text-center">{payment[month] || '—'}</td>
                     ))}
-                    <td className="p-2 text-center">${payment.Due_Payment || '0'}</td>
+                    <td className="p-2 text-center">${payment.Due_Payment}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1171,15 +987,12 @@
           </div>
 
           <div className="flex justify-between items-center mt-4">
-            <p>
-              Showing {(currentPage - 1) * entriesPerPage + 1} to{' '}
-              {Math.min(currentPage * entriesPerPage, totalEntries)} of {totalEntries} entries
-            </p>
+            <p>Showing {(currentPage - 1) * entriesPerPage + 1} to {Math.min(currentPage * entriesPerPage, totalEntries)} of {totalEntries} entries</p>
             <div className="flex space-x-2">
               <button
                 onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
                 disabled={currentPage === 1}
-                className="px-4 py-2 border rounded-lg disabled:opacity-50"
+                className="px-4 py-2 border rounded-lg"
               >
                 Previous
               </button>
@@ -1195,7 +1008,7 @@
               <button
                 onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
                 disabled={currentPage === totalPages}
-                className="px-4 py-2 border rounded-lg disabled:opacity-50"
+                className="px-4 py-2 border rounded-lg"
               >
                 Next
               </button>
