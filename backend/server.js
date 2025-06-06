@@ -1,5 +1,5 @@
 const express = require('express');
-const cors = require('cookie-parser');
+const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 const { google } = require('googleapis');
@@ -10,30 +10,46 @@ require('dotenv').config();
 
 const app = express();
 
+// Trust Render's proxy
 app.set('trust proxy', 1);
 
+// Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100,
   standardHeaders: true,
-  sessionToken: false,
+  legacyHeaders: false,
 });
 app.use(limiter);
 
+// CORS configuration
 app.use(cors({
   origin: ['https://reliable-eclair-abf03c.netlify.app', 'http://localhost:5174'],
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
+// Handle preflight OPTIONS requests
+app.options('*', cors({
+  origin: ['https://reliable-eclair-abf03c.netlify.app', 'http://localhost:5174'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+
+// Cookie parser
 app.use(cookieParser());
+
+// Parse JSON
 app.use(express.json());
 
+// Health check
 app.get('/', (req, res) => {
-  res.send('Payment Tracker Backend is running!');
+  res.json({ message: 'Payment Tracker Backend is running!' });
 });
 
+// Google Sheets setup
 const auth = new google.auth.JWT(
   process.env.GOOGLE_CLIENT_EMAIL,
   null,
@@ -41,8 +57,9 @@ const auth = new google.auth.JWT(
   ['https://www.googleapis.com/auth/spreadsheets']
 );
 
-const spreadsheetId = process.env.GOOGLE_SHEETS_ID;
+const spreadsheetId = process.env.SHEET_ID;
 
+// Helper to ensure sheet exists
 async function ensureSheet(sheetName, headers) {
   const sheets = google.sheets({ version: 'v4', auth });
   try {
@@ -56,7 +73,7 @@ async function ensureSheet(sheetName, headers) {
         },
       });
       await sheets.spreadsheets.values.update({
-        spreadsheetId,
+        spreadsheetId: spreadsheetId,
         range: `${sheetName}!A1`,
         valueInputOption: 'RAW',
         resource: { values: [headers] },
@@ -68,6 +85,7 @@ async function ensureSheet(sheetName, headers) {
   }
 }
 
+// Helper to read data
 async function readSheet(sheetName, range) {
   const sheets = google.sheets({ version: 'v4', auth });
   try {
@@ -82,6 +100,7 @@ async function readSheet(sheetName, range) {
   }
 }
 
+// Helper to append data
 async function appendSheet(sheetName, values) {
   const sheets = google.sheets({ version: 'v4', auth });
   try {
@@ -97,6 +116,7 @@ async function appendSheet(sheetName, values) {
   }
 }
 
+// Helper to write data
 async function writeSheet(sheetName, range, values) {
   const sheets = google.sheets({ version: 'v4', auth });
   try {
@@ -112,6 +132,7 @@ async function writeSheet(sheetName, range, values) {
   }
 }
 
+// Middleware to verify JWT
 const authenticateToken = (req, res, next) => {
   let token = req.cookies?.sessionToken;
   if (!token && req.headers.authorization) {
@@ -120,12 +141,10 @@ const authenticateToken = (req, res, next) => {
       token = authHeader.substring(7);
     }
   }
-
   if (!token) {
     console.log('No session token provided');
     return res.status(401).json({ error: 'Access denied: No token provided' });
   }
-
   try {
     const user = jwt.verify(token, process.env.SECRET_KEY);
     req.user = user;
@@ -136,6 +155,7 @@ const authenticateToken = (req, res, next) => {
   }
 };
 
+// Input sanitization
 const sanitizeInput = (input) => {
   return sanitizeHtml(input, {
     allowedTags: [],
@@ -143,15 +163,14 @@ const sanitizeInput = (input) => {
   });
 };
 
+// Signup
 app.post('/api/signup', async (req, res) => {
   let { username, password, gmailId } = req.body;
   if (!username || !password || !gmailId) {
     return res.status(400).json({ error: 'All fields are required' });
   }
-
   username = sanitizeInput(username);
   gmailId = sanitizeInput(gmailId);
-
   if (!/^[a-zA-Z0-9._%+-]+@gmail\.com$/.test(gmailId)) {
     return res.status(400).json({ error: 'Please enter a valid Gmail ID' });
   }
@@ -161,14 +180,12 @@ app.post('/api/signup', async (req, res) => {
   if (password.length < 6) {
     return res.status(400).json({ error: 'Password must be at least 6 characters' });
   }
-
   try {
     await ensureSheet('Users', ['Username', 'Password', 'Gmail ID']);
     const users = await readSheet('Users', 'A2:C');
     if (users.some(user => user[0] === username || user[2] === gmailId)) {
       return res.status(400).json({ error: 'Username or Gmail ID already exists' });
     }
-
     const hashedPassword = await bcrypt.hash(password, 10);
     await appendSheet('Users', [[username, hashedPassword, gmailId]]);
     res.status(201).json({ message: 'Account created successfully' });
@@ -178,14 +195,13 @@ app.post('/api/signup', async (req, res) => {
   }
 });
 
+// Login
 app.post('/api/login', async (req, res) => {
   let { username, password } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password are required' });
   }
-
   username = sanitizeInput(username);
-
   try {
     await ensureSheet('Users', ['Username', 'Password', 'Gmail ID']);
     const users = await readSheet('Users', 'A2:C');
@@ -193,7 +209,6 @@ app.post('/api/login', async (req, res) => {
     if (!user || !(await bcrypt.compare(password, user[1]))) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-
     const sessionToken = jwt.sign({ username }, process.env.SECRET_KEY, { expiresIn: '1h' });
     res.cookie('sessionToken', sessionToken, {
       httpOnly: true,
@@ -209,6 +224,7 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+// Logout
 app.post('/api/logout', (req, res) => {
   res.clearCookie('sessionToken', {
     httpOnly: true,
@@ -219,6 +235,7 @@ app.post('/api/logout', (req, res) => {
   res.json({ message: 'Logged out successfully' });
 });
 
+// Get Clients
 app.get('/api/get-clients', authenticateToken, async (req, res) => {
   try {
     await ensureSheet('Clients', ['User', 'Client_Name', 'Email', 'Type', 'Monthly_Payment']);
@@ -237,16 +254,15 @@ app.get('/api/get-clients', authenticateToken, async (req, res) => {
   }
 });
 
+// Add Client
 app.post('/api/add-client', authenticateToken, async (req, res) => {
   let { clientName, email, type, monthlyPayment } = req.body;
   if (!clientName || !type || !monthlyPayment) {
     return res.status(400).json({ error: 'Client name, type, and monthly payment are required' });
   }
-
   clientName = sanitizeInput(clientName);
   type = sanitizeInput(type);
   email = email ? sanitizeInput(email) : '';
-
   const paymentValue = parseFloat(monthlyPayment);
   if (isNaN(paymentValue) || paymentValue <= 0) {
     return res.status(400).json({ error: 'Monthly payment must be a positive number' });
@@ -254,7 +270,6 @@ app.post('/api/add-client', authenticateToken, async (req, res) => {
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({ error: 'Invalid email address' });
   }
-
   try {
     await ensureSheet('Clients', ['User', 'Client_Name', 'Email', 'Type', 'Monthly_Payment']);
     await ensureSheet('Payments', ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment']);
@@ -267,18 +282,17 @@ app.post('/api/add-client', authenticateToken, async (req, res) => {
   }
 });
 
+// Update Client
 app.put('/api/update-client', authenticateToken, async (req, res) => {
   let { clientName, email, type, monthlyPayment, Old_Client_Name, Old_Type } = req.body;
   if (!clientName || !type || !monthlyPayment || !Old_Client_Name || !Old_Type) {
     return res.status(400).json({ error: 'All required fields must be provided' });
   }
-
   clientName = sanitizeInput(clientName);
   type = sanitizeInput(type);
   Old_Client_Name = sanitizeInput(Old_Client_Name);
   Old_Type = sanitizeInput(Old_Type);
   email = email ? sanitizeInput(email) : '';
-
   const paymentValue = parseFloat(monthlyPayment);
   if (isNaN(paymentValue) || paymentValue <= 0) {
     return res.status(400).json({ error: 'Monthly payment must be a positive number' });
@@ -286,20 +300,16 @@ app.put('/api/update-client', authenticateToken, async (req, res) => {
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({ error: 'Invalid email address' });
   }
-
   try {
     await ensureSheet('Clients', ['User', 'Client_Name', 'Email', 'Type', 'Monthly_Payment']);
     await ensureSheet('Payments', ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment']);
     let clients = await readSheet('Clients', 'A2:E');
-    let payments = await readSheet('Payments', 'A2:C');
-
+    let payments = await readSheet('Payments', 'A2:R');
     const clientIndex = clients.findIndex(client => client[0] === req.user.username && client[1] === Old_Client_Name && client[3] === Old_Type);
     const paymentIndex = payments.findIndex(payment => payment[0] === req.user.username && payment[1] === Old_Client_Name && payment[2] === Old_Type);
-
     if (clientIndex === -1 || paymentIndex === -1) {
       return res.status(404).json({ error: 'Client not found' });
     }
-
     clients[clientIndex] = [req.user.username, clientName, email, type, paymentValue];
     payments[paymentIndex] = [req.user.username, clientName, type, paymentValue, ...payments[paymentIndex].slice(4, 17)];
     await writeSheet('Clients', 'A2:E', clients);
@@ -311,29 +321,25 @@ app.put('/api/update-client', authenticateToken, async (req, res) => {
   }
 });
 
+// Delete Client
 app.delete('/api/delete-client', authenticateToken, async (req, res) => {
   let { Client_Name, Type } = req.body;
   if (!Client_Name || !Type) {
     return res.status(400).json({ error: 'Client name and type are required' });
   }
-
   Client_Name = sanitizeInput(Client_Name);
   Type = sanitizeInput(Type);
-
   try {
     await ensureSheet('Clients', ['User', 'Client_Name', 'Email', 'Type', 'Monthly_Payment']);
     await ensureSheet('Payments', ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment']);
     let clients = await readSheet('Clients', 'A2:E');
     let payments = await readSheet('Payments', 'A2:R');
-
     const clientExists = clients.some(client => client[0] === req.user.username && client[1] === Client_Name && client[3] === Type);
     if (!clientExists) {
       return res.status(404).json({ error: 'Client not found' });
     }
-
     clients = clients.filter(client => !(client[0] === req.user.username && client[1] === Client_Name && client[3] === Type));
     payments = payments.filter(payment => !(payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type));
-
     await writeSheet('Clients', 'A2:E', clients);
     await writeSheet('Payments', 'A2:R', payments);
     res.json({ message: 'Client deleted successfully' });
@@ -343,6 +349,7 @@ app.delete('/api/delete-client', authenticateToken, async (req, res) => {
   }
 });
 
+// Get Payments
 app.get('/api/get-payments', authenticateToken, async (req, res) => {
   try {
     await ensureSheet('Payments', ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment']);
@@ -373,34 +380,30 @@ app.get('/api/get-payments', authenticateToken, async (req, res) => {
   }
 });
 
+// Save Payments
 app.post('/api/save-payments', authenticateToken, async (req, res) => {
   const paymentsData = req.body;
   if (!Array.isArray(paymentsData)) {
     return res.status(400).json({ error: 'Payments data must be an array' });
   }
-
   try {
     await ensureSheet('Payments', ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment']);
     let payments = await readSheet('Payments', 'A2:R');
     for (const data of paymentsData) {
       let { Client_Name, Type, Amount_To_Be_Paid, january, february, march, april, may, june, july, august, september, october, november, december, Due_Payment } = data;
-
       Client_Name = sanitizeInput(Client_Name);
       Type = sanitizeInput(Type);
       Amount_To_Be_Paid = parseFloat(Amount_To_Be_Paid);
       Due_Payment = parseFloat(Due_Payment);
-
       const months = [january, february, march, april, may, june, july, august, september, october, november, december];
       const sanitizedMonths = months.map(month => month ? sanitizeInput(month.toString()) : '');
-
       if (isNaN(Amount_To_Be_Paid) || Amount_To_Be_Paid <= 0) {
         continue;
       }
       if (isNaN(Due_Payment)) {
         Due_Payment = 0;
       }
-
-      const index不可以_pai = payments.findIndex(payment => payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type);
+      const index = payments.findIndex(payment => payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type);
       if (index !== -1) {
         payments[index] = [
           req.user.username,
@@ -429,38 +432,33 @@ app.post('/api/save-payments', authenticateToken, async (req, res) => {
   }
 });
 
+// Import CSV
 app.post('/api/import-csv', authenticateToken, async (req, res) => {
   const csvData = req.body;
   if (!Array.isArray(csvData)) {
     return res.status(400).json({ error: 'CSV data must be an array' });
   }
-
   try {
     await ensureSheet('Clients', ['User', 'Client_Name', 'Email', 'Type', 'Monthly_Payment']);
     await ensureSheet('Payments', ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment']);
     let clients = await readSheet('Clients', 'A2:E');
     let payments = await readSheet('Payments', 'A2:R');
-
     for (const record of csvData) {
       let { Client_Name, Type, Amount_To_Be_Paid } = record;
-
       Client_Name = sanitizeInput(Client_Name || 'Unknown Client');
       Type = sanitizeInput(Type || 'Unknown Type');
       Amount_To_Be_Paid = parseFloat(Amount_To_Be_Paid);
-
       if (isNaN(Amount_To_Be_Paid) || Amount_To_Be_Paid <= 0) {
         continue;
       }
-
       const clientExists = clients.some(client => client[0] === req.user.username && client[1] === Client_Name && client[3] === Type);
       if (!clientExists) {
         await appendSheet('Clients', [[req.user.username, Client_Name, '', Type, Amount_To_Be_Paid]]);
         clients.push([req.user.username, Client_Name, '', Type, Amount_To_Be_Paid]);
       }
-
       const paymentExists = payments.some(payment => payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type);
       if (!paymentExists) {
-        await appendSheet('Payments', [[req.user.username, Client_Name, Type, Amount_To_Be_Paid, '', '', '', '', '', '', '', '', '', '', '', '0']]);
+        await appendSheet('Payments', [[req.user.username, Client_Name, Type, Amount_To_Be_Paid, '', '', '', '', '', '', '', '', '', '', '', '', '0']]);
         payments.push([req.user.username, Client_Name, Type, Amount_To_Be_Paid, '', '', '', '', '', '', '', '', '', '', '', '', '0']);
       }
     }
