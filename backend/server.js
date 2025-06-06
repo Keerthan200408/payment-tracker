@@ -95,39 +95,50 @@ const sanitizeInput = (input) => {
 
 // Signup
 app.post('/api/signup', async (req, res) => {
-  let { username, password, gmailId } = req.body;
-  if (!username || !password || !gmailId) {
-    return res.status(400).json({ error: 'All fields are required' });
-  }
-
-  // Sanitize inputs
-  username = sanitizeInput(username);
-  gmailId = sanitizeInput(gmailId);
-
-  if (!gmailId.endsWith('@gmail.com')) {
-    return res.status(400).json({ error: 'Please enter a valid Gmail ID' });
-  }
-  if (username.length < 3 || username.length > 50) {
-    return res.status(400).json({ error: 'Username must be between 3 and 50 characters' });
-  }
-  if (password.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters' });
-  }
-
   try {
-    const users = await readSheet('Users', 'A2:C');
-    if (users.some(user => user[0] === username || user[2] === gmailId)) {
-      return res.status(400).json({ error: 'Username or Gmail ID already exists' });
+    const { email, password, gmailId } = req.body;
+    if (!email || !password || !gmailId) {
+      return res.status(400).json({ error: 'Email, password, and Gmail ID are required' });
+    }
+    if (!/^[a-zA-Z0-9._%+-]+@gmail\.com$/.test(gmailId)) {
+      return res.status(400).json({ error: 'Invalid Gmail ID' });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-    await appendSheet('Users', [[username, hashedPassword, gmailId]]);
+    const auth = new google.auth.JWT(
+      process.env.GOOGLE_CLIENT_EMAIL,
+      null,
+      process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      ['https://www.googleapis.com/auth/spreadsheets']
+    );
+    const sheets = google.sheets({ version: 'v4', auth });
+
+    // Check if user exists
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.GOOGLE_SHEETS_ID,
+      range: 'Users!A:C',
+    });
+    const users = response.data.values || [];
+    if (users.find(u => u[0] === email || u[2] === gmailId)) {
+      return res.status(400).json({ error: 'Email or Gmail ID already exists' });
+    }
+
+    // Append new user
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: process.env.GOOGLE_SHEETS_ID,
+      range: 'Users!A:C',
+      valueInputOption: 'RAW',
+      requestBody: {
+        values: [[email, password, gmailId]],
+      },
+    });
+
     res.status(201).json({ message: 'Account created successfully' });
   } catch (error) {
     console.error('Signup error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
 
 // Login endpoint
 app.post('/api/login', async (req, res) => {
