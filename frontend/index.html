@@ -361,106 +361,173 @@
     };
 
     const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
-      const [isSignup, setIsSignup] = useState(false);
-      const [username, setUsername] = useState('');
-      const [password, setPassword] = useState('');
-      const [gmailId, setGmailId] = useState('');
+  const [isSignup, setIsSignup] = useState(false);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [gmailId, setGmailId] = useState('');
 
-      const handleLogin = async () => {
-        if (!username || !password) {
-          alert('Username and password are required.');
-          return;
-        }
-        try {
-          const response = await axios.post(`${BASE_URL}/api/login`, { username, password }, { timeout: 10000 });
-          setCurrentUser(response.data.username);
-          setSessionToken(response.data.sessionToken);
-          localStorage.setItem('currentUser', response.data.username);
-          localStorage.setItem('sessionToken', response.data.sessionToken);
-          setPage('home');
-        } catch (error) {
-          console.error('Login error:', error.response?.data);
-          alert(error.response?.data?.error || 'Error logging in');
-        }
-      };
+  const handleLogin = async () => {
+    // Validate inputs
+    if (!username.trim() || !password.trim()) {
+      alert('Please enter both username and password.');
+      return;
+    }
 
-      const handleSignup = async () => {
-        if (!username || !password || !gmailId) {
-          alert('All fields are required.');
-          return;
-        }
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(gmailId) || !gmailId.endsWith('@gmail.com')) {
-          alert('Please enter a valid Gmail ID.');
-          return;
-        }
-        try {
-          await axios.post(`${BASE_URL}/api/signup`, { username, password, gmailId }, { timeout: 10000 });
-          alert('Account created successfully! Please login.');
-          setIsSignup(false);
-          setUsername('');
-          setPassword('');
-          setGmailId('');
-        } catch (error) {
-          console.error('Signup error:', error.response?.data);
-          alert(error.response?.data?.error || 'Error signing up');
-        }
-      };
-
-      return (
-        <div className="max-w-md mx-auto mt-20 p-6 bg-white rounded-lg shadow-lg">
-          <h2 className="text-2xl font-semibold text-center mb-4">
-            {isSignup ? 'Sign Up' : 'Sign In'}
-          </h2>
-          {isSignup ? (
-            <div>
-              <div className="mb-4">
-                <label className="block mb-1">Username</label>
-                <input type="text" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={username} onChange={e => setUsername(e.target.value)} placeholder="Enter username" />
-              </div>
-              <div className="mb-4">
-                <label className="block mb-1">Password</label>
-                <input type="password" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter password" />
-              </div>
-              <div className="mb-4">
-                <label className="block mb-1">Gmail ID</label>
-                <input type="email" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={gmailId} onChange={e => setGmailId(e.target.value)} placeholder="Enter Gmail ID" />
-              </div>
-'opposition: <div className="flex justify-end gap-2">
-                <button onClick={() => setIsSignup(false)} className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600">
-                  Cancel
-                </button>
-                <button onClick={handleSignup} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
-                  Sign Up
-                </button>
-              </div>
-              <p className="text-center mt-2">
-                Already have an account? <button onClick={() => setIsSignup(false)} className="text-blue-600 hover:underline">Login</button>
-              </p>
-            </div>
-          ) : (
-            <div>
-              <div className="mb-4">
-                <label className="block mb-1">Username</label>
-                <input type="text" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={username} onChange={e => setUsername(e.target.value)} placeholder="Enter username" />
-              </div>
-              <div className="mb-4">
-                <label className="block mb-1">Password</label>
-                <input type="password" className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter password" />
-              </div>
-              <div className="flex justify-end gap-2">
-                <button onClick={handleLogin} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
-                  Login
-                </button>
-              </div>
-              <p className="text-center mt-2">
-                Don't have an account? <button onClick={() => setIsSignup(true)} className="text-blue-600 hover:underline">Sign Up</button>
-              </p>
-            </div>
-          )}
-        </div>
+    try {
+      const response = await axios.post(
+        `${BASE_URL}/api/login`,
+        { username, password },
+        { timeout: 10000 }
       );
-    };
+      console.log('Login success:', response.data);
+      setCurrentUser(response.data.username);
+      setSessionToken(response.data.sessionToken);
+      localStorage.setItem('currentUser', response.data.username);
+      localStorage.setItem('sessionToken', response.data.sessionToken);
+      setPage('home');
+    } catch (error) {
+      console.error('Login error:', error.response?.data, error.message);
+      const errorMsg = error.response?.data?.error || 'Failed to log in. Please check your credentials or try again later.';
+      alert(errorMsg);
+    }
+  };
+
+  const handleSignup = async () => {
+    // Validate inputs
+    if (!username.trim() || !password.trim() || !gmailId.trim()) {
+      alert('Please fill in all fields.');
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(gmailId) || !gmailId.endsWith('@gmail.com')) {
+      alert('Please enter a valid Gmail address.');
+      return;
+    }
+
+    try {
+      const response = await axios.post(
+        `${BASE_URL}/api/signup`,
+        { username, password, gmailId },
+        { timeout: 10000 }
+      );
+      console.log('Signup success:', response.data);
+      alert('Account created successfully! Please log in.');
+      setIsSignup(false);
+      setUsername('');
+      setPassword('');
+      setGmailId('');
+    } catch (error) {
+      console.error('Signup error:', error.response?.data, error.message);
+      const errorMsg = error.response?.data?.error || 'Failed to sign up. Please check your details or try again later.';
+      alert(errorMsg);
+    }
+  };
+
+  return (
+    <div className="max-w-md mx-auto mt-20 p-6 bg-white rounded-lg shadow-lg">
+      <h2 className="text-2xl font-semibold text-center mb-4">
+        {isSignup ? 'Sign Up' : 'Sign In'}
+      </h2>
+      {isSignup ? (
+        <div>
+          <div className="mb-4">
+            <label className="block mb-1">Username</label>
+            <input
+              type="text"
+              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              value={username}
+              onChange={e => setUsername(e.target.value.trim())}
+              placeholder="Enter username"
+            />
+          </div>
+          <div className="mb-4">
+            <label className="block mb-1">Password</label>
+            <input
+              type="password"
+              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              value={password}
+              onChange={e => setPassword(e.target.value.trim())}
+              placeholder="Enter password"
+            />
+          </div>
+          <div className="mb-4">
+            <label className="block mb-1">Gmail ID</label>
+            <input
+              type="email"
+              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              value={gmailId}
+              onChange={e => setGmailId(e.target.value.trim())}
+              placeholder="Enter Gmail ID"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setIsSignup(false)}
+              className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSignup}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+            >
+              Sign Up
+            </button>
+          </div>
+          <p className="text-center mt-2">
+            Already have an account?{' '}
+            <button
+              onClick={() => setIsSignup(false)}
+              className="text-blue-600 hover:underline"
+            >
+              Login
+            </button>
+          </p>
+        </div>
+      ) : (
+        <div>
+          <div className="mb-4">
+            <label className="block mb-1">Username</label>
+            <input
+              type="text"
+              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              value={username}
+              onChange={e => setUsername(e.target.value.trim())}
+              placeholder="Enter username"
+            />
+          </div>
+          <div className="mb-4">
+            <label className="block mb-1">Password</label>
+            <input
+              type="password"
+              className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              value={password}
+              onChange={e => setPassword(e.target.value.trim())}
+              placeholder="Enter password"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={handleLogin}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+            >
+              Login
+            </button>
+          </div>
+          <p className="text-center mt-2">
+            Don't have an account?{' '}
+            <button
+              onClick={() => setIsSignup(true)}
+              className="text-blue-600 hover:underline"
+            >
+              Sign Up
+            </button>
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
 
     const HomePage = ({
       paymentsData, setPaymentsData, searchQuery, setSearchQuery, monthFilter, setMonthFilter, statusFilter, setStatusFilter,

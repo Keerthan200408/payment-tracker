@@ -8,7 +8,9 @@ const jwt = require('jsonwebtoken');
 
 const app = express();
 app.use(cors({
-  origin: 'https://reliable-eclair-abf03c.netlify.app',
+  origin: ['https://reliable-eclair-abf03c.netlify.app', 'http://localhost:8000', 'http://127.0.0.1:8000'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 app.use(express.json());
 
@@ -16,6 +18,12 @@ app.use(express.json());
 app.get('/', (req, res) => {
   res.send('Payment Tracker Backend is running!');
 });
+
+// Validate environment variables
+if (!process.env.GOOGLE_CREDENTIALS || !process.env.SPREADSHEET_ID) {
+  console.error('Missing required environment variables: GOOGLE_CREDENTIALS or SPREADSHEET_ID');
+  process.exit(1);
+}
 
 // Google Sheets setup
 const auth = new google.auth.GoogleAuth({
@@ -26,15 +34,20 @@ const auth = new google.auth.GoogleAuth({
 const spreadsheetId = process.env.SPREADSHEET_ID || '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
 
 async function getSheetsClient() {
-  const client = await auth.getClient();
-  return google.sheets({ version: 'v4', auth: client });
+  try {
+    const client = await auth.getClient();
+    return google.sheets({ version: 'v4', auth: client });
+  } catch (error) {
+    console.error('Error initializing Google Sheets client:', error.message);
+    throw error;
+  }
 }
 
 // Middleware to verify JWT
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Access denied' });
+  if (!token) return res.status(401).json({ error: 'Access denied: No token provided' });
 
   jwt.verify(token, 'your-secret-key', (err, user) => {
     if (err) return res.status(403).json({ error: 'Invalid token' });
@@ -45,39 +58,56 @@ const authenticateToken = (req, res, next) => {
 
 // Helper to read data from a sheet
 async function readSheet(sheetName, range) {
-  const sheets = await getSheetsClient();
-  const response = await sheets.spreadsheets.values.get({
-    spreadsheetId,
-    range: `${sheetName}!${range}`,
-  });
-  return response.data.values || [];
+  try {
+    const sheets = await getSheetsClient();
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${sheetName}!${range}`,
+    });
+    return response.data.values || [];
+  } catch (error) {
+    console.error(`Error reading sheet ${sheetName} range ${range}:`, error.message);
+    throw error;
+  }
 }
 
 // Helper to write data to a sheet
 async function writeSheet(sheetName, range, values) {
-  const sheets = await getSheetsClient();
-  await sheets.spreadsheets.values.update({
-    spreadsheetId,
-    range: `${sheetName}!${range}`,
-    valueInputOption: 'RAW',
-    resource: { values },
-  });
+  try {
+    const sheets = await getSheetsClient();
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `${sheetName}!${range}`,
+      valueInputOption: 'RAW',
+      resource: { values },
+    });
+  } catch (error) {
+    console.error(`Error writing to sheet ${sheetName} range ${range}:`, error.message);
+    throw error;
+  }
 }
 
 // Helper to append data to a sheet
 async function appendSheet(sheetName, values) {
-  const sheets = await getSheetsClient();
-  await sheets.spreadsheets.values.append({
-    spreadsheetId,
-    range: sheetName,
-    valueInputOption: 'RAW',
-    resource: { values },
-  });
+  try {
+    const sheets = await getSheetsClient();
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: sheetName,
+      valueInputOption: 'RAW',
+      resource: { values },
+    });
+  } catch (error) {
+    console.error(`Error appending to sheet ${sheetName}:`, error.message);
+    throw error;
+  }
 }
 
 // Signup
 app.post('/api/signup', async (req, res) => {
   const { username, password, gmailId } = req.body;
+  console.log('Signup request:', { username, gmailId }); // Debug log
+
   if (!username || !password || !gmailId) {
     return res.status(400).json({ error: 'All fields are required' });
   }
@@ -93,15 +123,19 @@ app.post('/api/signup', async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
     await appendSheet('Users', [[username, hashedPassword, gmailId]]);
+    console.log('User signed up successfully:', username);
     res.status(201).json({ message: 'Account created successfully' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Signup error:', error.message);
+    res.status(500).json({ error: `Failed to sign up: ${error.message}` });
   }
 });
 
 // Login
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
+  console.log('Login request:', { username }); // Debug log
+
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password are required' });
   }
@@ -109,16 +143,29 @@ app.post('/api/login', async (req, res) => {
   try {
     const users = await readSheet('Users', 'A2:C');
     const user = users.find(u => u[0] === username);
-    if (!user || !(await bcrypt.compare(password, user[1]))) {
+    if (!user) {
+      console.log('User not found:', username);
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const passwordMatch = await bcrypt.compare(password, user[1]);
+    if (!passwordMatch) {
+      console.log('Password mismatch for user:', username);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     const token = jwt.sign({ username }, 'your-secret-key', { expiresIn: '1h' });
+    console.log('Login successful:', username);
     res.json({ username, sessionToken: token });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Login error:', error.message);
+    res.status(500).json({ error: `Failed to log in: ${error.message}` });
   }
 });
+
+// [Rest of your server.js code remains unchanged: /api/get-clients, /api/add-client, /api/update-client, /api/delete-client, /api/get-payments, /api/save-payments, /api/import-csv]
+
+app.listen(5000, () => console.log('Server running on port 5000'));
 
 // Get Clients
 app.get('/api/get-clients', authenticateToken, async (req, res) => {
