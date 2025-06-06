@@ -1,4 +1,4 @@
-import { useState } from 'react';
+/* import { useState } from 'react';
 import axios from 'axios';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
@@ -150,4 +150,103 @@ const AddClientPage = ({
   );
 };
 
-export default AddClientPage;
+export default AddClientPage; */
+
+
+import { useState } from 'react';
+import axios from 'axios';
+
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+
+const AddClient = () => {
+  const [clientName, setClientName] = useState('');
+  const [email, setEmail] = useState('');
+  const [type, setType] = useState('');
+  const [monthlyPayment, setMonthlyPayment] = useState('');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!clientName || !type || !monthlyPayment) {
+      setError('Client name, type, and monthly payment are required.');
+      return;
+    }
+    setError('');
+    setIsLoading(true);
+    try {
+      await axios.post(`${BASE_URL}/api/add-client`, { clientName, email, type, monthlyPayment }, {
+        withCredentials: true,
+      });
+      setClientName('');
+      setEmail('');
+      setType('');
+      setMonthlyPayment('');
+      alert('Client added successfully!');
+    } catch (error) {
+      console.error('Add client error:', error);
+      setError(error.response?.data?.error || 'Error adding client. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="p-6 max-w-md mx-auto">
+      <h2 className="text-2xl font-bold mb-4">Add Client</h2>
+      {error && <div className="mb-4 p-2 bg-red-100 text-red-700 rounded-lg">{error}</div>}
+      <div className="mb-4">
+        <label className="block mb-1">Client Name</label>
+        <input
+          type="text"
+          className="w-full p-2 border rounded-lg"
+          value={clientName}
+          onChange={(e) => setClientName(e.target.value)}
+          placeholder="Enter Client Name"
+          disabled={isLoading}
+        />
+      </div>
+      <div className="mb-4">
+        <label className="block mb-1">Email (Optional)</label>
+        <input
+          type="email"
+          className="w-full p-2 border rounded-lg"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Enter Email"
+          disabled={isLoading}
+        />
+      </div>
+      <div className="mb-4">
+        <label className="block mb-1">Type</label>
+        <input
+          type="text"
+          className="w-full p-2 border rounded-lg"
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+          placeholder="Enter Type"
+          disabled={isLoading}
+        />
+      </div>
+      <div className="mb-4">
+        <label className="block mb-1">Monthly Payment</label>
+        <input
+          type="number"
+          className="w-full p-2 border rounded-lg"
+          value={monthlyPayment}
+          onChange={(e) => setMonthlyPayment(e.target.value)}
+          placeholder="Enter Monthly Payment"
+          disabled={isLoading}
+        />
+      </div>
+      <button
+        onClick={handleSubmit}
+        className="w-full p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
+        disabled={isLoading}
+      >
+        {isLoading ? 'Adding...' : 'Add Client'}
+      </button>
+    </div>
+  );
+};
+
+export default AddClient;

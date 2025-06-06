@@ -53,11 +53,8 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
         timeout: 10000,
         withCredentials: true,
       });
-      setIsSignup(false);
-      setUsername('');
-      setPassword('');
-      setGmailId('');
-      setError('');
+      // Auto-login after signup
+      await handleLogin(username, password);
       alert('Account created successfully! Please login.'); // Kept alert per original
     } catch (error) {
       console.error('Signup error:', error);

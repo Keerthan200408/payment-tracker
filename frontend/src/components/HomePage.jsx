@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+/* import { useState, useRef } from 'react';
 
 const HomePage = ({
   paymentsData,
@@ -394,6 +394,113 @@ const HomePage = ({
           </button>
         </div>
       )}
+    </div>
+  );
+};
+
+export default HomePage; */
+
+
+import { useState, useEffect } from 'react';
+import axios from 'axios';
+
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+
+const HomePage = () => {
+  const [clients, setClients] = useState([]);
+  const [payments, setPayments] = useState([]);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [clientsRes, paymentsRes] = await Promise.all([
+          axios.get(`${BASE_URL}/api/get-clients`, { withCredentials: true }),
+          axios.get(`${BASE_URL}/api/get-payments`, { withCredentials: true }),
+        ]);
+        setClients(clientsRes.data);
+        setPayments(paymentsRes.data);
+      } catch (error) {
+        console.error('Fetch error:', error);
+        setError('Error fetching data. Please try again.');
+      }
+    };
+    fetchData();
+  }, []);
+
+  return (
+    <div className="p-6">
+      {error && <div className="mb-4 p-2 bg-red-100 text-red-700 rounded-lg">{error}</div>}
+      <h2 className="text-2xl font-bold mb-4">Clients</h2>
+      <div className="overflow-x-auto">
+        <table className="min-w-full bg-white border">
+          <thead className="bg-gray-100 sticky top-16">
+            <tr>
+              <th className="p-2 border">Client Name</th>
+              <th className="p-2 border">Email</th>
+              <th className="p-2 border">Type</th>
+              <th className="p-2 border">Monthly Payment</th>
+            </tr>
+          </thead>
+          <tbody>
+            {clients.map((client, index) => (
+              <tr key={index}>
+                <td className="p-2 border">{client.Client_Name}</td>
+                <td className="p-2 border">{client.Email}</td>
+                <td className="p-2 border">{client.Type}</td>
+                <td className="p-2 border">{client.monthly_payment}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <h2 className="text-2xl font-bold mb-4 mt-6">Payments</h2>
+      <div className="overflow-x-auto">
+        <table className="min-w-full bg-white border">
+          <thead className="bg-gray-100 sticky top-16">
+            <tr>
+              <th className="p-2 border">Client Name</th>
+              <th className="p-2 border">Type</th>
+              <th className="p-2 border">Amount</th>
+              <th className="p-2 border">Jan</th>
+              <th className="p-2 border">Feb</th>
+              <th className="p-2 border">Mar</th>
+              <th className="p-2 border">Apr</th>
+              <th className="p-2 border">May</th>
+              <th className="p-2 border">Jun</th>
+              <th className="p-2 border">Jul</th>
+              <th className="p-2 border">Aug</th>
+              <th className="p-2 border">Sep</th>
+              <th className="p-2 border">Oct</th>
+              <th className="p-2 border">Nov</th>
+              <th className="p-2 border">Dec</th>
+              <th className="p-2 border">Due</th>
+            </tr>
+          </thead>
+          <tbody>
+            {payments.map((payment, index) => (
+              <tr key={index}>
+                <td className="p-2 border">{payment.Client_Name}</td>
+                <td className="p-2 border">{payment.Type}</td>
+                <td className="p-2 border">{payment.Amount_To_Be_Paid}</td>
+                <td className="p-2 border">{payment.january}</td>
+                <td className="p-2 border">{payment.february}</td>
+                <td className="p-2 border">{payment.march}</td>
+                <td className="p-2 border">{payment.april}</td>
+                <td className="p-2 border">{payment.may}</td>
+                <td className="p-2 border">{payment.june}</td>
+                <td className="p-2 border">{payment.july}</td>
+                <td className="p-2 border">{payment.august}</td>
+                <td className="p-2 border">{payment.september}</td>
+                <td className="p-2 border">{payment.october}</td>
+                <td className="p-2 border">{payment.november}</td>
+                <td className="p-2 border">{payment.december}</td>
+                <td className="p-2 border">{payment.Due_Payment}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };

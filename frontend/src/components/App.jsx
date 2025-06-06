@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+/* import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import SignInPage from './SignInPage.jsx';
 import HomePage from './HomePage.jsx';
@@ -363,5 +363,106 @@ const App = () => {
     </ErrorBoundary>
   );
 };
+
+export default App; */
+
+
+import { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
+import axios from 'axios';
+import SignInPage from './components/SignInPage';
+import HomePage from './components/HomePage';
+import AddClient from './components/AddClient';
+import ImportCSV from './components/ImportCSV';
+
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+
+function App() {
+  const [currentUser, setCurrentUser] = useState(localStorage.getItem('currentUser') || '');
+  const [sessionToken, setSessionToken] = useState(localStorage.getItem('sessionToken') || '');
+  const [gmailId, setGmailId] = useState('');
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+
+  useEffect(() => {
+    if (currentUser && sessionToken) {
+      axios.get(`${BASE_URL}/api/login`, { withCredentials: true })
+        .then(response => setGmailId(response.data.gmailId))
+        .catch(() => {
+          setCurrentUser('');
+          setSessionToken('');
+          localStorage.removeItem('currentUser');
+          localStorage.removeItem('sessionToken');
+        });
+    }
+  }, [currentUser, sessionToken]);
+
+  const handleLogout = async () => {
+    try {
+      await axios.post(`${BASE_URL}/api/logout`, {}, { withCredentials: true });
+      setCurrentUser('');
+      setSessionToken('');
+      setGmailId('');
+      localStorage.removeItem('currentUser');
+      localStorage.removeItem('sessionToken');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
+  return (
+    <Router>
+      <div className="flex min-h-screen">
+        {currentUser && (
+          <aside className="w-64 bg-gray-800 text-white fixed top-0 left-0 h-full z-10">
+            <div className="p-4 text-2xl font-bold">Payment Tracker</div>
+            <nav className="mt-4">
+              <ul>
+                <li className="p-4 hover:bg-gray-700"><a href="/home">Home</a></li>
+                <li className="p-4 hover:bg-gray-700"><a href="/add-client">Add Client</a></li>
+                <li className="p-4 hover:bg-gray-700"><a href="/import-csv">Import CSV</a></li>
+              </ul>
+            </nav>
+          </aside>
+        )}
+        <div className={`flex-1 ${currentUser ? 'ml-64' : ''}`}>
+          {currentUser && (
+            <header className="bg-white shadow p-4 flex justify-end fixed top-0 right-0 left-64 z-10">
+              <div className="relative">
+                <button
+                  onClick={() => setShowProfileMenu(!showProfileMenu)}
+                  className="text-gray-600 hover:text-gray-800"
+                >
+                  {currentUser}
+                </button>
+                {showProfileMenu && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white border rounded shadow-lg">
+                    <div className="p-4">
+                      <p><strong>Username:</strong> {currentUser}</p>
+                      <p><strong>Gmail ID:</strong> {gmailId}</p>
+                    </div>
+                    <button
+                      onClick={handleLogout}
+                      className="w-full text-left p-4 text-red-600 hover:bg-gray-100"
+                    >
+                      Logout
+                    </button>
+                  </div>
+                )}
+              </div>
+            </header>
+          )}
+          <main className="pt-16">
+            <Routes>
+              <Route path="/" element={currentUser ? <Navigate to="/home" /> : <SignInPage setSessionToken={setSessionToken} setCurrentUser={setCurrentUser} setPage={() => {}} />} />
+              <Route path="/home" element={currentUser ? <HomePage /> : <Navigate to="/" />} />
+              <Route path="/add-client" element={currentUser ? <AddClient /> : <Navigate to="/" />} />
+              <Route path="/import-csv" element={currentUser ? <ImportCSV /> : <Navigate to="/" />} />
+            </Routes>
+          </main>
+        </div>
+      </div>
+    </Router>
+  );
+}
 
 export default App;
