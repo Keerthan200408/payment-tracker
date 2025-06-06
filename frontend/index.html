@@ -411,7 +411,7 @@ nav.-translate-x-full {
           return;
         }
         try {
-          const response = await axios.post(`${BASE_URL}/api/login`, { username, password }, { timeout: 10000 });
+          const response = await axios.post(`${BASE_URL}/api/login`, { username, password }, { timeout: 0000 });
           setCurrentUser(response.data.username);
           setSessionToken(response.data.sessionToken);
           localStorage.setItem('currentUser', response.data.username);
@@ -434,7 +434,7 @@ nav.-translate-x-full {
           return;
         }
         try {
-          await axios.post(`${BASE_URL}/api/signup`, { username, password, gmailId }, { timeout: 10000 });
+          await axios.post(`${BASE_URL}/api/signup`, { username, password, gmailId }, { timeout: 20000 });
           alert('Account created successfully! Please login.');
           setIsSignup(false);
           setUsername('');
