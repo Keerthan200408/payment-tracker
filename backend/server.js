@@ -23,7 +23,7 @@ app.use(limiter);
 
 // CORS
 app.use(cors({
-  origin: 'https://reliable-eclair-abf03c.netlify.app',
+  origin: ['https://reliable-eclair-abf03c.netlify.app', 'http://localhost:5174'],
   credentials: true,
 }));
 
