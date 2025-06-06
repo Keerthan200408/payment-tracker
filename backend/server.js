@@ -420,6 +420,7 @@ app.listen(PORT, () => console.log(`Server running on port ${PORT}`)); */
 
 const express = require('express');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 const { google } = require('googleapis');
 const bcrypt = require('bcryptjs');
@@ -446,6 +447,9 @@ app.use(cors({
   origin: ['https://reliable-eclair-abf03c.netlify.app', 'http://localhost:5174'],
   credentials: true,
 }));
+
+// Cookie parser
+  app.use(cookieParser()); // Added
 
 // Parse JSON
 app.use(express.json());
@@ -539,16 +543,23 @@ async function writeSheet(sheetName, range, values) {
 }
 
 // Middleware to verify JWT
-const authenticateToken = (req, res, next) => {
-  const token = req.cookies.sessionToken;
-  if (!token) return res.status(401).json({ error: 'Access denied' });
+// Middleware to verify JWT
+  const authenticateToken = (req, res, next) => {
+    const token = req.cookies?.sessionToken; // Safe access
+    if (!token) {
+      console.log('No session token provided');
+      return res.status(401).json({ error: 'Access denied: No token provided' });
+    }
 
-  jwt.verify(token, process.env.SECRET_KEY, (err, user) => {
-    if (err) return res.status(403).json({ error: 'Invalid token' });
-    req.user = user;
-    next();
-  });
-};
+    try {
+      const user = jwt.verify(token, process.env.SECRET_KEY);
+      req.user = user;
+      next();
+    } catch (err) {
+      console.log('Invalid token:', err.message);
+      res.status(403).json({ error: 'Invalid token' });
+    }
+  };
 
 // Input sanitization helper
 const sanitizeInput = (input) => {
