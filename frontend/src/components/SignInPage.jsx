@@ -8,15 +8,19 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [gmailId, setGmailId] = useState('');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = async () => {
     if (!username || !password) {
-      alert('Username and password are required.');
+      setError('Username and password are required.');
       return;
     }
+    setError('');
+    setIsLoading(true);
     try {
       const response = await axios.post(`${BASE_URL}/api/login`, { username, password }, {
-        timeout: 20000,
+        timeout: 10000, // Reduced timeout
         withCredentials: true,
       });
       setCurrentUser(response.data.username);
@@ -26,33 +30,40 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
       setPage('home');
     } catch (error) {
       console.error('Login error:', error);
-      alert(error.response?.data?.error || `Error logging in: ${error.message}`);
+      setError(error.response?.data?.error || 'Error logging in. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleSignup = async () => {
     if (!username || !password || !gmailId) {
-      alert('All fields are required.');
+      setError('All fields are required.');
       return;
     }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(gmailId) || !gmailId.endsWith('@gmail.com')) {
-      alert('Please enter a valid Gmail ID.');
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
+    if (!emailRegex.test(gmailId)) {
+      setError('Please enter a valid Gmail ID.');
       return;
     }
+    setError('');
+    setIsLoading(true);
     try {
       await axios.post(`${BASE_URL}/api/signup`, { username, password, gmailId }, {
-        timeout: 20000,
+        timeout: 10000,
         withCredentials: true,
       });
-      alert('Account created successfully! Please login.');
       setIsSignup(false);
       setUsername('');
       setPassword('');
       setGmailId('');
+      setError('');
+      alert('Account created successfully! Please login.'); // Kept alert per original
     } catch (error) {
       console.error('Signup error:', error);
-      alert(error.response?.data?.error || `Error signing up: ${error.message}`);
+      setError(error.response?.data?.error || 'Error signing up. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -61,6 +72,11 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
       <h2 className="text-2xl font-semibold text-center mb-4">
         {isSignup ? 'Sign Up' : 'Sign In'}
       </h2>
+      {error && (
+        <div className="mb-4 p-2 bg-red-100 text-red-700 rounded-lg text-center">
+          {error}
+        </div>
+      )}
       {isSignup ? (
         <div>
           <div className="mb-4">
@@ -72,6 +88,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
               onChange={(e) => setUsername(e.target.value)}
               placeholder="Enter username"
               aria-label="Username"
+              disabled={isLoading}
             />
           </div>
           <div className="mb-4">
@@ -83,6 +100,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter password"
               aria-label="Password"
+              disabled={isLoading}
             />
           </div>
           <div className="mb-4">
@@ -94,19 +112,22 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
               onChange={(e) => setGmailId(e.target.value)}
               placeholder="Enter Gmail ID"
               aria-label="Gmail ID"
+              disabled={isLoading}
             />
           </div>
           <button
             onClick={handleSignup}
-            className="w-full bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition duration-200"
+            className="w-full bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition duration-200 disabled:bg-gray-400"
+            disabled={isLoading}
           >
-            Sign Up
+            {isLoading ? 'Signing Up...' : 'Sign Up'}
           </button>
           <p className="text-center mt-2">
             Already have an account?{' '}
             <button
-              onClick={() => setIsSignup(false)}
+              onClick={() => { setIsSignup(false); setError(''); }}
               className="text-blue-600 hover:underline"
+              disabled={isLoading}
             >
               Login
             </button>
@@ -123,6 +144,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
               onChange={(e) => setUsername(e.target.value)}
               placeholder="Enter username"
               aria-label="Username"
+              disabled={isLoading}
             />
           </div>
           <div className="mb-4">
@@ -134,19 +156,22 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter password"
               aria-label="Password"
+              disabled={isLoading}
             />
           </div>
           <button
             onClick={handleLogin}
-            className="w-full bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition duration-200"
+            className="w-full bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition duration-200 disabled:bg-gray-400"
+            disabled={isLoading}
           >
-            Login
+            {isLoading ? 'Logging In...' : 'Login'}
           </button>
           <p className="text-center mt-2">
             Don't have an account?{' '}
             <button
-              onClick={() => setIsSignup(true)}
+              onClick={() => { setIsSignup(true); setError(''); }}
               className="text-blue-600 hover:underline"
+              disabled={isLoading}
             >
               Sign Up
             </button>

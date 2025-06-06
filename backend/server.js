@@ -1,49 +1,53 @@
 const express = require('express');
-const { google } = require('googleapis');
 const cors = require('cors');
-const csv = require('csv-parse');
-const { Readable } = require('stream');
+const rateLimit = require('express-rate-limit');
+const { google } = require('googleapis');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const rateLimit = require('express-rate-limit');
 const sanitizeHtml = require('sanitize-html');
+require('dotenv').config();
 
 const app = express();
 
-app.use(cors({
-  origin: 'https://reliable-eclair-abf03c.netlify.app',
-  credentials: true,
-}));
-app.use(express.json());
+// Trust Render's proxy
+app.set('trust proxy', 1);
 
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per window
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 app.use(limiter);
 
-// Add root route for debugging
+// CORS
+app.use(cors({
+  origin: 'https://reliable-eclair-abf03c.netlify.app',
+  credentials: true,
+}));
+
+// Parse JSON
+app.use(express.json());
+
+// Health check
 app.get('/', (req, res) => {
   res.send('Payment Tracker Backend is running!');
 });
 
 // Google Sheets setup
-const auth = new google.auth.GoogleAuth({
-  credentials: JSON.parse(process.env.GOOGLE_CREDENTIALS),
-  scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-});
+const auth = new google.auth.JWT(
+  process.env.GOOGLE_CLIENT_EMAIL,
+  null,
+  process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+  ['https://www.googleapis.com/auth/spreadsheets']
+);
 
-const spreadsheetId = process.env.SPREADSHEET_ID || '1SaIzjVREoK3wbwR24vxx4FWwR1Ekdu3YT9-ryCjm2x8';
-
-async function getSheetsClient() {
-  const client = await auth.getClient();
-  return google.sheets({ version: 'v4', auth: client });
-}
+const spreadsheetId = process.env.GOOGLE_SHEETS_ID;
 
 // Helper to read data from a sheet
 async function readSheet(sheetName, range) {
-  const sheets = await getSheetsClient();
+  const sheets = google.sheets({ version: 'v4', auth });
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId,
     range: `${sheetName}!${range}`,
@@ -51,23 +55,23 @@ async function readSheet(sheetName, range) {
   return response.data.values || [];
 }
 
-// Helper to write data to a sheet
-async function writeSheet(sheetName, range, values) {
-  const sheets = await getSheetsClient();
-  await sheets.spreadsheets.values.update({
+// Helper to append data to a sheet
+async function appendSheet(sheetName, values) {
+  const sheets = google.sheets({ version: 'v4', auth });
+  await sheets.spreadsheets.values.append({
     spreadsheetId,
-    range: `${sheetName}!${range}`,
+    range: sheetName,
     valueInputOption: 'RAW',
     resource: { values },
   });
 }
 
-// Helper to append data to a sheet
-async function appendSheet(sheetName, values) {
-  const sheets = await getSheetsClient();
-  await sheets.spreadsheets.values.append({
+// Helper to write data to a sheet
+async function writeSheet(sheetName, range, values) {
+  const sheets = google.sheets({ version: 'v4', auth });
+  await sheets.spreadsheets.values.update({
     spreadsheetId,
-    range: sheetName,
+    range: `${sheetName}!${range}`,
     valueInputOption: 'RAW',
     resource: { values },
   });
@@ -95,43 +99,33 @@ const sanitizeInput = (input) => {
 
 // Signup
 app.post('/api/signup', async (req, res) => {
+  let { username, password, gmailId } = req.body;
+  if (!username || !password || !gmailId) {
+    return res.status(400).json({ error: 'All fields are required' });
+  }
+
+  // Sanitize inputs
+  username = sanitizeInput(username);
+  gmailId = sanitizeInput(gmailId);
+
+  if (!/^[a-zA-Z0-9._%+-]+@gmail\.com$/.test(gmailId)) {
+    return res.status(400).json({ error: 'Please enter a valid Gmail ID' });
+  }
+  if (username.length < 3 || username.length > 50) {
+    return res.status(400).json({ error: 'Username must be between 3 and 50 characters' });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  }
+
   try {
-    const { email, password, gmailId } = req.body;
-    if (!email || !password || !gmailId) {
-      return res.status(400).json({ error: 'Email, password, and Gmail ID are required' });
-    }
-    if (!/^[a-zA-Z0-9._%+-]+@gmail\.com$/.test(gmailId)) {
-      return res.status(400).json({ error: 'Invalid Gmail ID' });
+    const users = await readSheet('Users', 'A2:C');
+    if (users.some(user => user[0] === username || user[2] === gmailId)) {
+      return res.status(400).json({ error: 'Username or Gmail ID already exists' });
     }
 
-    const auth = new google.auth.JWT(
-      process.env.GOOGLE_CLIENT_EMAIL,
-      null,
-      process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-      ['https://www.googleapis.com/auth/spreadsheets']
-    );
-    const sheets = google.sheets({ version: 'v4', auth });
-
-    // Check if user exists
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: process.env.GOOGLE_SHEETS_ID,
-      range: 'Users!A:C',
-    });
-    const users = response.data.values || [];
-    if (users.find(u => u[0] === email || u[2] === gmailId)) {
-      return res.status(400).json({ error: 'Email or Gmail ID already exists' });
-    }
-
-    // Append new user
-    await sheets.spreadsheets.values.append({
-      spreadsheetId: process.env.GOOGLE_SHEETS_ID,
-      range: 'Users!A:C',
-      valueInputOption: 'RAW',
-      requestBody: {
-        values: [[email, password, gmailId]],
-      },
-    });
-
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await appendSheet('Users', [[username, hashedPassword, gmailId]]);
     res.status(201).json({ message: 'Account created successfully' });
   } catch (error) {
     console.error('Signup error:', error);
@@ -139,44 +133,36 @@ app.post('/api/signup', async (req, res) => {
   }
 });
 
-
-// Login endpoint
+// Login
 app.post('/api/login', async (req, res) => {
+  let { username, password } = req.body;
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password are required' });
+  }
+
+  // Sanitize inputs
+  username = sanitizeInput(username);
+
   try {
-    const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+    const users = await readSheet('Users', 'A2:C');
+    const user = users.find(u => u[0] === username);
+    if (!user || !(await bcrypt.compare(password, user[1]))) {
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // Authenticate with Google Sheets
-    const auth = new google.auth.JWT(
-      process.env.GOOGLE_CLIENT_EMAIL,
-      null,
-      process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-      ['https://www.googleapis.com/auth/spreadsheets']
-    );
-
-    const sheets = google.sheets({ version: 'v4', auth });
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: process.env.GOOGLE_SHEETS_ID,
-      range: 'Users!A:B', // Adjust range if your sheet differs
+    const sessionToken = jwt.sign({ username }, process.env.SECRET_KEY, { expiresIn: '1h' });
+    res.cookie('sessionToken', sessionToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 3600000, // 1 hour
+      sameSite: 'Strict',
     });
-
-    const users = response.data.values || [];
-    const user = users.find(u => u[0] === email && u[1] === password);
-
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid email or password' });
-    }
-
-    // Successful login (add session or token logic if needed)
-    res.status(200).json({ message: 'Login successful', user: { email } });
+    res.json({ username, sessionToken }); // Match frontend expectation
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
-
 
 // Logout
 app.post('/api/logout', (req, res) => {
@@ -314,7 +300,7 @@ app.delete('/api/delete-client', authenticateToken, async (req, res) => {
 // Get Payments
 app.get('/api/get-payments', authenticateToken, async (req, res) => {
   try {
-    const payments = await readSheet('Payments', {});
+    const payments = await readSheet('Payments', 'A2:R');
     const userPayments = payments.filter(payment => payment[0] === req.user.username);
     res.json(userPayments.map(payment => ({
       User: payment[0],
@@ -352,13 +338,13 @@ app.post('/api/save-payments', authenticateToken, async (req, res) => {
     let payments = await readSheet('Payments', 'A2:R');
     for (const data of paymentsData) {
       let { Client_Name, Type, Amount_To_Be_Paid, january, february, march, april, may, june, july, august, september, october, november, december, Due_Payment } = data;
-      
+
       // Sanitize inputs
       Client_Name = sanitizeInput(Client_Name);
       Type = sanitizeInput(Type);
       Amount_To_Be_Paid = parseFloat(Amount_To_Be_Paid);
       Due_Payment = parseFloat(Due_Payment);
-      
+
       const months = [january, february, march, april, may, june, july, august, september, october, november, december];
       const sanitizedMonths = months.map(month => month ? sanitizeInput(month.toString()) : '');
 
@@ -399,7 +385,7 @@ app.post('/api/import-csv', authenticateToken, async (req, res) => {
   try {
     for (const record of csvData) {
       let { Client_Name, Type, Amount_To_Be_Paid } = record;
-      
+
       // Sanitize inputs
       Client_Name = sanitizeInput(Client_Name || 'Unknown Client');
       Type = sanitizeInput(Type || 'Unknown Type');
