@@ -134,35 +134,42 @@ app.post('/api/signup', async (req, res) => {
 // Login
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
-  console.log('Login request:', { username }); // Debug log
+  console.log('Login request:', { username });
 
-  if (!username || !password) {
-    console.log('Missing credentials:', { username, password });
+  if (!username?.trim() || !password?.trim()) {
+    console.log('Missing or empty credentials:', { username });
     return res.status(400).json({ error: 'Username and password are required' });
   }
 
   try {
     const users = await readSheet('Users', 'A2:C');
+    console.log('Users fetched:', { userCount: users.length });
+
     if (!users || users.length === 0) {
-      console.log('No users found in Users sheet');
-      return res.status(500).json({ error: 'No users registered. Contact support.' });
+      console.log('Users sheet is empty or inaccessible');
+      return res.status(500).json({ error: 'No users found in database. Contact support.' });
     }
 
-    const user = users.find(u => u[0] === username);
+    const user = users.find(u => u[0] === username.trim());
     if (!user) {
       console.log('User not found:', username);
       return res.status(401).json({ error: 'Invalid username or password' });
     }
 
-    const passwordMatch = await bcrypt.compare(password, user[1]);
+    if (!user[1] || !user[1].startsWith('$2a$')) {
+      console.log('Invalid password hash for user:', username);
+      return res.status(500).json({ error: 'Corrupted user data. Contact support.' });
+    }
+
+    const passwordMatch = await bcrypt.compare(password.trim(), user[1]);
     if (!passwordMatch) {
       console.log('Password mismatch for user:', username);
       return res.status(401).json({ error: 'Invalid username or password' });
     }
 
-    const token = jwt.sign({ username }, 'your-secret-key', { expiresIn: '1h' });
+    const token = jwt.sign({ username: username.trim() }, process.env.JWT_SECRET || 'your-secret-key', { expiresIn: '1h' });
     console.log('Login successful:', username);
-    res.json({ username, sessionToken: token });
+    res.json({ username: username.trim(), sessionToken: token });
   } catch (error) {
     console.error('Login error:', {
       message: error.message,
