@@ -90,11 +90,11 @@ const HomePage = ({
   const renderDashboard = () => (
     <>
       {/* Header Section */}
-      <div className="flex justify-between items-center mb-6">
-        <div className="flex space-x-3">
+      <div className="flex flex-col sm:flex-row justify-between items-center mb-6 space-y-3 sm:space-y-0">
+        <div className="flex flex-col sm:flex-row space-x-0 sm:space-x-3 space-y-3 sm:space-y-0 w-full sm:w-auto">
           <button
             onClick={() => setPage('addClient')}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition duration-200 flex items-center"
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition duration-200 flex items-center w-full sm:w-auto"
           >
             <i className="fas fa-plus mr-2"></i> Add Client
           </button>
@@ -108,7 +108,7 @@ const HomePage = ({
           />
           <label
             htmlFor="csv-import"
-            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition duration-200 flex items-center cursor-pointer"
+            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition duration-200 flex items-center cursor-pointer w-full sm:w-auto"
           >
             <i className="fas fa-upload mr-2"></i> Bulk Import
           </label>
@@ -116,18 +116,18 @@ const HomePage = ({
       </div>
 
       {/* Filters Section */}
-      <div className="flex space-x-4 mb-6">
+      <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 mb-6">
         <input
           type="text"
           placeholder="Search by client or type..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="p-2 border rounded-lg w-1/3 focus:ring-2 focus:ring-blue-500"
+          className="p-2 border rounded-lg w-full sm:w-1/3 focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
         />
         <select
           value={monthFilter}
           onChange={(e) => setMonthFilter(e.target.value)}
-          className="p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+          className="p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm sm:text-base"
         >
           <option value="">All Months</option>
           {months.map((month, index) => (
@@ -139,8 +139,8 @@ const HomePage = ({
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-          disabled={!monthFilter} // Disable status filter if no month is selected
+          className="p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm sm:text-base"
+          disabled={!monthFilter}
         >
           <option value="">Status</option>
           <option value="Paid">Paid</option>
@@ -192,7 +192,7 @@ const HomePage = ({
                         onChange={(e) =>
                           updatePayment(rowIndex, month, e.target.value)
                         }
-                        className="w-20 p-1 border rounded text-right focus:ring-2 focus:ring-blue-500"
+                        className="w-20 p-1 border rounded text-right focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
                         placeholder="0.00"
                       />
                     </td>

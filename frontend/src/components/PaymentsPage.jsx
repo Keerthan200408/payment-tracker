@@ -47,35 +47,35 @@ const PaymentsPage = ({ paymentsData, fetchClients, fetchPayments, sessionToken 
           <tbody>
             {paginatedData.map((payment, index) => (
               <tr key={index} className="border-t">
-                <td className="p-2 flex items-center">
+                <td className="p-2 flex items-center text-sm sm:text-base">
                   <i className="fas fa-user-circle mr-2"></i>
                   {payment.Client_Name}
                 </td>
-                <td className="p-2 text-center">{payment.Type || 'N/A'}</td>
-                <td className="p-2 text-center">${payment.Amount_To_Be_Paid}</td>
+                <td className="p-2 text-center text-sm sm:text-base">{payment.Type || 'N/A'}</td>
+                <td className="p-2 text-center text-sm sm:text-base">${payment.Amount_To_Be_Paid}</td>
                 {months.map((month) => (
-                  <td key={month} className="p-2 text-center">
+                  <td key={month} className="p-2 text-center text-sm sm:text-base">
                     {payment[month] || '—'}
                   </td>
                 ))}
-                <td className="p-2 text-center">${payment.Due_Payment}</td>
+                <td className="p-2 text-center text-sm sm:text-base">${payment.Due_Payment}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      <div className="flex justify-between items-center mt-4">
-        <p>
+      <div className="flex flex-col sm:flex-row justify-between items-center mt-4 space-y-3 sm:space-y-0">
+        <p className="text-sm sm:text-base">
           Showing {(currentPage - 1) * entriesPerPage + 1} to{' '}
           {Math.min(currentPage * entriesPerPage, totalEntries)} of {totalEntries}{' '}
           entries
         </p>
-        <div className="flex space-x-2">
+        <div className="flex flex-wrap justify-center sm:justify-end space-x-2">
           <button
             onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
             disabled={currentPage === 1}
-            className="px-4 py-2 border rounded-lg disabled:opacity-50"
+            className="px-4 py-2 border rounded-lg disabled:opacity-50 text-sm sm:text-base"
           >
             Previous
           </button>
@@ -83,7 +83,7 @@ const PaymentsPage = ({ paymentsData, fetchClients, fetchPayments, sessionToken 
             <button
               key={i}
               onClick={() => setCurrentPage(i + 1)}
-              className={`px-4 py-2 border rounded-lg ${
+              className={`px-4 py-2 border rounded-lg text-sm sm:text-base ${
                 currentPage === i + 1 ? 'bg-blue-800 text-white' : ''
               }`}
             >
@@ -93,7 +93,7 @@ const PaymentsPage = ({ paymentsData, fetchClients, fetchPayments, sessionToken 
           <button
             onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
             disabled={currentPage === totalPages}
-            className="px-4 py-2 border rounded-lg disabled:opacity-50"
+            className="px-4 py-2 border rounded-lg disabled:opacity-50 text-sm sm:text-base"
           >
             Next
           </button>
