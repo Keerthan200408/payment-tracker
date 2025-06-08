@@ -337,56 +337,41 @@ const App = () => {
         )}
         {page !== 'signIn' && (
           <>
-
-            {/* Navbar for Mobile */}
-            <nav className="bg-gray-800 w-full p-4 md:hidden flex justify-between items-center">
-              <div className="flex items-center">
-                <i className="fas fa-money-bill-wave text-2xl mr-2 text-white"></i>
-                <h1 className="text-xl font-semibold text-white">Payment Tracker</h1>
-              </div>
-              <button
-                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className="text-white focus:outline-none"
-              >
-                <i className="fas fa-bars text-2xl"></i>
-              </button>
-            </nav>
-
-            {/* Sidebar - Hidden on mobile by default, visible on md screens */}
-            <nav className={`bg-gray-800 w-full md:w-64 p-4 fixed top-0 left-0 h-auto md:h-full border-r border-gray-200 z-50 ${isSidebarOpen ? 'block' : 'hidden md:block'}`}>
+            {/* Sidebar - Always Visible */}
+            <nav className="bg-white w-64 p-4 fixed top-0 left-0 h-full border-r border-gray-200 z-50">
               <div className="flex items-center mb-6">
-                <i className="fas fa-money-bill-wave text-2xl mr-2 text-white"></i>
-                <h1 className="text-xl font-semibold text-white">Payment Tracker</h1>
+                <i className="fas fa-money-bill-wave text-2xl mr-2"></i>
+                <h1 className="text-xl font-semibold">Payment Tracker</h1>
               </div>
               <ul className="space-y-2">
                 <li>
                   <button
-                    onClick={() => { setPage('home'); setIsSidebarOpen(false); }}
-                    className="w-full text-left p-2 hover:bg-gray-700 rounded-lg flex items-center text-white"
+                    onClick={() => setPage('home')}
+                    className="w-full text-left p-2 hover:bg-gray-100 rounded-lg flex items-center"
                   >
                     <i className="fas fa-tachometer-alt mr-2"></i> Dashboard
                   </button>
                 </li>
                 <li>
                   <button
-                    onClick={() => { setPage('clients'); setIsSidebarOpen(false); }}
-                    className="w-full text-left p-2 hover:bg-gray-700 rounded-lg flex items-center text-white"
+                    onClick={() => setPage('clients')}
+                    className="w-full text-left p-2 hover:bg-gray-100 rounded-lg flex items-center"
                   >
                     <i className="fas fa-users mr-2"></i> Clients
                   </button>
                 </li>
                 <li>
                   <button
-                    onClick={() => { setPage('payments'); setIsSidebarOpen(false); }}
-                    className="w-full text-left p-2 hover:bg-gray-700 rounded-lg flex items-center text-white"
+                    onClick={() => setPage('payments')}
+                    className="w-full text-left p-2 hover:bg-gray-100 rounded-lg flex items-center"
                   >
                     <i className="fas fa-money-bill-wave mr-2"></i> Payments
                   </button>
                 </li>
                 <li>
                   <button
-                    onClick={() => { setPage('reports'); setIsSidebarOpen(false); }}
-                    className="w-full text-left p-2 hover:bg-gray-700 rounded-lg flex items-center text-white"
+                    onClick={() => setPage('reports')}
+                    className="w-full text-left p-2 hover:bg-gray-100 rounded-lg flex items-center"
                   >
                     <i className="fas fa-chart-line mr-2"></i> Reports
                   </button>
@@ -394,7 +379,7 @@ const App = () => {
                 <li>
                   <button
                     onClick={logout}
-                    className="w-full text-left p-2 hover:bg-gray-700 rounded-lg text-red-500 flex items-center"
+                    className="w-full text-left p-2 hover:bg-gray-100 rounded-lg text-red-500 flex items-center"
                   >
                     <i className="fas fa-sign-out-alt mr-2"></i> Logout
                   </button>
@@ -402,9 +387,9 @@ const App = () => {
               </ul>
             </nav>
             {/* Main Content */}
-            <main className="flex-1 p-6 overflow-y-auto md:ml-64 mt-16 md:mt-0">
+            <main className="flex-1 p-6 overflow-y-auto ml-64">
               <header className="flex items-center justify-between mb-6">
-                <h1 className="text-xl font-semibold text-gray-800">
+                <h1 className="text-xl font-semibold">
                   {page === 'home' ? 'Dashboard' : page.charAt(0).toUpperCase() + page.slice(1)}
                 </h1>
                 <div className="relative" ref={profileMenuRef}>
@@ -412,15 +397,15 @@ const App = () => {
                     onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
                     className="focus:outline-none"
                   >
-                    <i className="fas fa-user-circle text-3xl text-gray-800"></i>
+                    <i className="fas fa-user-circle text-3xl"></i>
                   </button>
                   {isProfileMenuOpen && (
-                    <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                    <div className="absolute right-0 mt-2 w-48 bg-white border rounded-lg shadow-lg z-50">
                       <div className="p-4">
-                        <p className="font-semibold text-gray-800">{currentUser}</p>
+                        <p className="font-semibold">{currentUser}</p>
                         <p className="text-gray-600 text-sm">{localStorage.getItem('gmailId')}</p>
                       </div>
-                      <hr className="border-gray-200" />
+                      <hr />
                       <button
                         onClick={logout}
                         className="w-full text-left p-4 text-red-500 hover:bg-gray-100 flex items-center"
