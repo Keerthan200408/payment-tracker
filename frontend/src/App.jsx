@@ -466,6 +466,7 @@ const App = () => {
               {page === 'clients' && (
                 <ClientsPage
                   clientsData={clientsData}
+                  setClientsData={setClientsData} // Pass setClientsData prop
                   setPage={setPage}
                   setEditClient={setEditClient}
                   fetchClients={fetchClients}

@@ -31,7 +31,19 @@ const ClientsPage = ({
         headers: { Authorization: `Bearer ${sessionToken}` },
         data: { Client_Name: client.Client_Name, Type: client.Type },
       });
+
       console.log('Delete response:', response.data); // Debug log
+
+      // Immediately update the local clientsData state to remove the deleted client
+      const updatedClients = clientsData.filter(
+        (c) => !(c.Client_Name === client.Client_Name && c.Type === client.Type)
+      );
+      // Update the parent state (App.jsx) by calling a setter (we'll need to pass this as a prop)
+      // Since clientsData is managed in App.jsx, we need to pass a setClientsData prop
+      // For now, we'll assume App.jsx will handle this, but we need to ensure it's passed
+      setClientsData(updatedClients); // This line assumes setClientsData is passed as a prop
+      
+      // Still fetch updated data to ensure consistency with the backend
       // Refresh data only after successful deletion
       await fetchClients(sessionToken);
       await fetchPayments(sessionToken);
