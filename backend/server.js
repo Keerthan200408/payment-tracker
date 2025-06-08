@@ -236,6 +236,44 @@ app.post('/api/logout', (req, res) => {
   res.json({ message: 'Logged out successfully' });
 });
 
+// Refresh Token Endpoint
+app.post('/api/refresh-token', async (req, res) => {
+  let token = req.cookies?.sessionToken;
+  if (!token && req.headers.authorization) {
+    const authHeader = req.headers.authorization;
+    if (authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    }
+  }
+  if (!token) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+  try {
+    const decoded = jwt.decode(token);
+    if (!decoded || !decoded.username) {
+      return res.status(403).json({ error: 'Invalid token' });
+    }
+    await ensureSheet('Users', ['Username', 'Password', 'Gmail ID']);
+    const users = await readSheet('Users', 'A2:C');
+    const user = users.find(u => u[0] === decoded.username);
+    if (!user) {
+      return res.status(403).json({ error: 'User not found' });
+    }
+    const newToken = jwt.sign({ username: decoded.username }, process.env.SECRET_KEY, { expiresIn: '1h' });
+    res.cookie('sessionToken', newToken, {
+      httpOnly: true,
+      secure: true,
+      maxAge: 3600000,
+      sameSite: 'None',
+      path: '/',
+    });
+    res.json({ username: decoded.username, sessionToken: newToken, gmailId: user[2] });
+  } catch (error) {
+    console.error('Refresh token error:', error);
+    res.status(403).json({ error: 'Invalid token' });
+  }
+});
+
 // Get Clients
 app.get('/api/get-clients', authenticateToken, async (req, res) => {
   try {

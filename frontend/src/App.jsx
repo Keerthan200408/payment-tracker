@@ -11,6 +11,37 @@ import ErrorBoundary from './components/ErrorBoundary.jsx';
 
 const BASE_URL = 'https://payment-tracker-aswa.onrender.com/api';
 
+// Axios Interceptor for Token Refresh
+axios.interceptors.response.use(
+  response => response,
+  async error => {
+    const originalRequest = error.config;
+    if (error.response?.status === 403 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      try {
+        const storedToken = localStorage.getItem('sessionToken');
+        const response = await axios.post(`${BASE_URL}/refresh-token`, {}, {
+          headers: { Authorization: `Bearer ${storedToken}` },
+          withCredentials: true,
+        });
+        const { sessionToken } = response.data;
+        localStorage.setItem('sessionToken', sessionToken);
+        setSessionToken(sessionToken); // Update state
+        originalRequest.headers.Authorization = `Bearer ${sessionToken}`;
+        return axios(originalRequest);
+      } catch (refreshError) {
+        console.error('Token refresh failed:', refreshError);
+        localStorage.removeItem('sessionToken');
+        localStorage.removeItem('currentUser');
+        localStorage.removeItem('gmailId');
+        window.location.href = '/';
+        return Promise.reject(refreshError);
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 const App = () => {
   const [sessionToken, setSessionToken] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
