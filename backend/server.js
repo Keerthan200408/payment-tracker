@@ -472,6 +472,10 @@ app.post('/api/save-payments', authenticateToken, async (req, res) => {
 // });
 
 // Import CSV
+
+// Utility to add delay
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
 app.post('/api/import-csv', authenticateToken, async (req, res) => {
   const csvData = req.body;
   if (!Array.isArray(csvData)) {
@@ -498,11 +502,13 @@ app.post('/api/import-csv', authenticateToken, async (req, res) => {
       if (!clientExists) {
         await appendSheet('Clients', [[req.user.username, Client_Name, Email, Type, Amount_To_Be_Paid]]);
         clients.push([req.user.username, Client_Name, Email, Type, Amount_To_Be_Paid]);
+        await delay(200); // Add 200ms delay between writes to avoid rate limits
       }
       const paymentExists = payments.some(payment => payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type);
       if (!paymentExists) {
         await appendSheet('Payments', [[req.user.username, Client_Name, Type, Amount_To_Be_Paid, '', '', '', '', '', '', '', '', '', '', '', '', '0']]);
         payments.push([req.user.username, Client_Name, Type, Amount_To_Be_Paid, '', '', '', '', '', '', '', '', '', '', '', '', '0']);
+        await delay(200); // Add 200ms delay between writes
       }
     }
     res.status(200).json({ message: 'CSV data imported successfully' });

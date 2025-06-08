@@ -316,7 +316,9 @@ const App = () => {
       fetchClients(sessionToken);
       fetchPayments(sessionToken);
       alert('CSV data imported successfully!');
-      window.location.reload();
+      setTimeout(() => {
+        window.location.reload();
+      }, 3000)
       csvFileInputRef.current.value = '';
     } catch (error) {
       console.error('Import CSV error:', error.response?.data?.error || error.message);
