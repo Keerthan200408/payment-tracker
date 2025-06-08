@@ -48,7 +48,6 @@ const ClientsPage = ({
       // Refresh data only after successful deletion
       await fetchClients(sessionToken);
       await fetchPayments(sessionToken);
-      alert('Client deleted successfully.');
     } catch (error) {
       console.error('Delete client error:', error.response?.data?.error || error.message);
       alert(`Failed to delete client: ${error.response?.data?.error || error.message}`);
