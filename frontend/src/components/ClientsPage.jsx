@@ -6,6 +6,7 @@ const BASE_URL = 'https://payment-tracker-aswa.onrender.com/api'; // Added BASE_
 
 const ClientsPage = ({
   clientsData,
+  setClientsData, // Ensure this prop is received
   setPage,
   setEditClient,
   fetchClients,
