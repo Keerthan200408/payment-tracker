@@ -39,13 +39,13 @@ const ClientsPage = ({
   };
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       {/* Header Section */}
-      <div className="flex justify-between items-center mb-6">
-        <div className="flex space-x-3">
+      <div className="flex flex-col sm:flex-row justify-between items-center mb-4 sm:mb-6">
+        <div className="flex flex-col sm:flex-row space-x-0 sm:space-x-3 space-y-3 sm:space-y-0 w-full sm:w-auto">
           <button
             onClick={() => setPage('addClient')}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition duration-200 flex items-center"
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition duration-200 flex items-center w-full sm:w-auto"
           >
             <i className="fas fa-plus mr-2"></i> Add Client
           </button>
@@ -53,55 +53,55 @@ const ClientsPage = ({
       </div>
 
       {/* Search Section */}
-      <div className="mb-6">
+      <div className="mb-4 sm:mb-6">
         <input
           type="text"
           placeholder="Search by client or type..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="p-2 border rounded-lg w-1/3 focus:ring-2 focus:ring-blue-500"
+          className="p-2 border rounded-lg w-full sm:w-1/3 focus:ring-2 focus:ring-blue-500"
         />
       </div>
 
       {/* Table Section */}
       <div className="overflow-x-auto bg-white rounded-lg shadow-lg">
-        <table className="min-w-full border-collapse">
+        <table className="min-w-[800px] border-collapse">
           <thead>
             <tr className="bg-gray-100">
-              <th className="border p-3 text-left">Client Name</th>
-              <th className="border p-3 text-left">Type</th>
-              <th className="border p-3 text-right">Amount To Be Paid</th>
-              <th className="border p-3 text-center">Actions</th>
+              <th className="border p-2 sm:p-3 text-left text-sm sm:text-base">Client Name</th>
+              <th className="border p-2 sm:p-3 text-left text-sm sm:text-base">Type</th>
+              <th className="border p-2 sm:p-3 text-right text-sm sm:text-base">Amount To Be Paid</th>
+              <th className="border p-2 sm:p-3 text-center text-sm sm:text-base">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredClients.length === 0 ? (
               <tr>
-                <td colSpan={4} className="border p-3 text-center text-gray-500">
+                <td colSpan={4} className="border p-2 sm:p-3 text-center text-gray-500 text-sm sm:text-base">
                   No clients found.
                 </td>
               </tr>
             ) : (
               filteredClients.map((client, index) => (
                 <tr key={index} className="hover:bg-gray-50">
-                  <td className="border p-3">{client.Client_Name}</td>
-                  <td className="border p-3">{client.Type}</td>
-                  <td className="border p-3 text-right">
+                  <td className="border p-2 sm:p-3 text-sm sm:text-base">{client.Client_Name}</td>
+                  <td className="border p-2 sm:p-3 text-sm sm:text-base">{client.Type}</td>
+                  <td className="border p-2 sm:p-3 text-right text-sm sm:text-base">
                     {(client.Amount_To_Be_Paid || 0).toFixed(2)}
                   </td>
-                  <td className="border p-3 text-center">
+                  <td className="border p-2 sm:p-3 text-center">
                     <button
                       onClick={() => {
                         setEditClient(client);
                         setPage('addClient');
                       }}
-                      className="text-blue-500 hover:text-blue-700 mr-4"
+                      className="text-blue-500 hover:text-blue-700 mr-2 sm:mr-4 text-sm sm:text-base"
                     >
                       <i className="fas fa-edit"></i> Edit
                     </button>
                     <button
                       onClick={() => handleDelete(client)}
-                      className="text-red-500 hover:text-red-700"
+                      className="text-red-500 hover:text-red-700 text-sm sm:text-base"
                     >
                       <i className="fas fa-trash"></i> Delete
                     </button>
