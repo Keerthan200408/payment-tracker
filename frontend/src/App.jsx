@@ -121,17 +121,21 @@ const App = () => {
     }
     const rowData = paymentsData[contextMenu.rowIndex];
     try {
-      console.log('Deleting row:', rowData.Client_Name, rowData.Type);
+      console.log('Deleting row from Google Sheets:', rowData.Client_Name, rowData.Type);
+      // Call the delete-client endpoint to remove the client from both worksheets
       await axios.delete(`${BASE_URL}/delete-client`, {
         headers: { Authorization: `Bearer ${sessionToken}` },
         data: { Client_Name: rowData.Client_Name, Type: rowData.Type },
       });
+      // Update local state to reflect the deletion immediately
       setPaymentsData(paymentsData.filter((_, i) => i !== contextMenu.rowIndex));
       setClientsData(clientsData.filter(client => client.Client_Name !== rowData.Client_Name || client.Type !== rowData.Type));
       hideContextMenu();
+      alert('Row deleted successfully.');
     } catch (error) {
       console.error('Delete row error:', error.response?.data?.error || error.message);
       handleSessionError(error);
+      alert(`Failed to delete row: ${error.response?.data?.error || error.message}`);
     }
   };
 
