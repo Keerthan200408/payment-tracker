@@ -94,7 +94,7 @@ const HomePage = ({
         <div className="flex flex-col sm:flex-row space-x-0 sm:space-x-3 space-y-3 sm:space-y-0 w-full sm:w-auto">
           <button
             onClick={() => setPage('addClient')}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition duration-200 flex items-center w-full sm:w-auto"
+            className="bg-blue-500 text-white px-3 py-1.5 rounded-md hover:bg-blue-600 transition duration-200 flex items-center w-full sm:w-auto"
           >
             <i className="fas fa-plus mr-2"></i> Add Client
           </button>
@@ -122,12 +122,12 @@ const HomePage = ({
           placeholder="Search by client or type..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="p-2 border rounded-lg w-full sm:w-1/3 focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+          className="p-2 border-gray-300 rounded-lg w-full sm:w-1/3 focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
         />
         <select
           value={monthFilter}
           onChange={(e) => setMonthFilter(e.target.value)}
-          className="p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm sm:text-base"
+          className="p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm sm:text-base"
         >
           <option value="">All Months</option>
           {months.map((month, index) => (
@@ -139,7 +139,7 @@ const HomePage = ({
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm sm:text-base"
+          className="p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm sm:text-base"
           disabled={!monthFilter}
         >
           <option value="">Status</option>
@@ -153,7 +153,7 @@ const HomePage = ({
       <div className="overflow-x-auto bg-white rounded-lg shadow-lg">
         <table className="min-w-full border-collapse" ref={tableRef}>
           <thead>
-            <tr className="bg-gray-100">
+            <tr className="bg-blue-100">
               <th className="border p-3 text-left">Client Name</th>
               <th className="border p-3 text-left">Type</th>
               <th className="border p-3 text-right">Amount To Be Paid</th>
@@ -177,7 +177,7 @@ const HomePage = ({
                 <tr
                   key={rowIndex}
                   onContextMenu={(e) => handleContextMenu(e, rowIndex)}
-                  className="hover:bg-gray-50"
+                  className="hover:bg-blue-50"
                 >
                   <td className="border p-3">{row.Client_Name}</td>
                   <td className="border p-3">{row.Type}</td>
@@ -192,7 +192,7 @@ const HomePage = ({
                         onChange={(e) =>
                           updatePayment(rowIndex, month, e.target.value)
                         }
-                        className="w-20 p-1 border rounded text-right focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                        className="w-20 p-1 border-gray-300 rounded text-right focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
                         placeholder="0.00"
                       />
                     </td>

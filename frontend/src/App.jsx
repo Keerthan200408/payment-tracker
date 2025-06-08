@@ -353,7 +353,7 @@ const App = () => {
             </nav>
 
             {/* Sidebar */}
-            <nav className={`bg-gray-800 w-full sm:w-64 p-4 fixed top-0 left-0 h-auto sm:h-full border-r border-gray-200 z-50 ${isSidebarOpen ? 'block' : 'hidden sm:block'}`}>
+            <nav className={`bg-blue-900 w-full sm:w-64 p-4 fixed top-0 left-0 h-auto sm:h-full border-r border-gray-200 z-50 ${isSidebarOpen ? 'block' : 'hidden sm:block'}`}>
               <div className="flex items-center mb-6">
                 <i className="fas fa-money-bill-wave text-2xl mr-2 text-white"></i>
                 <h1 className="text-xl font-semibold text-white">Payment Tracker</h1>
@@ -362,7 +362,7 @@ const App = () => {
                 <li>
                   <button
                     onClick={() => { setPage('home'); setIsSidebarOpen(false); }}
-                    className="w-full text-left p-2 hover:bg-gray-700 rounded-lg flex items-center text-white"
+                    className="w-full text-left p-2 hover:bg-blue-800 rounded-lg flex items-center text-white"
                   >
                     <i className="fas fa-tachometer-alt mr-2"></i> Dashboard
                   </button>
@@ -370,7 +370,7 @@ const App = () => {
                 <li>
                   <button
                     onClick={() => { setPage('clients'); setIsSidebarOpen(false); }}
-                    className="w-full text-left p-2 hover:bg-gray-700 rounded-lg flex items-center text-white"
+                    className="w-full text-left p-2 hover:bg-blue-800 rounded-lg flex items-center text-white"
                   >
                     <i className="fas fa-users mr-2"></i> Clients
                   </button>
@@ -378,7 +378,7 @@ const App = () => {
                 <li>
                   <button
                     onClick={() => { setPage('payments'); setIsSidebarOpen(false); }}
-                    className="w-full text-left p-2 hover:bg-gray-700 rounded-lg flex items-center text-white"
+                    className="w-full text-left p-2 hover:bg-blue-800 rounded-lg flex items-center text-white"
                   >
                     <i className="fas fa-money-bill-wave mr-2"></i> Payments
                   </button>
@@ -386,7 +386,7 @@ const App = () => {
                 <li>
                   <button
                     onClick={() => { setPage('reports'); setIsSidebarOpen(false); }}
-                    className="w-full text-left p-2 hover:bg-gray-700 rounded-lg flex items-center text-white"
+                    className="w-full text-left p-2 hover:bg-blue-800 rounded-lg flex items-center text-white"
                   >
                     <i className="fas fa-chart-line mr-2"></i> Reports
                   </button>
@@ -394,7 +394,7 @@ const App = () => {
                 <li>
                   <button
                     onClick={logout}
-                    className="w-full text-left p-2 hover:bg-gray-700 rounded-lg text-red-500 flex items-center"
+                    className="w-full text-left p-2 hover:bg-blue-800 rounded-lg text-red-500 flex items-center"
                   >
                     <i className="fas fa-sign-out-alt mr-2"></i> Logout
                   </button>
@@ -405,7 +405,7 @@ const App = () => {
             {/* Main Content */}
             <main className="flex-1 p-6 overflow-y-auto sm:ml-64 mt-16 sm:mt-0">
               <header className="flex items-center justify-between mb-6">
-                <h1 className="text-xl font-semibold text-gray-800">
+                <h1 className="text-xl font-semibold text-gray-900">
                   {page === 'home' ? 'Dashboard' : page.charAt(0).toUpperCase() + page.slice(1)}
                 </h1>
                 <div className="relative" ref={profileMenuRef}>
@@ -413,18 +413,18 @@ const App = () => {
                     onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
                     className="focus:outline-none"
                   >
-                    <i className="fas fa-user-circle text-3xl text-gray-800"></i>
+                    <i className="fas fa-user-circle text-3xl text-gray-900"></i>
                   </button>
                   {isProfileMenuOpen && (
                     <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
                       <div className="p-4">
-                        <p className="font-semibold text-gray-800">{currentUser}</p>
+                        <p className="font-semibold text-gray-900">{currentUser}</p>
                         <p className="text-gray-600 text-sm">{localStorage.getItem('gmailId')}</p>
                       </div>
                       <hr className="border-gray-200" />
                       <button
                         onClick={logout}
-                        className="w-full text-left p-4 text-red-500 hover:bg-gray-100 flex items-center"
+                        className="w-full text-left p-4 text-red-500 hover:bg-gray-50 flex items-center"
                       >
                         <i className="fas fa-sign-out-alt mr-2"></i> Logout
                       </button>

@@ -80,7 +80,7 @@ const AddClientPage = ({
         {editClient ? 'Edit Client' : 'Add Client'}
       </h2>
       {error && <p className="text-red-500 mb-4">{error}</p>}
-      <div className="bg-white p-4 sm:p-6 rounded-lg shadow-lg">
+      <div className="bg-white p-4 sm:p-6 rounded-lg shadow-md">
         <div className="mb-4">
           <label className="block text-gray-700 mb-2">Client Name</label>
           <input
@@ -116,7 +116,7 @@ const AddClientPage = ({
         <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">
           <button
             onClick={handleSubmit}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition duration-200 flex items-center w-full sm:w-auto"
+            className="bg-blue-500 text-white px-3 py-1.5 rounded-md hover:bg-blue-600 transition duration-200 flex items-center w-full sm:w-auto"
           >
             <i className="fas fa-save mr-2"></i> {editClient ? 'Update' : 'Save'}
           </button>

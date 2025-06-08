@@ -75,8 +75,8 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
-      <div className="w-full sm:max-w-md p-4 sm:p-6 bg-white rounded-lg shadow-lg">
+    <div className="flex items-center justify-center min-h-screen bg-gray-50">
+      <div className="w-full sm:max-w-md p-4 sm:p-6 bg-white rounded-lg shadow-md">
         <h2 className="text-2xl font-semibold text-center mb-4">
           {isSignup ? 'Sign Up' : 'Sign In'}
         </h2>
@@ -91,7 +91,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
               <label className="block mb-1 text-sm sm:text-base">Username</label>
               <input
                 type="text"
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                className="w-full p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="Enter Username"
@@ -103,7 +103,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
               <label className="block mb-1 text-sm sm:text-base">Password</label>
               <input
                 type="password"
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                className="w-full p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter Password"
@@ -115,7 +115,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
               <label className="block mb-1 text-sm sm:text-base">Gmail ID</label>
               <input
                 type="email"
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                className="w-full p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
                 value={gmailId}
                 onChange={(e) => setGmailId(e.target.value)}
                 placeholder="Enter Gmail ID"
@@ -125,7 +125,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
             </div>
             <button
               onClick={handleSignup}
-              className="w-full p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-200 disabled:bg-gray-400"
+              className="w-full px-3 py-1.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200 disabled:bg-gray-400"
               disabled={isLoading}
             >
               {isLoading ? 'Signing Up...' : 'Sign Up'}
@@ -134,7 +134,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
               Already have an account?{' '}
               <button
                 onClick={() => { setIsSignup(false); setError(''); }}
-                className="text-blue-600 hover:underline"
+                className="text-blue-500 hover:underline"
                 disabled={isLoading}
               >
                 Login
@@ -147,7 +147,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
               <label className="block mb-1 text-sm sm:text-base">Username</label>
               <input
                 type="text"
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                className="w-full p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="Enter Username"
@@ -159,7 +159,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
               <label className="block mb-1 text-sm sm:text-base">Password</label>
               <input
                 type="password"
-                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                className="w-full p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter Password"
@@ -169,7 +169,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
             </div>
             <button
               onClick={() => handleLogin(username, password)}
-              className="w-full p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-200 disabled:bg-gray-400"
+              className="w-full px-3 py-1.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200 disabled:bg-gray-400"
               disabled={isLoading}
             >
               {isLoading ? 'Logging In...' : 'Login'}
@@ -178,7 +178,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
               Don't have an account?{' '}
               <button
                 onClick={() => { setIsSignup(true); setError(''); }}
-                className="text-blue-600 hover:underline"
+                className="text-blue-500 hover:underline"
                 disabled={isLoading}
               >
                 Sign Up

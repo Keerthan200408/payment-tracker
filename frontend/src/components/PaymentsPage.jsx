@@ -32,21 +32,21 @@ const PaymentsPage = ({ paymentsData, fetchClients, fetchPayments, sessionToken 
       <div className="max-h-[60vh] overflow-y-auto w-full rounded-lg shadow bg-white">
         <table className="min-w-[1200px] w-full">
           <thead>
-            <tr className="bg-gray-100 text-left">
-              <th className="p-2 text-center">Client</th>
-              <th className="p-2 text-center">Type</th>
-              <th className="p-2 text-center">Amount To Be Paid</th>
+            <tr className="bg-blue-100 text-left">
+              <th className="p-2 text-center border-gray-200">Client</th>
+              <th className="p-2 text-center border-gray-200">Type</th>
+              <th className="p-2 text-center border-gray-200">Amount To Be Paid</th>
               {months.map((month) => (
-                <th key={month} className="p-2 text-center">
+                <th key={month} className="p-2 text-center border-gray-200">
                   {month.charAt(0).toUpperCase() + month.slice(1)}
                 </th>
               ))}
-              <th className="p-2 text-center">Total Due</th>
+              <th className="p-2 text-center border-gray-200">Total Due</th>
             </tr>
           </thead>
           <tbody>
             {paginatedData.map((payment, index) => (
-              <tr key={index} className="border-t">
+              <tr key={index} className="border-t border-gray-200">
                 <td className="p-2 flex items-center text-sm sm:text-base">
                   <i className="fas fa-user-circle mr-2"></i>
                   {payment.Client_Name}
@@ -75,7 +75,7 @@ const PaymentsPage = ({ paymentsData, fetchClients, fetchPayments, sessionToken 
           <button
             onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
             disabled={currentPage === 1}
-            className="px-4 py-2 border rounded-lg disabled:opacity-50 text-sm sm:text-base"
+            className="px-3 py-1.5 border rounded-md disabled:opacity-50 text-sm sm:text-base"
           >
             Previous
           </button>
@@ -83,8 +83,8 @@ const PaymentsPage = ({ paymentsData, fetchClients, fetchPayments, sessionToken 
             <button
               key={i}
               onClick={() => setCurrentPage(i + 1)}
-              className={`px-4 py-2 border rounded-lg text-sm sm:text-base ${
-                currentPage === i + 1 ? 'bg-blue-800 text-white' : ''
+              className={`px-3 py-1.5 border rounded-md text-sm sm:text-base ${
+                currentPage === i + 1 ? 'bg-blue-500 text-white' : ''
               }`}
             >
               {i + 1}
@@ -93,7 +93,7 @@ const PaymentsPage = ({ paymentsData, fetchClients, fetchPayments, sessionToken 
           <button
             onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
             disabled={currentPage === totalPages}
-            className="px-4 py-2 border rounded-lg disabled:opacity-50 text-sm sm:text-base"
+            className="px-3 py-1.5 border rounded-md disabled:opacity-50 text-sm sm:text-base"
           >
             Next
           </button>
