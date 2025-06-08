@@ -26,15 +26,19 @@ const ClientsPage = ({
       return;
     }
     try {
-      await axios.delete(`${BASE_URL}/delete-client`, {
+      console.log('Deleting client:', client.Client_Name, client.Type); // Debug log
+      const response = await axios.delete(`${BASE_URL}/delete-client`, {
         headers: { Authorization: `Bearer ${sessionToken}` },
         data: { Client_Name: client.Client_Name, Type: client.Type },
       });
-      fetchClients(sessionToken);
-      fetchPayments(sessionToken);
+      console.log('Delete response:', response.data); // Debug log
+      // Refresh data only after successful deletion
+      await fetchClients(sessionToken);
+      await fetchPayments(sessionToken);
+      alert('Client deleted successfully.');
     } catch (error) {
-      console.error('Delete client error:', error);
-      alert('Failed to delete client.');
+      console.error('Delete client error:', error.response?.data?.error || error.message);
+      alert(`Failed to delete client: ${error.response?.data?.error || error.message}`);
     }
   };
 
@@ -68,28 +72,28 @@ const ClientsPage = ({
         <table className="min-w-[800px] border-collapse">
           <thead>
             <tr className="bg-blue-100">
-              <th className="border p-3 text-left">Client Name</th>
-              <th className="border p-3 text-left">Type</th>
-              <th className="border p-3 text-right">Amount To Be Paid</th>
-              <th className="border p-3 text-center">Actions</th>
+              <th className="border border-gray-200 p-3 text-left">Client Name</th>
+              <th className="border border-gray-200 p-3 text-left">Type</th>
+              <th className="border border-gray-200 p-3 text-right">Amount To Be Paid</th>
+              <th className="border border-gray-200 p-3 text-center">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredClients.length === 0 ? (
               <tr>
-                <td colSpan={4} className="border p-3 text-center text-gray-500">
+                <td colSpan={4} className="border border-gray-200 p-3 text-center text-gray-500">
                   No clients found.
                 </td>
               </tr>
             ) : (
               filteredClients.map((client, index) => (
                 <tr key={index} className="hover:bg-blue-50">
-                  <td className="border p-3">{client.Client_Name}</td>
-                  <td className="border p-3">{client.Type}</td>
-                  <td className="border p-3 text-right">
+                  <td className="border border-gray-200 p-3">{client.Client_Name}</td>
+                  <td className="border border-gray-200 p-3">{client.Type}</td>
+                  <td className="border border-gray-200 p-3 text-right">
                     {(client.Amount_To_Be_Paid || 0).toFixed(2)}
                   </td>
-                  <td className="border p-3 text-center">
+                  <td className="border border-gray-200 p-3 text-center">
                     <button
                       onClick={() => {
                         setEditClient(client);
