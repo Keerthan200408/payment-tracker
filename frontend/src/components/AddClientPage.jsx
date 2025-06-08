@@ -15,6 +15,7 @@ const AddClientPage = ({
   setEditClient,
 }) => {
   const [clientName, setClientName] = useState('');
+  const [email, setEmail] = useState(''); // New state for email
   const [type, setType] = useState('');
   const [amountToBePaid, setAmountToBePaid] = useState('');
   const [error, setError] = useState('');
@@ -23,6 +24,7 @@ const AddClientPage = ({
   useEffect(() => {
     if (editClient) {
       setClientName(editClient.Client_Name);
+      setEmail(editClient.Email); // Populate email if editing
       setType(editClient.Type);
       setAmountToBePaid(editClient.Amount_To_Be_Paid.toString());
     }
@@ -31,12 +33,16 @@ const AddClientPage = ({
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!clientName || !type || !amountToBePaid) {
-      setError('All fields are required.');
+      setError('Client name, type, and amount are required.');
       return;
     }
     const amount = parseFloat(amountToBePaid);
     if (isNaN(amount) || amount <= 0) {
       setError('Amount must be a positive number.');
+      return;
+    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError('Please enter a valid email address.');
       return;
     }
 
@@ -53,7 +59,7 @@ const AddClientPage = ({
         // Add new client
         await axios.post(`${BASE_URL}/add-client`, {
           clientName,
-          email: '', // Not used in your app, but endpoint expects it
+          email, // Not used in your app, but endpoint expects it
           type,
           monthlyPayment: amount,
         }, {
@@ -63,6 +69,7 @@ const AddClientPage = ({
       fetchClients(sessionToken);
       fetchPayments(sessionToken);
       setClientName('');
+      setEmail(''); // Reset email field
       setType('');
       setAmountToBePaid('');
       setError('');
@@ -90,6 +97,16 @@ const AddClientPage = ({
             className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
             placeholder="Enter client name"
           />
+          </div>
+        <div className="mb-4">
+          <label className="block text-gray-700 mb-2">Email (Optional)</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+            placeholder="Enter email (optional)"
+          />
         </div>
         <div className="mb-4">
           <label className="block text-gray-700 mb-2">Type</label>
@@ -110,7 +127,7 @@ const AddClientPage = ({
             className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
             placeholder="Enter amount"
             min="0"
-            step="0.01"
+            step="100"
           />
         </div>
         <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">
