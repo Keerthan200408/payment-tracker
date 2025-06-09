@@ -19,6 +19,7 @@ const HomePage = ({
   csvFileInputRef,
   importCsv,
   isReportsPage = false,
+  isImporting, // Add isImporting to the destructured props
 }) => {
   const months = [
     'january',
