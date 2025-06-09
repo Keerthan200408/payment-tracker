@@ -102,34 +102,91 @@ async function readSheet(sheetName, range) {
 }
 
 // Helper to append data
+// async function appendSheet(sheetName, values) {
+//   const sheets = google.sheets({ version: 'v4', auth });
+//   try {
+//     await sheets.spreadsheets.values.append({
+//       spreadsheetId,
+//       range: sheetName,
+//       valueInputOption: 'RAW',
+//       resource: { values },
+//     });
+//   } catch (error) {
+//     console.error(`Error appending to sheet ${sheetName}:`, error);
+//     throw error;
+//   }
+// }
+
 async function appendSheet(sheetName, values) {
   const sheets = google.sheets({ version: 'v4', auth });
-  try {
-    await sheets.spreadsheets.values.append({
-      spreadsheetId,
-      range: sheetName,
-      valueInputOption: 'RAW',
-      resource: { values },
-    });
-  } catch (error) {
-    console.error(`Error appending to sheet ${sheetName}:`, error);
-    throw error;
+  const maxRetries = 3;
+  let retryCount = 0;
+
+  while (retryCount <= maxRetries) {
+    try {
+      await sheets.spreadsheets.values.append({
+        spreadsheetId,
+        range: sheetName,
+        valueInputOption: 'RAW',
+        resource: { values },
+      });
+      return; // Success, exit the function
+    } catch (error) {
+      if (error.status === 429 && retryCount < maxRetries) {
+        // Rate limit exceeded, wait and retry
+        const delayMs = Math.pow(2, retryCount) * 1000; // Exponential backoff: 1s, 2s, 4s
+        console.log(`Rate limit exceeded for ${sheetName}, retrying after ${delayMs}ms...`);
+        await delay(delayMs);
+        retryCount++;
+      } else {
+        console.error(`Error appending to sheet ${sheetName}:`, error);
+        throw error;
+      }
+    }
   }
 }
 
 // Helper to write data
+// async function writeSheet(sheetName, range, values) {
+//   const sheets = google.sheets({ version: 'v4', auth });
+//   try {
+//     await sheets.spreadsheets.values.update({
+//       spreadsheetId,
+//       range: `${sheetName}!${range}`,
+//       valueInputOption: 'RAW',
+//       resource: { values },
+//     });
+//   } catch (error) {
+//     console.error(`Error writing to sheet ${sheetName}:`, error);
+//     throw error;
+//   }
+// }
+
 async function writeSheet(sheetName, range, values) {
   const sheets = google.sheets({ version: 'v4', auth });
-  try {
-    await sheets.spreadsheets.values.update({
-      spreadsheetId,
-      range: `${sheetName}!${range}`,
-      valueInputOption: 'RAW',
-      resource: { values },
-    });
-  } catch (error) {
-    console.error(`Error writing to sheet ${sheetName}:`, error);
-    throw error;
+  const maxRetries = 3;
+  let retryCount = 0;
+
+  while (retryCount <= maxRetries) {
+    try {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `${sheetName}!${range}`,
+        valueInputOption: 'RAW',
+        resource: { values },
+      });
+      return;
+    } catch (error) {
+      if (error.status === 429 && retryCount < maxRetries) {
+        const delayMs = Math.pow(2, retryCount) * 1000;
+        console.log(`Rate limit exceeded for ${sheetName}, retrying after ${delayMs}ms...`);
+        await delay(delayMs);
+        retryCount++;
+      } else {
+        console.error(`Error writing to sheet ${sheetName}:`, error);
+        throw error;
+      }
+    }
   }
 }
 
@@ -476,6 +533,48 @@ app.post('/api/save-payments', authenticateToken, async (req, res) => {
 // Utility to add delay
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+// app.post('/api/import-csv', authenticateToken, async (req, res) => {
+//   const csvData = req.body;
+//   if (!Array.isArray(csvData)) {
+//     return res.status(400).json({ error: 'CSV data must be an array' });
+//   }
+//   try {
+//     await ensureSheet('Clients', ['User', 'Client_Name', 'Email', 'Type', 'Monthly_Payment']);
+//     await ensureSheet('Payments', ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment']);
+//     let clients = await readSheet('Clients', 'A2:E');
+//     let payments = await readSheet('Payments', 'A2:R');
+//     for (const record of csvData) {
+//       let { Client_Name, Type, Email, Amount_To_Be_Paid } = record;
+//       Client_Name = sanitizeInput(Client_Name || 'Unknown Client');
+//       Type = sanitizeInput(Type || 'Unknown Type');
+//       Email = Email ? sanitizeInput(Email) : '';
+//       Amount_To_Be_Paid = parseFloat(Amount_To_Be_Paid);
+//       if (isNaN(Amount_To_Be_Paid) || Amount_To_Be_Paid <= 0) {
+//         continue;
+//       }
+//       if (Email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(Email)) {
+//         continue; // Skip rows with invalid email
+//       }
+//       const clientExists = clients.some(client => client[0] === req.user.username && client[1] === Client_Name && client[3] === Type);
+//       if (!clientExists) {
+//         await appendSheet('Clients', [[req.user.username, Client_Name, Email, Type, Amount_To_Be_Paid]]);
+//         clients.push([req.user.username, Client_Name, Email, Type, Amount_To_Be_Paid]);
+//         await delay(200); // Add 200ms delay between writes to avoid rate limits
+//       }
+//       const paymentExists = payments.some(payment => payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type);
+//       if (!paymentExists) {
+//         await appendSheet('Payments', [[req.user.username, Client_Name, Type, Amount_To_Be_Paid, '', '', '', '', '', '', '', '', '', '', '', '', '0']]);
+//         payments.push([req.user.username, Client_Name, Type, Amount_To_Be_Paid, '', '', '', '', '', '', '', '', '', '', '', '', '0']);
+//         await delay(200); // Add 200ms delay between writes
+//       }
+//     }
+//     res.status(200).json({ message: 'CSV data imported successfully' });
+//   } catch (error) {
+//     console.error('Import CSV error:', error);
+//     res.status(500).json({ error: 'Internal server error' });
+//   }
+// });
+
 app.post('/api/import-csv', authenticateToken, async (req, res) => {
   const csvData = req.body;
   if (!Array.isArray(csvData)) {
@@ -486,6 +585,11 @@ app.post('/api/import-csv', authenticateToken, async (req, res) => {
     await ensureSheet('Payments', ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment']);
     let clients = await readSheet('Clients', 'A2:E');
     let payments = await readSheet('Payments', 'A2:R');
+
+    // Prepare batches for Clients and Payments
+    const clientsBatch = [];
+    const paymentsBatch = [];
+
     for (const record of csvData) {
       let { Client_Name, Type, Email, Amount_To_Be_Paid } = record;
       Client_Name = sanitizeInput(Client_Name || 'Unknown Client');
@@ -496,21 +600,28 @@ app.post('/api/import-csv', authenticateToken, async (req, res) => {
         continue;
       }
       if (Email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(Email)) {
-        continue; // Skip rows with invalid email
+        continue;
       }
       const clientExists = clients.some(client => client[0] === req.user.username && client[1] === Client_Name && client[3] === Type);
       if (!clientExists) {
-        await appendSheet('Clients', [[req.user.username, Client_Name, Email, Type, Amount_To_Be_Paid]]);
+        clientsBatch.push([req.user.username, Client_Name, Email, Type, Amount_To_Be_Paid]);
         clients.push([req.user.username, Client_Name, Email, Type, Amount_To_Be_Paid]);
-        await delay(200); // Add 200ms delay between writes to avoid rate limits
       }
       const paymentExists = payments.some(payment => payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type);
       if (!paymentExists) {
-        await appendSheet('Payments', [[req.user.username, Client_Name, Type, Amount_To_Be_Paid, '', '', '', '', '', '', '', '', '', '', '', '', '0']]);
+        paymentsBatch.push([req.user.username, Client_Name, Type, Amount_To_Be_Paid, '', '', '', '', '', '', '', '', '', '', '', '', '0']);
         payments.push([req.user.username, Client_Name, Type, Amount_To_Be_Paid, '', '', '', '', '', '', '', '', '', '', '', '', '0']);
-        await delay(200); // Add 200ms delay between writes
       }
     }
+
+    // Write batches in one go if there are any rows to write
+    if (clientsBatch.length > 0) {
+      await appendSheet('Clients', clientsBatch);
+    }
+    if (paymentsBatch.length > 0) {
+      await appendSheet('Payments', paymentsBatch);
+    }
+
     res.status(200).json({ message: 'CSV data imported successfully' });
   } catch (error) {
     console.error('Import CSV error:', error);

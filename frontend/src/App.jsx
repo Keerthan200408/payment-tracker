@@ -57,6 +57,7 @@ const App = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Add state for sidebar toggle
   const csvFileInputRef = useRef(null);
   const profileMenuRef = useRef(null);
+  const [isImporting, setIsImporting] = useState(false); // Add loading state for CSV import
 
   axios.defaults.withCredentials = true;
 
@@ -234,6 +235,8 @@ const App = () => {
   const file = e.target.files[0];
   if (!file) return;
 
+  setIsImporting(true); // Start loading state
+
   const reader = new FileReader();
   reader.onload = async (event) => {
     const text = event.target.result;
@@ -318,13 +321,15 @@ const App = () => {
       alert('CSV data imported successfully!');
       setTimeout(() => {
         window.location.reload();
-      }, 3000)
+      }, 5000)
       csvFileInputRef.current.value = '';
     } catch (error) {
       console.error('Import CSV error:', error.response?.data?.error || error.message);
       handleSessionError(error);
       alert('Failed to import CSV data: ' + (error.response?.data?.error || error.message));
       csvFileInputRef.current.value = '';
+    } finally {
+      setIsImporting(false); // End loading state
     }
   };
   reader.readAsText(file);
@@ -383,20 +388,22 @@ const App = () => {
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gray-100">
-        {page === 'signIn' && (
+        {page === "signIn" && (
           <SignInPage
             setSessionToken={setSessionToken}
             setCurrentUser={setCurrentUser}
             setPage={setPage}
           />
         )}
-        {page !== 'signIn' && (
+        {page !== "signIn" && (
           <div className="flex flex-col sm:flex-row">
             {/* Navbar for Mobile */}
             <nav className="bg-gray-800 w-full p-4 sm:hidden flex justify-between items-center">
               <div className="flex items-center">
                 <i className="fas fa-money-bill-wave text-2xl mr-2 text-white"></i>
-                <h1 className="text-xl font-semibold text-white">Payment Tracker</h1>
+                <h1 className="text-xl font-semibold text-white">
+                  Payment Tracker
+                </h1>
               </div>
               <button
                 onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -407,15 +414,24 @@ const App = () => {
             </nav>
 
             {/* Sidebar */}
-            <nav className={`bg-blue-900 w-full sm:w-64 p-4 fixed top-0 left-0 h-auto sm:h-full border-r border-gray-200 z-50 ${isSidebarOpen ? 'block' : 'hidden sm:block'}`}>
+            <nav
+              className={`bg-blue-900 w-full sm:w-64 p-4 fixed top-0 left-0 h-auto sm:h-full border-r border-gray-200 z-50 ${
+                isSidebarOpen ? "block" : "hidden sm:block"
+              }`}
+            >
               <div className="flex items-center mb-6">
                 <i className="fas fa-money-bill-wave text-2xl mr-2 text-white"></i>
-                <h1 className="text-xl font-semibold text-white">Payment Tracker</h1>
+                <h1 className="text-xl font-semibold text-white">
+                  Payment Tracker
+                </h1>
               </div>
               <ul className="space-y-2">
                 <li>
                   <button
-                    onClick={() => { setPage('home'); setIsSidebarOpen(false); }}
+                    onClick={() => {
+                      setPage("home");
+                      setIsSidebarOpen(false);
+                    }}
                     className="w-full text-left p-2 hover:bg-blue-800 rounded-lg flex items-center text-white"
                   >
                     <i className="fas fa-tachometer-alt mr-2"></i> Dashboard
@@ -423,7 +439,10 @@ const App = () => {
                 </li>
                 <li>
                   <button
-                    onClick={() => { setPage('clients'); setIsSidebarOpen(false); }}
+                    onClick={() => {
+                      setPage("clients");
+                      setIsSidebarOpen(false);
+                    }}
                     className="w-full text-left p-2 hover:bg-blue-800 rounded-lg flex items-center text-white"
                   >
                     <i className="fas fa-users mr-2"></i> Clients
@@ -431,7 +450,10 @@ const App = () => {
                 </li>
                 <li>
                   <button
-                    onClick={() => { setPage('payments'); setIsSidebarOpen(false); }}
+                    onClick={() => {
+                      setPage("payments");
+                      setIsSidebarOpen(false);
+                    }}
                     className="w-full text-left p-2 hover:bg-blue-800 rounded-lg flex items-center text-white"
                   >
                     <i className="fas fa-money-bill-wave mr-2"></i> Payments
@@ -439,7 +461,10 @@ const App = () => {
                 </li>
                 <li>
                   <button
-                    onClick={() => { setPage('reports'); setIsSidebarOpen(false); }}
+                    onClick={() => {
+                      setPage("reports");
+                      setIsSidebarOpen(false);
+                    }}
                     className="w-full text-left p-2 hover:bg-blue-800 rounded-lg flex items-center text-white"
                   >
                     <i className="fas fa-chart-line mr-2"></i> Reports
@@ -460,7 +485,9 @@ const App = () => {
             <main className="flex-1 p-6 overflow-y-auto sm:ml-64 mt-16 sm:mt-0">
               <header className="flex items-center justify-between mb-6">
                 <h1 className="text-xl font-semibold text-gray-900">
-                  {page === 'home' ? 'Dashboard' : page.charAt(0).toUpperCase() + page.slice(1)}
+                  {page === "home"
+                    ? "Dashboard"
+                    : page.charAt(0).toUpperCase() + page.slice(1)}
                 </h1>
                 <div className="relative" ref={profileMenuRef}>
                   <button
@@ -472,8 +499,9 @@ const App = () => {
                   {isProfileMenuOpen && (
                     <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
                       <div className="p-4">
-                        <p className="font-semibold text-gray-900">{currentUser}</p>
-                        {/* <p className="text-gray-600 text-sm">{localStorage.getItem('gmailId')}</p> */}
+                        <p className="font-semibold text-gray-900">
+                          {currentUser}
+                        </p>
                       </div>
                       <hr className="border-gray-200" />
                       <button
@@ -486,7 +514,12 @@ const App = () => {
                   )}
                 </div>
               </header>
-              {page === 'home' && (
+              {isImporting && (
+                <div className="mb-4 p-3 bg-yellow-100 text-yellow-700 rounded-lg text-center">
+                  Importing, please wait... Do not refresh the page.
+                </div>
+              )}
+              {page === "home" && (
                 <HomePage
                   paymentsData={paymentsData}
                   setPaymentsData={setPaymentsData}
@@ -504,9 +537,10 @@ const App = () => {
                   setPage={setPage}
                   csvFileInputRef={csvFileInputRef}
                   importCsv={importCsv}
+                  isImporting={isImporting}
                 />
               )}
-              {page === 'addClient' && (
+              {page === "addClient" && (
                 <AddClientPage
                   setPage={setPage}
                   fetchClients={fetchClients}
@@ -517,7 +551,7 @@ const App = () => {
                   setEditClient={setEditClient}
                 />
               )}
-              {page === 'clients' && (
+              {page === "clients" && (
                 <ClientsPage
                   clientsData={clientsData}
                   setClientsData={setClientsData} // Pass setClientsData prop
@@ -528,15 +562,16 @@ const App = () => {
                   sessionToken={sessionToken}
                 />
               )}
-              {page === 'payments' && (
+              {page === "payments" && (
                 <PaymentsPage
                   paymentsData={paymentsData}
                   fetchClients={fetchClients}
                   fetchPayments={fetchPayments}
                   sessionToken={sessionToken}
+                  isImporting={isImporting}
                 />
               )}
-              {page === 'reports' && (
+              {page === "reports" && (
                 <HomePage
                   paymentsData={paymentsData}
                   setPaymentsData={setPaymentsData}
@@ -555,6 +590,7 @@ const App = () => {
                   csvFileInputRef={csvFileInputRef}
                   importCsv={importCsv}
                   isReportsPage={true}
+                  isImporting={isImporting}
                 />
               )}
             </main>

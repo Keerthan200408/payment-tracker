@@ -72,17 +72,20 @@ const HomePage = ({
     const matchesMonth =
       !monthFilter ||
       (row[monthFilter.toLowerCase()] !== undefined &&
-       row[monthFilter.toLowerCase()] !== null);
+        row[monthFilter.toLowerCase()] !== null);
 
     const matchesStatus = !monthFilter
       ? true // If no month is selected, don't filter by status
       : !statusFilter ||
-        (statusFilter === 'Paid' &&
-         getPaymentStatusForMonth(row, monthFilter.toLowerCase()) === 'Paid') ||
-        (statusFilter === 'PartiallyPaid' &&
-         getPaymentStatusForMonth(row, monthFilter.toLowerCase()) === 'PartiallyPaid') ||
-        (statusFilter === 'Unpaid' &&
-         getPaymentStatusForMonth(row, monthFilter.toLowerCase()) === 'Unpaid');
+        (statusFilter === "Paid" &&
+          getPaymentStatusForMonth(row, monthFilter.toLowerCase()) ===
+            "Paid") ||
+        (statusFilter === "PartiallyPaid" &&
+          getPaymentStatusForMonth(row, monthFilter.toLowerCase()) ===
+            "PartiallyPaid") ||
+        (statusFilter === "Unpaid" &&
+          getPaymentStatusForMonth(row, monthFilter.toLowerCase()) ===
+            "Unpaid");
 
     return matchesSearch && matchesMonth && matchesStatus;
   });
@@ -93,7 +96,7 @@ const HomePage = ({
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6 space-y-3 sm:space-y-0">
         <div className="flex flex-col sm:flex-row space-x-0 sm:space-x-3 space-y-3 sm:space-y-0 w-full sm:w-auto">
           <button
-            onClick={() => setPage('addClient')}
+            onClick={() => setPage("addClient")}
             className="bg-blue-500 text-white px-3 py-1.5 rounded-md hover:bg-blue-600 transition duration-200 flex items-center w-full sm:w-auto"
           >
             <i className="fas fa-plus mr-2"></i> Add Client
@@ -105,12 +108,18 @@ const HomePage = ({
             onChange={importCsv}
             className="hidden"
             id="csv-import"
+            disabled={isImporting} // Disable the input when importing
           />
           <label
             htmlFor="csv-import"
-            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition duration-200 flex items-center cursor-pointer w-full sm:w-auto"
+            className={`px-4 py-2 rounded-lg text-white flex items-center w-full sm:w-auto ${
+              isImporting
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-green-600 hover:bg-green-700 cursor-pointer"
+            } transition duration-200`}
           >
-            <i className="fas fa-upload mr-2"></i> Bulk Import
+            <i className="fas fa-upload mr-2"></i>
+            {isImporting ? "Importing..." : "Bulk Import"}
           </label>
         </div>
       </div>
@@ -168,7 +177,10 @@ const HomePage = ({
           <tbody>
             {filteredData.length === 0 ? (
               <tr>
-                <td colSpan={15} className="border p-3 text-center text-gray-500">
+                <td
+                  colSpan={15}
+                  className="border p-3 text-center text-gray-500"
+                >
                   No payments found.
                 </td>
               </tr>
@@ -188,7 +200,7 @@ const HomePage = ({
                     <td key={colIndex} className="border p-1 text-right">
                       <input
                         type="text"
-                        value={row[month] || ''}
+                        value={row[month] || ""}
                         onChange={(e) =>
                           updatePayment(rowIndex, month, e.target.value)
                         }
