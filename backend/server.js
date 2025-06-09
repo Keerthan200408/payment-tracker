@@ -166,15 +166,15 @@ const sanitizeInput = (input) => {
 
 // Signup
 app.post('/api/signup', async (req, res) => {
-  let { username, password, gmailId } = req.body;
-  if (!username || !password || !gmailId) {
+  let { username, password } = req.body;
+  if (!username || !password ) {
     return res.status(400).json({ error: 'All fields are required' });
   }
   username = sanitizeInput(username);
-  gmailId = sanitizeInput(gmailId);
-  if (!/^[a-zA-Z0-9._%+-]+@gmail\.com$/.test(gmailId)) {
-    return res.status(400).json({ error: 'Please enter a valid Gmail ID' });
-  }
+  // gmailId = sanitizeInput(gmailId);
+  // if (!/^[a-zA-Z0-9._%+-]+@gmail\.com$/.test(gmailId)) {
+  //   return res.status(400).json({ error: 'Please enter a valid Gmail ID' });
+  // }
   if (username.length < 3 || username.length > 50) {
     return res.status(400).json({ error: 'Username must be between 3 and 50 characters' });
   }
@@ -182,13 +182,13 @@ app.post('/api/signup', async (req, res) => {
     return res.status(400).json({ error: 'Password must be at least 6 characters' });
   }
   try {
-    await ensureSheet('Users', ['Username', 'Password', 'Gmail ID']);
-    const users = await readSheet('Users', 'A2:C');
-    if (users.some(user => user[0] === username || user[2] === gmailId)) {
+    await ensureSheet('Users', ['Username', 'Password']);
+    const users = await readSheet('Users', 'A2:B');
+    if (users.some(user => user[0] === username )) {
       return res.status(400).json({ error: 'Username or Gmail ID already exists' });
     }
     const hashedPassword = await bcrypt.hash(password, 10);
-    await appendSheet('Users', [[username, hashedPassword, gmailId]]);
+    await appendSheet('Users', [[username, hashedPassword]]);
     res.status(201).json({ message: 'Account created successfully' });
   } catch (error) {
     console.error('Signup error:', error);
@@ -204,8 +204,8 @@ app.post('/api/login', async (req, res) => {
   }
   username = sanitizeInput(username);
   try {
-    await ensureSheet('Users', ['Username', 'Password', 'Gmail ID']);
-    const users = await readSheet('Users', 'A2:C');
+    await ensureSheet('Users', ['Username', 'Password']);
+    const users = await readSheet('Users', 'A2:B');
     const user = users.find(u => u[0] === username);
     if (!user || !(await bcrypt.compare(password, user[1]))) {
       return res.status(401).json({ error: 'Invalid credentials' });
@@ -218,7 +218,7 @@ app.post('/api/login', async (req, res) => {
       sameSite: 'None',
       path: '/',
     });
-    res.json({ username, sessionToken, gmailId: user[2] });
+    res.json({ username, sessionToken });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -253,8 +253,8 @@ app.post('/api/refresh-token', async (req, res) => {
     if (!decoded || !decoded.username) {
       return res.status(403).json({ error: 'Invalid token' });
     }
-    await ensureSheet('Users', ['Username', 'Password', 'Gmail ID']);
-    const users = await readSheet('Users', 'A2:C');
+    await ensureSheet('Users', ['Username', 'Password']);
+    const users = await readSheet('Users', 'A2:B');
     const user = users.find(u => u[0] === decoded.username);
     if (!user) {
       return res.status(403).json({ error: 'User not found' });
@@ -267,7 +267,7 @@ app.post('/api/refresh-token', async (req, res) => {
       sameSite: 'None',
       path: '/',
     });
-    res.json({ username: decoded.username, sessionToken: newToken, gmailId: user[2] });
+    res.json({ username: decoded.username, sessionToken: newToken });
   } catch (error) {
     console.error('Refresh token error:', error);
     res.status(403).json({ error: 'Invalid token' });

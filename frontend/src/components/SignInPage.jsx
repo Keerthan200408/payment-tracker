@@ -8,7 +8,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
   const [isSignup, setIsSignup] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [gmailId, setGmailId] = useState('');
+  // const [gmailId, setGmailId] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -28,12 +28,11 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
         withCredentials: true, // Keep for cookie compatibility
       });
       console.log('Login response:', response.data);
-      const { username, sessionToken, gmailId } = response.data;
+      const { username, sessionToken } = response.data;
       setCurrentUser(username);
       setSessionToken(sessionToken);
       localStorage.setItem('currentUser', username);
       localStorage.setItem('sessionToken', sessionToken);
-      localStorage.setItem('gmailId', gmailId);
       setPage('home');
     } catch (error) {
       console.error('Login error:', error.response?.data?.error || error.message);
@@ -44,13 +43,8 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
   };
 
   const handleSignup = async () => {
-    if (!username || !password || !gmailId) {
+    if (!username || !password) {
       setError('All fields are required.');
-      return;
-    }
-    const emailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
-    if (!emailRegex.test(gmailId)) {
-      setError('Please enter a valid Gmail ID.');
       return;
     }
     setError('');
@@ -59,7 +53,6 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
       await axios.post(`${BASE_URL}/signup`, {
         username,
         password,
-        gmailId,
       }, {
         timeout: 10000,
         withCredentials: true,
@@ -111,7 +104,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
                 disabled={isLoading}
               />
             </div>
-            <div className="mb-4">
+            {/* <div className="mb-4">
               <label className="block mb-1 text-sm sm:text-base">Gmail ID</label>
               <input
                 type="email"
@@ -122,7 +115,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
                 aria-label="Gmail ID"
                 disabled={isLoading}
               />
-            </div>
+            </div> */}
             <button
               onClick={handleSignup}
               className="w-full px-3 py-1.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200 disabled:bg-gray-400"

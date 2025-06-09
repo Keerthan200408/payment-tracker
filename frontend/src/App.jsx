@@ -33,7 +33,7 @@ axios.interceptors.response.use(
         console.error('Token refresh failed:', refreshError);
         localStorage.removeItem('sessionToken');
         localStorage.removeItem('currentUser');
-        localStorage.removeItem('gmailId');
+        // localStorage.removeItem('gmailId');
         window.location.href = '/';
         return Promise.reject(refreshError);
       }
@@ -126,7 +126,7 @@ const App = () => {
     setSessionToken(null);
     localStorage.removeItem('currentUser');
     localStorage.removeItem('sessionToken');
-    localStorage.removeItem('gmailId');
+    // localStorage.removeItem('gmailId');
     setClientsData([]);
     setPaymentsData([]);
     setPage('signIn');
@@ -473,7 +473,7 @@ const App = () => {
                     <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
                       <div className="p-4">
                         <p className="font-semibold text-gray-900">{currentUser}</p>
-                        <p className="text-gray-600 text-sm">{localStorage.getItem('gmailId')}</p>
+                        {/* <p className="text-gray-600 text-sm">{localStorage.getItem('gmailId')}</p> */}
                       </div>
                       <hr className="border-gray-200" />
                       <button
