@@ -267,7 +267,7 @@ app.post('/api/login', async (req, res) => {
     if (!user || !(await bcrypt.compare(password, user[1]))) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-    const sessionToken = jwt.sign({ username }, process.env.SECRET_KEY, { expiresIn: '24h' });
+    const sessionToken = jwt.sign({ username }, process.env.SECRET_KEY, { expiresIn: '1h' });
     res.cookie('sessionToken', sessionToken, {
       httpOnly: true,
       secure: true,
@@ -293,7 +293,7 @@ app.post('/api/logout', (req, res) => {
   res.json({ message: 'Logged out successfully' });
 });
 
-// Replace the entire /api/refresh-token endpoint with:
+// Refresh Token Endpoint
 app.post('/api/refresh-token', async (req, res) => {
   let token = req.cookies?.sessionToken;
   if (!token && req.headers.authorization) {
@@ -306,29 +306,21 @@ app.post('/api/refresh-token', async (req, res) => {
     return res.status(401).json({ error: 'No token provided' });
   }
   try {
-    // Try to verify the token first
-    let decoded;
-    try {
-      decoded = jwt.verify(token, process.env.SECRET_KEY);
-    } catch (err) {
-      // If verification fails, try to decode without verification
-      decoded = jwt.decode(token);
-      if (!decoded || !decoded.username) {
-        return res.status(403).json({ error: 'Invalid token' });
-      }
+    const decoded = jwt.decode(token);
+    if (!decoded || !decoded.username) {
+      return res.status(403).json({ error: 'Invalid token' });
     }
-    
     await ensureSheet('Users', ['Username', 'Password']);
     const users = await readSheet('Users', 'A2:B');
     const user = users.find(u => u[0] === decoded.username);
     if (!user) {
       return res.status(403).json({ error: 'User not found' });
     }
-    const newToken = jwt.sign({ username: decoded.username }, process.env.SECRET_KEY, { expiresIn: '24h' });
+    const newToken = jwt.sign({ username: decoded.username }, process.env.SECRET_KEY, { expiresIn: '1h' });
     res.cookie('sessionToken', newToken, {
       httpOnly: true,
       secure: true,
-      maxAge: 86400000,
+      maxAge: 3600000,
       sameSite: 'None',
       path: '/',
     });
