@@ -68,11 +68,15 @@ const App = () => {
       console.log('Restoring session for user:', storedUser);
       setCurrentUser(storedUser);
       setSessionToken(storedToken);
-      setPage('home');
+      setPage(storedPage || 'home'); //changes for restoring last page after reload
       fetchClients(storedToken);
       fetchPayments(storedToken);
     }
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem('currentPage', page); // Save the current page to localStorage whenever it changes
+  }, [page]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -127,7 +131,7 @@ const App = () => {
     setSessionToken(null);
     localStorage.removeItem('currentUser');
     localStorage.removeItem('sessionToken');
-    // localStorage.removeItem('gmailId');
+    localStorage.removeItem('currentPage');
     setClientsData([]);
     setPaymentsData([]);
     setPage('signIn');

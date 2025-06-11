@@ -33,6 +33,16 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
       setSessionToken(sessionToken);
       localStorage.setItem('currentUser', username);
       localStorage.setItem('sessionToken', sessionToken);
+      // Fetch data before navigating to home page
+    await Promise.all([
+      fetchClients(sessionToken),
+      fetchPayments(sessionToken)
+    ]);
+    setPage('home');
+    // Refresh the page after 3 seconds
+    setTimeout(() => {
+      window.location.reload();
+    }, 3000);
       setPage('home');
     } catch (error) {
       console.error('Login error:', error.response?.data?.error || error.message);

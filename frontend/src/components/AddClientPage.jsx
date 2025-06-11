@@ -110,13 +110,15 @@ const AddClientPage = ({
         </div>
         <div className="mb-4">
           <label className="block text-gray-700 mb-2">Type</label>
-          <input
-            type="text"
+          <select
             value={type}
             onChange={(e) => setType(e.target.value)}
             className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-            placeholder="Enter type"
-          />
+          >
+            <option value="">Select Type</option>
+            <option value="GST">GST</option>
+            <option value="IT Return">IT Return</option>
+          </select>
         </div>
         <div className="mb-6">
           <label className="block text-gray-700 mb-2">Amount To Be Paid</label>

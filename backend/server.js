@@ -368,6 +368,10 @@ app.post('/api/add-client', authenticateToken, async (req, res) => {
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({ error: 'Invalid email address' });
   }
+  // Validate Type
+  if (!['GST', 'IT Return'].includes(type)) {
+    return res.status(400).json({ error: 'Type must be either "GST" or "IT Return"' });
+  }
   try {
     await ensureSheet('Clients', ['User', 'Client_Name', 'Email', 'Type', 'Monthly_Payment']);
     await ensureSheet('Payments', ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment']);
@@ -602,6 +606,9 @@ app.post('/api/import-csv', authenticateToken, async (req, res) => {
       if (Email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(Email)) {
         continue;
       }
+      if (!['GST', 'IT Return'].includes(Type)) {
+        continue; // Skip invalid Type values
+      }
       const clientExists = clients.some(client => client[0] === req.user.username && client[1] === Client_Name && client[3] === Type);
       if (!clientExists) {
         clientsBatch.push([req.user.username, Client_Name, Email, Type, Amount_To_Be_Paid]);
@@ -644,6 +651,10 @@ app.put('/api/update-client', authenticateToken, async (req, res) => {
   const paymentValue = parseFloat(newAmount);
   if (isNaN(paymentValue) || paymentValue <= 0) {
     return res.status(400).json({ error: 'Amount to be paid must be a positive number' });
+  }
+  // Validate Type
+  if (!['GST', 'IT Return'].includes(newType)) {
+    return res.status(400).json({ error: 'Type must be either "GST" or "IT Return"' });
   }
   try {
     await ensureSheet('Clients', ['User', 'Client_Name', 'Email', 'Type', 'Monthly_Payment']);

@@ -64,6 +64,14 @@ const HomePage = ({
     return 'PartiallyPaid';
   };
 
+  const getInputBackgroundColor = (row, month) => {
+    const status = getPaymentStatusForMonth(row, month);
+    if (status === 'Unpaid') return 'bg-red-100';
+    if (status === 'PartiallyPaid') return 'bg-yellow-100';
+    if (status === 'Paid') return 'bg-green-100';
+    return 'bg-white'; // Default for empty or invalid
+  };
+
   const filteredData = paymentsData.filter((row) => {
     const matchesSearch =
       !searchQuery ||
@@ -120,7 +128,7 @@ const HomePage = ({
             } transition duration-200`}
           >
             <i className="fas fa-upload mr-2"></i>
-            {isImporting ? "Importing..." : "Bulk Import"}
+            {isImporting ? "Importing..." : "Bulk Import(in CSV format)"}
           </label>
         </div>
       </div>

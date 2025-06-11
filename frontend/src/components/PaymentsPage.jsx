@@ -52,13 +52,13 @@ const PaymentsPage = ({ paymentsData, fetchClients, fetchPayments, sessionToken 
                   {payment.Client_Name}
                 </td>
                 <td className="p-2 text-center text-sm sm:text-base">{payment.Type || 'N/A'}</td>
-                <td className="p-2 text-center text-sm sm:text-base">${payment.Amount_To_Be_Paid}</td>
+                <td className="p-2 text-center text-sm sm:text-base">₹{payment.Amount_To_Be_Paid}</td>
                 {months.map((month) => (
                   <td key={month} className="p-2 text-center text-sm sm:text-base">
                     {payment[month] || '—'}
                   </td>
                 ))}
-                <td className="p-2 text-center text-sm sm:text-base">${payment.Due_Payment}</td>
+                <td className="p-2 text-center text-sm sm:text-base">₹{payment.Due_Payment}</td>
               </tr>
             ))}
           </tbody>
