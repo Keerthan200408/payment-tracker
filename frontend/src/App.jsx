@@ -64,6 +64,7 @@ const App = () => {
   useEffect(() => {
     const storedUser = localStorage.getItem('currentUser');
     const storedToken = localStorage.getItem('sessionToken');
+    const storedPage = localStorage.getItem('currentPage');
     if (storedUser && storedToken) {
       console.log('Restoring session for user:', storedUser);
       setCurrentUser(storedUser);
