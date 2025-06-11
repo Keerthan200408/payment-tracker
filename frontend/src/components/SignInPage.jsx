@@ -34,10 +34,10 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
       localStorage.setItem('currentUser', username);
       localStorage.setItem('sessionToken', sessionToken);
       // Fetch data before navigating to home page
-    await Promise.all([
-      fetchClients(sessionToken),
-      fetchPayments(sessionToken)
-    ]);
+    // await Promise.all([
+    //   fetchClients(sessionToken),
+    //   fetchPayments(sessionToken)
+    // ]);
     setPage('home');
     // Refresh the page after 3 seconds
     setTimeout(() => {
