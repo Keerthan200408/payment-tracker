@@ -24,7 +24,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
         username: loginUsername,
         password: loginPassword,
       }, {
-        timeout: 10000,
+        timeout: 20000,
         withCredentials: true, // Keep for cookie compatibility
       });
       console.log('Login response:', response.data);
@@ -64,7 +64,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
         username,
         password,
       }, {
-        timeout: 10000,
+        timeout: 20000,
         withCredentials: true,
       });
       console.log('Signup successful, attempting login');
