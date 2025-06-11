@@ -43,7 +43,6 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
     setTimeout(() => {
       window.location.reload();
     }, 3000);
-      setPage('home');
     } catch (error) {
       console.error('Login error:', error.response?.data?.error || error.message);
       setError(error.response?.data?.error || 'Error logging in. Please try again.');
