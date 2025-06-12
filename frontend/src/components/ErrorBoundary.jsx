@@ -1,4 +1,4 @@
-import {React, useEffect} from 'react';
+import React, { Component } from 'react';
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
