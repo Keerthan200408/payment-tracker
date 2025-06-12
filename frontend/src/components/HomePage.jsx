@@ -50,32 +50,18 @@ const HomePage = ({
         headers: { Authorization: `Bearer ${sessionToken}` },
       });
       console.log('Fetched available years:', response.data);
-      
-      // Filter years to start from 2025 and sort in ascending order
       const filteredYears = (response.data || [])
         .filter(year => parseInt(year) >= 2025)
         .sort((a, b) => parseInt(a) - parseInt(b));
-      
-      // Ensure currentYear is included in the list
-      const yearsToSet = filteredYears.length > 0 ? filteredYears : [currentYear];
-      if (!yearsToSet.includes(currentYear)) {
-        yearsToSet.push(currentYear);
-        yearsToSet.sort((a, b) => parseInt(a) - parseInt(b));
-      }
-      
-      setAvailableYears(yearsToSet);
+      setAvailableYears(filteredYears.length > 0 ? filteredYears : ['2025']);
     } catch (error) {
       console.error('Error fetching available years:', error);
-      setAvailableYears([currentYear]); // Fallback to current year
+      setAvailableYears(['2025']);
     }
   };
-  
-  if (sessionToken) {
-    fetchYears();
-  }
-}, [sessionToken, currentYear]); // Add currentYear as dependency
+  if (sessionToken) fetchYears();
+}, [sessionToken]);
 
-  // Update handleAddNewYear to create sheet and set empty table
 const handleAddNewYear = async () => {
   const newYear = (parseInt(currentYear) + 1).toString();
   console.log(`Adding new year: ${newYear}`);
@@ -86,19 +72,18 @@ const handleAddNewYear = async () => {
       { headers: { Authorization: `Bearer ${sessionToken}` } }
     );
     console.log('Add new year response:', response.data);
-    
-    // Update availableYears with proper sorting
-    const updatedYears = [...availableYears, newYear].sort((a, b) => parseInt(a) - parseInt(b));
-    setAvailableYears(updatedYears);
+    setAvailableYears(prev => {
+      const updatedYears = [...new Set([...prev, newYear])].sort((a, b) => parseInt(a) - parseInt(b));
+      return updatedYears;
+    });
     setCurrentYear(newYear);
-    setPaymentsData([]); // Initialize empty table
+    setPaymentsData([]);
     console.log(`New year ${newYear} added with empty table`);
   } catch (error) {
     console.error('Error adding new year:', error);
     alert(`Failed to add new year: ${error.response?.data?.error || 'Unknown error occurred'}`);
   }
 };
-
 const handleYearChange = async (year) => {
   setCurrentYear(year);
   console.log(`Fetching payments for year: ${year}`);

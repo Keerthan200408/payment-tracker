@@ -75,13 +75,16 @@ const App = () => {
       const yearToSet = storedYear && parseInt(storedYear) >= 2025 ? storedYear : new Date().getFullYear().toString();
       setCurrentYear(yearToSet);
       fetchClients(storedToken);
-      fetchPayments(storedToken, currentYear);
+      fetchPayments(storedToken, yearToSet);
     }
-  }, [currentYear]);
+  }, []);
 
   useEffect(() => {
-    localStorage.setItem('currentYear', currentYear); // Save the current page to localStorage whenever it changes
-  }, [currentYear]);
+  if (sessionToken && currentYear) {
+    fetchPayments(sessionToken, currentYear);
+  }
+  localStorage.setItem('currentYear', currentYear);
+}, [currentYear, sessionToken]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
