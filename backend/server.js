@@ -741,6 +741,7 @@ app.get('/api/get-payments-by-year', authenticateToken, async (req, res) => {
     await ensureSheet('Payments', headers, year);
     const payments = await readSheet(getPaymentSheetName(year), 'A2:R');
     const userPayments = payments.filter(payment => payment[0] === req.user.username);
+    console.log(`Payments for ${year} for user ${req.user.username}:`, userPayments);
     res.json(userPayments.map(payment => ({
       User: payment[0],
       Client_Name: payment[1],

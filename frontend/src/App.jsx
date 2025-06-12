@@ -117,18 +117,18 @@ const App = () => {
   //     handleSessionError(error);
   //   }
   // };
-  const fetchPayments = async (token, year = currentYear) => {
+  // Update fetchPayments to handle empty data
+const fetchPayments = async (token, year) => {
   try {
-    console.log('Fetching payments for year:', year);
     const response = await axios.get(`${BASE_URL}/get-payments-by-year`, {
       headers: { Authorization: `Bearer ${token}` },
       params: { year },
     });
-    console.log('Payments fetched:', response.data);
-    setPaymentsData(response.data);
+    console.log(`Fetched payments for ${year}:`, response.data);
+    setPaymentsData(response.data || []); // Ensure empty array if no data
   } catch (error) {
-    console.error('Fetch payments error:', error.response?.data?.error || error.message);
-    handleSessionError(error);
+    console.error('Error fetching payments:', error);
+    setPaymentsData([]); // Set empty table on error
   }
 };
 
