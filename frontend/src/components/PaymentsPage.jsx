@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const PaymentsPage = ({ paymentsData, fetchClients, fetchPayments, sessionToken, isImporting, currentYear, setCurrentYear }) => {
   const [currentPage, setCurrentPage] = useState(1);
