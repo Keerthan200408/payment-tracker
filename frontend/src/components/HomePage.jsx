@@ -66,9 +66,9 @@ const HomePage = ({
 
   const getInputBackgroundColor = (row, month) => {
     const status = getPaymentStatusForMonth(row, month);
-    if (status === 'Unpaid') return 'bg-red-100';
-    if (status === 'PartiallyPaid') return 'bg-yellow-100';
-    if (status === 'Paid') return 'bg-green-100';
+    if (status === 'Unpaid') return 'bg-red-100/60';
+    if (status === 'PartiallyPaid') return 'bg-yellow-100/60';
+    if (status === 'Paid') return 'bg-green-100/60';
     return 'bg-white'; // Default for empty or invalid
   };
 

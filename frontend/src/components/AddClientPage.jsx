@@ -51,7 +51,7 @@ const AddClientPage = ({
         // Update existing client
         await axios.put(`${BASE_URL}/update-client`, {
           oldClient: { Client_Name: editClient.Client_Name, Type: editClient.Type },
-          newClient: { Client_Name: clientName, Type: type, Amount_To_Be_Paid: amount },
+          newClient: { Client_Name: clientName, Type: type, Amount_To_Be_Paid: amount, Email: email },
         }, {
           headers: { Authorization: `Bearer ${sessionToken}` },
         });
