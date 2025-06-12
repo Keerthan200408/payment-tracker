@@ -66,19 +66,22 @@ const App = () => {
     const storedUser = localStorage.getItem('currentUser');
     const storedToken = localStorage.getItem('sessionToken');
     const storedPage = localStorage.getItem('currentPage');
+    const storedYear = localStorage.getItem('currentYear');
     if (storedUser && storedToken) {
       console.log('Restoring session for user:', storedUser);
       setCurrentUser(storedUser);
       setSessionToken(storedToken);
       setPage(storedPage || 'home'); //changes for restoring last page after reload
+      const yearToSet = storedYear && parseInt(storedYear) >= 2025 ? storedYear : new Date().getFullYear().toString();
+      setCurrentYear(yearToSet);
       fetchClients(storedToken);
       fetchPayments(storedToken, currentYear);
     }
   }, [currentYear]);
 
   useEffect(() => {
-    localStorage.setItem('currentPage', page); // Save the current page to localStorage whenever it changes
-  }, [page]);
+    localStorage.setItem('currentYear', pcurrentYear); // Save the current page to localStorage whenever it changes
+  }, [currentYear]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {

@@ -51,17 +51,17 @@ const HomePage = ({
       });
       console.log('Fetched available years:', response.data);
       // Filter years to start from 2025 and sort in ascending order
-      const filteredYears = (response.data || [currentYear])
+      const filteredYears = (response.data || [])
         .filter(year => parseInt(year) >= 2025)
         .sort((a, b) => parseInt(a) - parseInt(b));
       setAvailableYears(filteredYears.length > 0 ? filteredYears : ['2025']);
     } catch (error) {
       console.error('Error fetching available years:', error);
-      setAvailableYears([currentYear]); // Fallback to current year
+      setAvailableYears(['2025']); // Fallback to current year
     }
   };
   fetchYears();
-}, [sessionToken, currentYear]); // Add dependencies
+}, [sessionToken]); // Add dependencies
 
   // Update handleAddNewYear to create sheet and set empty table
 const handleAddNewYear = async () => {
