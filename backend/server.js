@@ -404,12 +404,17 @@ app.delete('/api/delete-client', authenticateToken, async (req, res) => {
   try {
     await ensureSheet('Clients', ['User', 'Client_Name', 'Email', 'Type', 'Monthly_Payment']);
     await ensureSheet('Payments', ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment']);
+
     let clients = await readSheet('Clients', 'A2:E');
     let payments = await readSheet('Payments', 'A2:R');
+
+
     const clientExists = clients.some(client => client[0] === req.user.username && client[1] === Client_Name && client[3] === Type);
     if (!clientExists) {
       return res.status(404).json({ error: 'Client not found' });
     }
+
+    
     clients = clients.filter(client => !(client[0] === req.user.username && client[1] === Client_Name && client[3] === Type));
     payments = payments.filter(payment => !(payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type));
     await writeSheet('Clients', 'A2:E', clients);
