@@ -415,10 +415,21 @@ app.delete('/api/delete-client', authenticateToken, async (req, res) => {
     }
 
     
-    clients = clients.filter(client => !(client[0] === req.user.username && client[1] === Client_Name && client[3] === Type));
-    payments = payments.filter(payment => !(payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type));
-    await writeSheet('Clients', 'A2:E', clients);
-    await writeSheet('Payments', 'A2:R', payments);
+    const filteredClients = clients.filter(client => !(client[0] === req.user.username && client[1] === Client_Name && client[3] === Type));
+    const filteredPayments = payments.filter(payment => !(payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type));
+
+    await writeSheet('Clients', 'A2:E', []);
+    await writeSheet('Payments', 'A2:R', []);
+
+    // Write the filtered data back (only if there are records to write)
+    if (filteredClients.length > 0) {
+      await writeSheet('Clients', `A2:E${filteredClients.length + 1}`, filteredClients);
+    }
+    
+    if (filteredPayments.length > 0) {
+      await writeSheet('Payments', `A2:R${filteredPayments.length + 1}`, filteredPayments);
+    }
+    
     res.json({ message: 'Client deleted successfully' });
   } catch (error) {
     console.error('Delete client error:', error);
