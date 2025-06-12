@@ -50,18 +50,30 @@ const HomePage = ({
         headers: { Authorization: `Bearer ${sessionToken}` },
       });
       console.log('Fetched available years:', response.data);
+      
       // Filter years to start from 2025 and sort in ascending order
       const filteredYears = (response.data || [])
         .filter(year => parseInt(year) >= 2025)
         .sort((a, b) => parseInt(a) - parseInt(b));
-      setAvailableYears(filteredYears.length > 0 ? filteredYears : ['2025']);
+      
+      // Ensure currentYear is included in the list
+      const yearsToSet = filteredYears.length > 0 ? filteredYears : [currentYear];
+      if (!yearsToSet.includes(currentYear)) {
+        yearsToSet.push(currentYear);
+        yearsToSet.sort((a, b) => parseInt(a) - parseInt(b));
+      }
+      
+      setAvailableYears(yearsToSet);
     } catch (error) {
       console.error('Error fetching available years:', error);
-      setAvailableYears(['2025']); // Fallback to current year
+      setAvailableYears([currentYear]); // Fallback to current year
     }
   };
-  fetchYears();
-}, [sessionToken]); // Add dependencies
+  
+  if (sessionToken) {
+    fetchYears();
+  }
+}, [sessionToken, currentYear]); // Add currentYear as dependency
 
   // Update handleAddNewYear to create sheet and set empty table
 const handleAddNewYear = async () => {
@@ -74,7 +86,10 @@ const handleAddNewYear = async () => {
       { headers: { Authorization: `Bearer ${sessionToken}` } }
     );
     console.log('Add new year response:', response.data);
-    setAvailableYears([...availableYears, newYear]);
+    
+    // Update availableYears with proper sorting
+    const updatedYears = [...availableYears, newYear].sort((a, b) => parseInt(a) - parseInt(b));
+    setAvailableYears(updatedYears);
     setCurrentYear(newYear);
     setPaymentsData([]); // Initialize empty table
     console.log(`New year ${newYear} added with empty table`);
