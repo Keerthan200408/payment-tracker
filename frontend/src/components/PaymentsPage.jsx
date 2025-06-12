@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
+import axios from 'axios';
+const BASE_URL = 'https://payment-tracker-aswa.onrender.com/api';
 
-const PaymentsPage = ({ paymentsData, fetchClients, fetchPayments, sessionToken, isImporting, currentYear, setCurrentYear }) => {
+const PaymentsPage = ({ paymentsData, setPaymentsData, fetchClients, fetchPayments, sessionToken, isImporting, currentYear, setCurrentYear }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const entriesPerPage = 10;
   const totalEntries = paymentsData.length;
@@ -24,6 +26,7 @@ useEffect(() => {
       headers: { Authorization: `Bearer ${sessionToken}` },
       params: { year },
     });
+    console.log(`Payments for ${year} in PaymentsPage:`, response.data); // Debug
     setPaymentsData(response.data);
   } catch (error) {
     console.error(`Error fetching payments for year ${year}:`, error);
@@ -50,6 +53,7 @@ useEffect(() => {
     (currentPage - 1) * entriesPerPage,
     currentPage * entriesPerPage
   );
+  console.log('Payments data in PaymentsPage:', paymentsData);
 
   return (
     <div>

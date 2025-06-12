@@ -180,6 +180,7 @@ const App = () => {
       setClientsData(clientsData.filter(client => client.Client_Name !== rowData.Client_Name || client.Type !== rowData.Type));
       hideContextMenu();
       alert('Row deleted successfully.');
+      fetchPayments(sessionToken, currentYear); // Refresh payments for current year
     } catch (error) {
       console.error('Delete row error:', error.response?.data?.error || error.message);
       handleSessionError(error);

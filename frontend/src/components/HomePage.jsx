@@ -1,6 +1,7 @@
 
 import { useEffect, useRef, useState } from 'react';
-
+import axios from 'axios';
+const BASE_URL = 'https://payment-tracker-aswa.onrender.com/api';
 const HomePage = ({
   paymentsData,
   setPaymentsData,
@@ -40,6 +41,7 @@ const HomePage = ({
   ];
 
   const [availableYears, setAvailableYears] = useState([currentYear]);
+  const BASE_URL = 'https://payment-tracker-aswa.onrender.com/api';
 
   useEffect(() => {
     const years = [];
@@ -79,6 +81,7 @@ const handleYearChange = async (year) => {
       headers: { Authorization: `Bearer ${sessionToken}` },
       params: { year },
     });
+    console.log(`Payments for ${year}:`, response.data); // Debug
     setPaymentsData(response.data);
   } catch (error) {
     console.error(`Error fetching payments for year ${year}:`, error);
@@ -318,6 +321,7 @@ const handleYearChange = async (year) => {
     months.forEach((month) => {
       acc[row.Client_Name][month] = getMonthlyStatus(row, month);
     });
+    console.log('Payments data in HomePage:', paymentsData);
     return acc;
   }, {});
 
