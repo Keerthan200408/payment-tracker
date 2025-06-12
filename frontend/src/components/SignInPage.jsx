@@ -1,10 +1,10 @@
-
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 
 const BASE_URL = 'https://payment-tracker-aswa.onrender.com/api';
 
-const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
+// Add fetchClients and fetchPayments as props
+const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fetchPayments }) => {
   const [isSignup, setIsSignup] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -33,15 +33,20 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
       setSessionToken(sessionToken);
       localStorage.setItem('currentUser', username);
       localStorage.setItem('sessionToken', sessionToken);
-      await Promise.all([
-  fetchClients(sessionToken),
-  fetchPayments(sessionToken, new Date().getFullYear().toString())
-]);
-    setPage('home');
-    // Refresh the page after 3 seconds
-    setTimeout(() => {
-      window.location.reload();
-    }, 3000);
+      
+      // Only call fetch functions if they are provided as props
+      if (fetchClients && fetchPayments) {
+        await Promise.all([
+          fetchClients(sessionToken),
+          fetchPayments(sessionToken, new Date().getFullYear().toString())
+        ]);
+      }
+      
+      setPage('home');
+      // Remove the automatic refresh - it's causing issues
+      // setTimeout(() => {
+      //   window.location.reload();
+      // }, 3000);
     } catch (error) {
       console.error('Login error:', error.response?.data?.error || error.message);
       setError(error.response?.data?.error || 'Error logging in. Please try again.');
@@ -112,18 +117,6 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage }) => {
                 disabled={isLoading}
               />
             </div>
-            {/* <div className="mb-4">
-              <label className="block mb-1 text-sm sm:text-base">Gmail ID</label>
-              <input
-                type="email"
-                className="w-full p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-                value={gmailId}
-                onChange={(e) => setGmailId(e.target.value)}
-                placeholder="Enter Gmail ID"
-                aria-label="Gmail ID"
-                disabled={isLoading}
-              />
-            </div> */}
             <button
               onClick={handleSignup}
               className="w-full px-3 py-1.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200 disabled:bg-gray-400"
