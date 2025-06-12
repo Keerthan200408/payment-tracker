@@ -66,19 +66,11 @@ const App = () => {
     const storedUser = localStorage.getItem('currentUser');
     const storedToken = localStorage.getItem('sessionToken');
     const storedPage = localStorage.getItem('currentPage');
-    const storedYear = localStorage.getItem('currentYear'); // Add this line
-
     if (storedUser && storedToken) {
       console.log('Restoring session for user:', storedUser);
       setCurrentUser(storedUser);
       setSessionToken(storedToken);
       setPage(storedPage || 'home'); //changes for restoring last page after reload
-
-      // Restore year if available
-    if (storedYear) {
-      setCurrentYear(storedYear);
-    }
-
       fetchClients(storedToken);
       fetchPayments(storedToken, currentYear);
     }
@@ -126,14 +118,6 @@ const App = () => {
   //   }
   // };
   // Update fetchPayments to handle empty data
-
-  // Add this NEW useEffect to persist currentYear changes
-useEffect(() => {
-  if (currentYear) {
-    localStorage.setItem('currentYear', currentYear);
-  }
-}, [currentYear]);
-
 const fetchPayments = async (token, year) => {
   try {
     const response = await axios.get(`${BASE_URL}/get-payments-by-year`, {
@@ -141,10 +125,10 @@ const fetchPayments = async (token, year) => {
       params: { year },
     });
     console.log(`Fetched payments for ${year}:`, response.data);
-    setPaymentsData(Array.isArray(response.data) ? response.data : []); // Ensure it's always an array
+    setPaymentsData(response.data || []); // Ensure empty array if no data
   } catch (error) {
     console.error('Error fetching payments:', error);
-    setPaymentsData([]); // Set empty array on error
+    setPaymentsData([]); // Set empty table on error
   }
 };
 
@@ -799,8 +783,6 @@ const importCsv = async (e) => {
     handleSessionError(error);
   }
 };
-
-  
 
   return (
     <ErrorBoundary>
