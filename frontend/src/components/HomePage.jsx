@@ -44,14 +44,24 @@ const HomePage = ({
   const BASE_URL = 'https://payment-tracker-aswa.onrender.com/api';
 
   useEffect(() => {
-    const years = [];
-    const currentYearNum = new Date().getFullYear();
-    
-    for (let y = 2023; y <= currentYearNum + 1; y++) {
-      years.push(y.toString());
+  const fetchYears = async () => {
+    try {
+      const response = await axios.get(`${BASE_URL}/get-available-years`, {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      });
+      console.log('Fetched available years:', response.data);
+      // Filter years to start from 2025 and sort in ascending order
+      const filteredYears = (response.data || [currentYear])
+        .filter(year => parseInt(year) >= 2025)
+        .sort((a, b) => parseInt(a) - parseInt(b));
+      setAvailableYears(filteredYears.length > 0 ? filteredYears : ['2025']);
+    } catch (error) {
+      console.error('Error fetching available years:', error);
+      setAvailableYears([currentYear]); // Fallback to current year
     }
-    setAvailableYears(years);
-  }, []);
+  };
+  fetchYears();
+}, [sessionToken, currentYear]); // Add dependencies
 
   // Update handleAddNewYear to create sheet and set empty table
 const handleAddNewYear = async () => {

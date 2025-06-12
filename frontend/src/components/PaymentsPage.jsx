@@ -13,7 +13,7 @@ const PaymentsPage = ({ paymentsData, setPaymentsData, fetchClients, fetchPaymen
 useEffect(() => {
   const years = [];
   const currentYearNum = new Date().getFullYear();
-  for (let y = 2023; y <= currentYearNum + 1; y++) {
+  for (let y = 2025; y <= currentYearNum + 1; y++) {
     years.push(y.toString());
   }
   setAvailableYears(years);

@@ -74,7 +74,7 @@ const App = () => {
       fetchClients(storedToken);
       fetchPayments(storedToken, currentYear);
     }
-  }, []);
+  }, [currentYear]);
 
   useEffect(() => {
     localStorage.setItem('currentPage', page); // Save the current page to localStorage whenever it changes
