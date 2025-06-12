@@ -58,6 +58,7 @@ const App = () => {
   const csvFileInputRef = useRef(null);
   const profileMenuRef = useRef(null);
   const [isImporting, setIsImporting] = useState(false); // Add loading state for CSV import
+  const [currentYear, setCurrentYear] = useState(new Date().getFullYear().toString());
 
   axios.defaults.withCredentials = true;
 
@@ -71,7 +72,7 @@ const App = () => {
       setSessionToken(storedToken);
       setPage(storedPage || 'home'); //changes for restoring last page after reload
       fetchClients(storedToken);
-      fetchPayments(storedToken);
+      fetchPayments(storedToken, currentYear);
     }
   }, []);
 
@@ -103,19 +104,33 @@ const App = () => {
     }
   };
 
-  const fetchPayments = async (token) => {
-    try {
-      console.log('Fetching payments with token:', token.substring(0, 10) + '...');
-      const response = await axios.get(`${BASE_URL}/get-payments`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      console.log('Payments fetched:', response.data);
-      setPaymentsData(response.data);
-    } catch (error) {
-      console.error('Fetch payments error:', error.response?.data?.error || error.message);
-      handleSessionError(error);
-    }
-  };
+  // const fetchPayments = async (token) => {
+  //   try {
+  //     console.log('Fetching payments with token:', token.substring(0, 10) + '...');
+  //     const response = await axios.get(`${BASE_URL}/get-payments`, {
+  //       headers: { Authorization: `Bearer ${token}` },
+  //     });
+  //     console.log('Payments fetched:', response.data);
+  //     setPaymentsData(response.data);
+  //   } catch (error) {
+  //     console.error('Fetch payments error:', error.response?.data?.error || error.message);
+  //     handleSessionError(error);
+  //   }
+  // };
+  const fetchPayments = async (token, year = currentYear) => {
+  try {
+    console.log('Fetching payments for year:', year);
+    const response = await axios.get(`${BASE_URL}/get-payments`, {
+      headers: { Authorization: `Bearer ${token}` },
+      params: { year },
+    });
+    console.log('Payments fetched:', response.data);
+    setPaymentsData(response.data);
+  } catch (error) {
+    console.error('Fetch payments error:', error.response?.data?.error || error.message);
+    handleSessionError(error);
+  }
+};
 
   const handleSessionError = (error) => {
     if (error.response && (error.response.status === 401 || error.response.status === 403)) {
@@ -675,7 +690,7 @@ const importCsv = async (e) => {
       console.log('Refreshing client and payment data...');
       await Promise.all([
         fetchClients(sessionToken),
-        fetchPayments(sessionToken)
+        fetchPayments(sessionToken, currentYear)
       ]);
       
       alert(`CSV import completed successfully! ${importedCount} records imported.`);
@@ -718,7 +733,7 @@ const importCsv = async (e) => {
   reader.readAsText(file);
 };
 
-  const updatePayment = async (rowIndex, month, value) => {
+  const updatePayment = async (rowIndex, month, value, year = currentYear) => {
   if (value && isNaN(parseFloat(value))) {
     alert('Please enter a valid number');
     return;
@@ -730,7 +745,6 @@ const importCsv = async (e) => {
 
   rowData[month] = value;
 
-  // If a value is entered, set earlier empty months to '0'
   if (value.trim() !== '') {
     for (let i = 0; i < monthIndex; i++) {
       if (!rowData[months[i]] || rowData[months[i]].trim() === '') {
@@ -738,10 +752,8 @@ const importCsv = async (e) => {
       }
     }
   } else {
-    // If the value is cleared, check if any later months have values
     const hasLaterValues = months.slice(monthIndex + 1).some(m => rowData[m] && rowData[m].trim() !== '');
     if (!hasLaterValues) {
-      // Clear zeros in earlier months if no later months have values
       for (let i = 0; i < monthIndex; i++) {
         if (rowData[months[i]] === '0') {
           rowData[months[i]] = '';
@@ -758,10 +770,12 @@ const importCsv = async (e) => {
 
   setPaymentsData(updatedPayments);
   try {
-    console.log('Saving payments for:', rowData.Client_Name, month, value);
+    console.log('Saving payments for:', rowData.Client_Name, month, value, year);
     await axios.post(`${BASE_URL}/save-payments`, updatedPayments, {
       headers: { Authorization: `Bearer ${sessionToken}` },
+      params: { year },
     });
+    fetchPayments(sessionToken, year);
   } catch (error) {
     console.error('Save payments error:', error.response?.data?.error || error.message);
     handleSessionError(error);
@@ -921,6 +935,8 @@ const importCsv = async (e) => {
                   csvFileInputRef={csvFileInputRef}
                   importCsv={importCsv}
                   isImporting={isImporting}
+                  currentYear={currentYear}
+                  setCurrentYear={setCurrentYear}
                 />
               )}
               {page === "addClient" && (

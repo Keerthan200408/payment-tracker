@@ -1,10 +1,34 @@
 import { useState } from 'react';
 
-const PaymentsPage = ({ paymentsData, fetchClients, fetchPayments, sessionToken }) => {
+const PaymentsPage = ({ paymentsData, fetchClients, fetchPayments, sessionToken, isImporting, currentYear, setCurrentYear }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const entriesPerPage = 10;
   const totalEntries = paymentsData.length;
   const totalPages = Math.ceil(totalEntries / entriesPerPage);
+
+  const [availableYears, setAvailableYears] = useState([currentYear]);
+
+useEffect(() => {
+  const years = [];
+  const currentYearNum = new Date().getFullYear();
+  for (let y = 2023; y <= currentYearNum + 1; y++) {
+    years.push(y.toString());
+  }
+  setAvailableYears(years);
+}, []);
+
+  const handleYearChange = async (year) => {
+  setCurrentYear(year);
+  try {
+    const response = await axios.get(`${BASE_URL}/get-payments`, {
+      headers: { Authorization: `Bearer ${sessionToken}` },
+      params: { year },
+    });
+    setPaymentsData(response.data);
+  } catch (error) {
+    console.error(`Error fetching payments for year ${year}:`, error);
+  }
+};
 
   const months = [
     'january',
@@ -20,6 +44,7 @@ const PaymentsPage = ({ paymentsData, fetchClients, fetchPayments, sessionToken 
     'november',
     'december',
   ];
+  
 
   const paginatedData = paymentsData.slice(
     (currentPage - 1) * entriesPerPage,
@@ -30,6 +55,19 @@ const PaymentsPage = ({ paymentsData, fetchClients, fetchPayments, sessionToken 
     <div>
       <h1 className="text-2xl font-semibold mb-4">Payments</h1>
       <div className="max-h-[60vh] overflow-y-auto w-full rounded-lg shadow bg-white">
+        <div className="mb-4">
+  <select
+    value={currentYear}
+    onChange={(e) => handleYearChange(e.target.value)}
+    className="p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm sm:text-base"
+  >
+    {availableYears.map((year) => (
+      <option key={year} value={year}>
+        {year}
+      </option>
+    ))}
+  </select>
+</div>
         <table className="min-w-[1200px] w-full">
           <thead>
             <tr className="bg-blue-100 text-left">

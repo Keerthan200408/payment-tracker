@@ -67,7 +67,7 @@ const AddClientPage = ({
         });
       }
       fetchClients(sessionToken);
-      fetchPayments(sessionToken);
+      fetchPayments(sessionToken, new Date().getFullYear().toString());
       setClientName('');
       setEmail(''); // Reset email field
       setType('');

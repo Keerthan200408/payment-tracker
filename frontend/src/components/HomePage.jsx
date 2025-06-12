@@ -20,6 +20,9 @@ const HomePage = ({
   importCsv,
   isReportsPage = false,
   isImporting, // Add isImporting to the destructured props
+  sessionToken,
+  currentYear,
+  setCurrentYear,
 }) => {
   const months = [
     'january',
@@ -36,6 +39,51 @@ const HomePage = ({
     'december',
   ];
 
+  const [availableYears, setAvailableYears] = useState([currentYear]);
+
+  useEffect(() => {
+    const years = [];
+    const currentYearNum = new Date().getFullYear();
+    
+    for (let y = 2023; y <= currentYearNum + 1; y++) {
+      years.push(y.toString());
+    }
+    setAvailableYears(years);
+  }, []);
+
+  const handleAddNewYear = async () => {
+  const newYear = (parseInt(currentYear) + 1).toString();
+  try {
+    await axios.post(
+      `${BASE_URL}/add-new-year`,
+      { year: newYear },
+      { headers: { Authorization: `Bearer ${sessionToken}` } }
+    );
+    setAvailableYears([...availableYears, newYear]);
+    setCurrentYear(newYear);
+    const response = await axios.get(`${BASE_URL}/get-payments`, {
+      headers: { Authorization: `Bearer ${sessionToken}` },
+      params: { year: newYear },
+    });
+    setPaymentsData(response.data);
+  } catch (error) {
+    console.error('Error adding new year:', error);
+    alert('Failed to add new year');
+  }
+};
+
+const handleYearChange = async (year) => {
+  setCurrentYear(year);
+  try {
+    const response = await axios.get(`${BASE_URL}/get-payments`, {
+      headers: { Authorization: `Bearer ${sessionToken}` },
+      params: { year },
+    });
+    setPaymentsData(response.data);
+  } catch (error) {
+    console.error(`Error fetching payments for year ${year}:`, error);
+  }
+};
   const tableRef = useRef(null);
 
   useEffect(() => {
@@ -103,35 +151,52 @@ const HomePage = ({
     <>
       {/* Header Section */}
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6 space-y-3 sm:space-y-0">
-        <div className="flex flex-col sm:flex-row space-x-0 sm:space-x-3 space-y-3 sm:space-y-0 w-full sm:w-auto">
-          <button
-            onClick={() => setPage("addClient")}
-            className="bg-blue-500 text-white px-3 py-1.5 rounded-md hover:bg-blue-600 transition duration-200 flex items-center w-full sm:w-auto"
-          >
-            <i className="fas fa-plus mr-2"></i> Add Client
-          </button>
-          <input
-            type="file"
-            accept=".csv"
-            ref={csvFileInputRef}
-            onChange={importCsv}
-            className="hidden"
-            id="csv-import"
-            disabled={isImporting} // Disable the input when importing
-          />
-          <label
-            htmlFor="csv-import"
-            className={`px-4 py-2 rounded-lg text-white flex items-center w-full sm:w-auto ${
-              isImporting
-                ? "bg-gray-400 cursor-not-allowed"
-                : "bg-green-600 hover:bg-green-700 cursor-pointer"
-            } transition duration-200`}
-          >
-            <i className="fas fa-upload mr-2"></i>
-            {isImporting ? "Importing..." : "Bulk Import(in CSV format)"}
-          </label>
-        </div>
-      </div>
+  <div className="flex flex-col sm:flex-row space-x-0 sm:space-x-3 space-y-3 sm:space-y-0 w-full sm:w-auto">
+    <button
+      onClick={() => setPage("addClient")}
+      className="bg-blue-500 text-white px-3 py-1.5 rounded-md hover:bg-blue-600 transition duration-200 flex items-center w-full sm:w-auto"
+    >
+      <i className="fas fa-plus mr-2"></i> Add Client
+    </button>
+    <input
+      type="file"
+      accept=".csv"
+      ref={csvFileInputRef}
+      onChange={importCsv}
+      className="hidden"
+      id="csv-import"
+      disabled={isImporting}
+    />
+    <label
+      htmlFor="csv-import"
+      className={`px-4 py-2 rounded-lg text-white flex items-center w-full sm:w-auto ${
+        isImporting
+          ? "bg-gray-400 cursor-not-allowed"
+          : "bg-green-600 hover:bg-green-700 cursor-pointer"
+      } transition duration-200`}
+    >
+      <i className="fas fa-upload mr-2"></i>
+      {isImporting ? "Importing..." : "Bulk Import(in CSV format)"}
+    </label>
+    <button
+      onClick={handleAddNewYear}
+      className="bg-purple-500 text-white px-3 py-1.5 rounded-md hover:bg-purple-600 transition duration-200 flex items-center w-full sm:w-auto"
+    >
+      <i className="fas fa-calendar-plus mr-2"></i> Add New Year
+    </button>
+  </div>
+  <select
+    value={currentYear}
+    onChange={(e) => handleYearChange(e.target.value)}
+    className="p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm sm:text-base"
+  >
+    {availableYears.map((year) => (
+      <option key={year} value={year}>
+        {year}
+      </option>
+    ))}
+  </select>
+</div>
 
       {/* Filters Section */}
       <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 mb-6">
@@ -211,7 +276,7 @@ const HomePage = ({
                         type="text"
                         value={row[month] || ""}
                         onChange={(e) =>
-                          updatePayment(rowIndex, month, e.target.value)
+                          updatePayment(rowIndex, month, e.target.value, currentYear)
                         }
                         className={`w-20 p-1 border-gray-300 rounded text-right focus:ring-2 focus:ring-blue-500 text-sm sm:text-base ${getInputBackgroundColor(row, month)}`}
                         placeholder="0.00"
@@ -246,66 +311,79 @@ const HomePage = ({
   );
 
   const renderReports = () => {
-    const monthStatus = paymentsData.reduce((acc, row) => {
-      if (!acc[row.Client_Name]) {
-        acc[row.Client_Name] = {};
-      }
-      months.forEach((month) => {
-        acc[row.Client_Name][month] = getMonthlyStatus(row, month);
-      });
-      return acc;
-    }, {});
+  const monthStatus = paymentsData.reduce((acc, row) => {
+    if (!acc[row.Client_Name]) {
+      acc[row.Client_Name] = {};
+    }
+    months.forEach((month) => {
+      acc[row.Client_Name][month] = getMonthlyStatus(row, month);
+    });
+    return acc;
+  }, {});
 
     return (
-      <>
-        <h2 className="text-2xl font-semibold mb-6">Monthly Client Status Report</h2>
-        <div className="overflow-x-auto bg-white rounded-lg shadow-lg">
-          <table className="min-w-full border-collapse">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border p-3 text-left font-semibold">Client Name</th>
-                {months.map((month, index) => (
-                  <th key={index} className="border p-3 text-center font-semibold">
-                    {month.charAt(0).toUpperCase() + month.slice(1)}
-                  </th>
-                ))}
+    <>
+      <h2 className="text-2xl font-semibold mb-2">Monthly Client Status Report ({currentYear})</h2>
+      <div className="flex mb-4">
+        <select
+          value={currentYear}
+          onChange={(e) => handleYearChange(e.target.value)}
+          className="p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm sm:text-base"
+        >
+          {availableYears.map((year) => (
+            <option key={year} value={year}>
+              {year}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="overflow-x-auto bg-white rounded-lg shadow-lg">
+        <table className="min-w-full border-collapse">
+          <thead>
+            <tr className="bg-gray-100">
+              <th className="border p-3 text-left font-semibold">Client Name</th>
+              {months.map((month, index) => (
+                <th key={index} className="border p-3 text-center font-semibold">
+                  {month.charAt(0).toUpperCase() + month.slice(1)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {Object.keys(monthStatus).length === 0 ? (
+              <tr>
+                <td colSpan={13} className="border p-3 text-center text-gray-500">
+                  No data available.
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {Object.keys(monthStatus).length === 0 ? (
-                <tr>
-                  <td colSpan={13} className="border p-3 text-center text-gray-500">
-                    No data available.
-                  </td>
+            ) : (
+              Object.keys(monthStatus).map((client, idx) => (
+                <tr key={idx} className="hover:bg-gray-50">
+                  <td className="border p-3">{client}</td>
+                  {months.map((month, mIdx) => (
+                    <td key={mIdx} className="border p-3 text-center">
+                      <span
+                        className={`px-2 py-1 rounded-full text-sm ${
+                          monthStatus[client][month] === 'Paid'
+                            ? 'bg-green-100 text-green-800'
+                            : monthStatus[client][month] === 'PartiallyPaid'
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-red-100 text-red-800'
+                        }`}
+                      >
+                        {monthStatus[client][month] || 'Unpaid'}
+                      </span>
+                    </td>
+                  ))}
                 </tr>
-              ) : (
-                Object.keys(monthStatus).map((client, idx) => (
-                  <tr key={idx} className="hover:bg-gray-50">
-                    <td className="border p-3">{client}</td>
-                    {months.map((month, mIdx) => (
-                      <td key={mIdx} className="border p-3 text-center">
-                        <span
-                          className={`px-2 py-1 rounded-full text-sm ${
-                            monthStatus[client][month] === 'Paid'
-                              ? 'bg-green-100 text-green-800'
-                              : monthStatus[client][month] === 'PartiallyPaid'
-                              ? 'bg-yellow-100 text-yellow-800'
-                              : 'bg-red-100 text-red-800'
-                          }`}
-                        >
-                          {monthStatus[client][month] || 'Unpaid'}
-                        </span>
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </>
-    );
-  };
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+};
 
   return (
     <div className="p-6">
