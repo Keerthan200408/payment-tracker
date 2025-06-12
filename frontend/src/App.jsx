@@ -151,11 +151,7 @@ const App = () => {
   };
 
   const deleteRow = async () => {
-    if (paymentsData.length <= 1) {
-      alert('Cannot delete the last row.');
-      hideContextMenu();
-      return;
-    }
+    
     const rowData = paymentsData[contextMenu.rowIndex];
     try {
       console.log('Deleting row from Google Sheets:', rowData.Client_Name, rowData.Type);
