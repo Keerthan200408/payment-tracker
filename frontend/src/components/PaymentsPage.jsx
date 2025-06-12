@@ -22,7 +22,7 @@ useEffect(() => {
   const handleYearChange = async (year) => {
   setCurrentYear(year);
   try {
-    const response = await axios.get(`${BASE_URL}/get-payments`, {
+    const response = await axios.get(`${BASE_URL}/get-payments-by-year`, {
       headers: { Authorization: `Bearer ${sessionToken}` },
       params: { year },
     });

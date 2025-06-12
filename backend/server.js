@@ -1054,7 +1054,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 // Modified /api/import-csv to handle current year
 app.post('/api/import-csv', authenticateToken, async (req, res) => {
   const csvData = req.body;
-  const year = new Date().getFullYear().toString();
+  const year = req.query.year || new Date().getFullYear().toString();
   if (!Array.isArray(csvData)) {
     return res.status(400).json({ error: 'CSV data must be an array' });
   }

@@ -63,7 +63,7 @@ const HomePage = ({
     );
     setAvailableYears([...availableYears, newYear]);
     setCurrentYear(newYear);
-    const response = await axios.get(`${BASE_URL}/get-payments`, {
+    const response = await axios.get(`${BASE_URL}/get-payments-by-year`, {
       headers: { Authorization: `Bearer ${sessionToken}` },
       params: { year: newYear },
     });

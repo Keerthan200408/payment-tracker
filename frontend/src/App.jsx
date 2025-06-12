@@ -120,7 +120,7 @@ const App = () => {
   const fetchPayments = async (token, year = currentYear) => {
   try {
     console.log('Fetching payments for year:', year);
-    const response = await axios.get(`${BASE_URL}/get-payments`, {
+    const response = await axios.get(`${BASE_URL}/get-payments-by-year`, {
       headers: { Authorization: `Bearer ${token}` },
       params: { year },
     });
@@ -656,6 +656,7 @@ const importCsv = async (e) => {
                 Authorization: `Bearer ${sessionToken}`,
                 'Content-Type': 'application/json'
               },
+              params: { year: currentYear }, // Pass currentYear
               timeout: 30000 // 30 second timeout
             });
             
