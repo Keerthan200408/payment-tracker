@@ -339,14 +339,14 @@ const importCsv = async (e) => {
   const file = e.target.files[0];
   if (!file) return;
 
-  setIsImporting(true); // Start loading state
+  setIsImporting(true);
 
   const reader = new FileReader();
   reader.onload = async (event) => {
     try {
       const text = event.target.result;
       
-      // Better CSV parsing - handle quoted fields and commas within quotes
+      // Enhanced CSV parsing to handle quotes and commas
       const parseCSVLine = (line) => {
         const result = [];
         let current = '';
@@ -358,15 +358,15 @@ const importCsv = async (e) => {
           if (char === '"') {
             inQuotes = !inQuotes;
           } else if (char === ',' && !inQuotes) {
-            result.push(current.trim());
+            result.push(current.trim().replace(/^"|"$/g, ''));
             current = '';
           } else {
             current += char;
           }
         }
         
-        result.push(current.trim());
-        return result;
+        result.push(current.trim().replace(/^"|"$/g, ''));
+        return result.filter(col => col !== ''); // Remove empty columns
       };
 
       const rows = text.split('\n')
@@ -380,146 +380,305 @@ const importCsv = async (e) => {
         return;
       }
 
-      const fieldAliases = {
-        Client_Name: ['client name', 'clientname', 'name', 'client'],
-        Type: ['type', 'category', 'client type'],
-        Email: ['email', 'e-mail', 'email address'],
-        Amount_To_Be_Paid: ['amount to be paid', 'amount', 'monthly payment', 'payment', 'monthlypayment'],
+      // Smart column detection function
+      const detectColumns = (rows) => {
+        const sampleSize = Math.min(10, rows.length); // Analyze first 10 rows
+        const columnData = [];
+        
+        // Parse sample rows
+        for (let i = 0; i < sampleSize; i++) {
+          const cols = parseCSVLine(rows[i]);
+          for (let j = 0; j < cols.length; j++) {
+            if (!columnData[j]) {
+              columnData[j] = {
+                values: [],
+                isNumeric: 0,
+                hasGST: 0,
+                hasITReturn: 0,
+                hasEmail: 0,
+                avgLength: 0,
+                containsNumbers: 0,
+                isName: 0
+              };
+            }
+            columnData[j].values.push(cols[j]);
+          }
+        }
+
+        // Analyze each column
+        columnData.forEach((col, index) => {
+          let numericCount = 0;
+          let gstCount = 0;
+          let itReturnCount = 0;
+          let emailCount = 0;
+          let totalLength = 0;
+          let numberCount = 0;
+          let nameCount = 0;
+
+          col.values.forEach(value => {
+            const val = value.toLowerCase().trim();
+            totalLength += val.length;
+
+            // Check if numeric (amount)
+            if (/^\d+(\.\d+)?$/.test(val) || /^\d+$/.test(val)) {
+              numericCount++;
+            }
+
+            // Check for GST indicators
+            if (val.includes('gst') || val === 'gst') {
+              gstCount++;
+            }
+
+            // Check for IT Return indicators
+            if (val.includes('it return') || val.includes('itreturn') || val === 'it return' || val === 'itreturn') {
+              itReturnCount++;
+            }
+
+            // Check for email
+            if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
+              emailCount++;
+            }
+
+            // Check if contains numbers (could be student ID or amount)
+            if (/\d/.test(val)) {
+              numberCount++;
+            }
+
+            // Check if looks like a name (multiple words, no numbers in first part)
+            if (val.split(' ').length >= 2 && !/^\d/.test(val) && val.length > 5) {
+              nameCount++;
+            }
+          });
+
+          col.isNumeric = numericCount / col.values.length;
+          col.hasGST = gstCount / col.values.length;
+          col.hasITReturn = itReturnCount / col.values.length;
+          col.hasEmail = emailCount / col.values.length;
+          col.avgLength = totalLength / col.values.length;
+          col.containsNumbers = numberCount / col.values.length;
+          col.isName = nameCount / col.values.length;
+        });
+
+        // Determine column types
+        const columnTypes = {};
+        
+        // Find Amount column (highest numeric score)
+        let amountIndex = -1;
+        let maxNumeric = 0;
+        columnData.forEach((col, index) => {
+          if (col.isNumeric > maxNumeric && col.isNumeric >= 0.7) {
+            maxNumeric = col.isNumeric;
+            amountIndex = index;
+          }
+        });
+        if (amountIndex !== -1) columnTypes.Amount_To_Be_Paid = amountIndex;
+
+        // Find Type column (has GST or IT Return)
+        let typeIndex = -1;
+        let maxTypeScore = 0;
+        columnData.forEach((col, index) => {
+          const typeScore = col.hasGST + col.hasITReturn;
+          if (typeScore > maxTypeScore && (col.hasGST > 0 || col.hasITReturn > 0)) {
+            maxTypeScore = typeScore;
+            typeIndex = index;
+          }
+        });
+        if (typeIndex !== -1) columnTypes.Type = typeIndex;
+
+        // Find Email column
+        let emailIndex = -1;
+        let maxEmail = 0;
+        columnData.forEach((col, index) => {
+          if (col.hasEmail > maxEmail && col.hasEmail >= 0.3) {
+            maxEmail = col.hasEmail;
+            emailIndex = index;
+          }
+        });
+        if (emailIndex !== -1) columnTypes.Email = emailIndex;
+
+        // Find Client Name column (remaining column with highest name score)
+        let nameIndex = -1;
+        let maxNameScore = 0;
+        columnData.forEach((col, index) => {
+          if (!Object.values(columnTypes).includes(index)) {
+            const nameScore = col.isName + (col.avgLength / 20); // Longer text likely to be names
+            if (nameScore > maxNameScore) {
+              maxNameScore = nameScore;
+              nameIndex = index;
+            }
+          }
+        });
+        if (nameIndex !== -1) columnTypes.Client_Name = nameIndex;
+
+        // If we couldn't detect client name, use the first non-assigned column
+        if (columnTypes.Client_Name === undefined) {
+          for (let i = 0; i < columnData.length; i++) {
+            if (!Object.values(columnTypes).includes(i)) {
+              columnTypes.Client_Name = i;
+              break;
+            }
+          }
+        }
+
+        return columnTypes;
       };
 
-      // Parse the first row to check for headers
-      const firstRowCols = parseCSVLine(rows[0]);
-      const headers = firstRowCols.map(header => 
-        header.trim().replace(/\s+/g, ' ').toLowerCase().replace(/"/g, '')
-      );
-      
-      let dataRows = [];
-      let headerMap = {};
+      console.log('Analyzing CSV structure...');
+      const columnMapping = detectColumns(rows);
+      console.log('Detected column mapping:', columnMapping);
 
-      // Check if the first row contains headers
-      const hasHeaders = Object.keys(fieldAliases).some(field =>
-        headers.some(header => fieldAliases[field].includes(header))
-      );
-
-      if (hasHeaders) {
-        // Map headers to fields if headers are present
-        Object.keys(fieldAliases).forEach((field) => {
-          const aliasIndex = headers.findIndex(header => fieldAliases[field].includes(header));
-          headerMap[field] = aliasIndex !== -1 ? aliasIndex : -1;
-        });
-
-        const requiredFields = ['Client_Name', 'Type', 'Amount_To_Be_Paid'];
-        const missingRequiredFields = requiredFields.filter(field => headerMap[field] === -1);
-        
-        if (missingRequiredFields.length > 0) {
-          alert(`Missing required fields in CSV: ${missingRequiredFields.join(', ')}. Expected fields (or aliases): Client Name, Type, Amount To Be Paid. Email is optional.`);
-          csvFileInputRef.current.value = '';
-          setIsImporting(false);
-          return;
-        }
-
-        dataRows = rows.slice(1); // Skip header row
-      } else {
-        // No headers, assume columns are in order: Client_Name, Type, Email (optional), Amount_To_Be_Paid
-        const colCount = firstRowCols.length;
-        if (colCount < 3) {
-          alert('CSV must have at least 3 columns: Client Name, Type, Amount To Be Paid. Email is optional.');
-          csvFileInputRef.current.value = '';
-          setIsImporting(false);
-          return;
-        }
-        
-        headerMap = {
-          Client_Name: 0,
-          Type: 1,
-          Email: colCount === 3 ? -1 : 2, // Email is optional
-          Amount_To_Be_Paid: colCount === 3 ? 2 : 3, // Adjust based on column count
-        };
-        dataRows = rows; // All rows are data rows
-      }
-
-      const data = [];
-      
-      for (let i = 0; i < dataRows.length; i++) {
-        const row = dataRows[i];
-        if (!row || row.trim() === '') continue;
-        
-        const cols = parseCSVLine(row).map(col => col.trim().replace(/"/g, ''));
-        
-        // Skip rows that don't have enough columns
-        if (cols.length < 3) {
-          console.warn(`Skipping row ${i + 1}: insufficient columns`);
-          continue;
-        }
-
-        // Extract data based on header mapping
-        const clientName = cols[headerMap.Client_Name] || '';
-        const type = cols[headerMap.Type] || '';
-        const email = headerMap.Email !== -1 ? (cols[headerMap.Email] || '') : '';
-        const amountStr = cols[headerMap.Amount_To_Be_Paid] || '0';
-        
-        // Validate required fields
-        if (!clientName || clientName.trim() === '') {
-          console.warn(`Skipping row ${i + 1}: missing client name`);
-          continue;
-        }
-        
-        if (!type || type.trim() === '') {
-          console.warn(`Skipping row ${i + 1}: missing type`);
-          continue;
-        }
-        
-        // Validate type
-        if (!['GST', 'IT Return'].includes(type)) {
-          console.warn(`Skipping row ${i + 1}: invalid type "${type}". Must be "GST" or "IT Return"`);
-          continue;
-        }
-        
-        // Parse and validate amount
-        const amount = parseFloat(amountStr.replace(/[^\d.-]/g, '')); // Remove currency symbols
-        if (isNaN(amount) || amount <= 0) {
-          console.warn(`Skipping row ${i + 1}: invalid amount "${amountStr}"`);
-          continue;
-        }
-        
-        // Validate email if provided
-        if (email && email.trim() !== '' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-          console.warn(`Skipping row ${i + 1}: invalid email "${email}"`);
-          continue;
-        }
-        
-        data.push({
-          Client_Name: clientName.trim(),
-          Type: type.trim(),
-          Email: email.trim(),
-          Amount_To_Be_Paid: amount,
-        });
-      }
-
-      if (data.length === 0) {
-        alert('No valid data found in CSV file. Please check the format and required fields.');
+      // Validate that we found essential columns
+      if (columnMapping.Client_Name === undefined) {
+        alert('Could not detect Client Name column. Please ensure your CSV has client names.');
         csvFileInputRef.current.value = '';
         setIsImporting(false);
         return;
       }
 
-      console.log('Importing CSV data:', data);
-      
-      // Make the API call
-      const response = await axios.post(`${BASE_URL}/import-csv`, data, {
-        headers: { 
-          Authorization: `Bearer ${sessionToken}`,
-          'Content-Type': 'application/json'
-        },
-      });
+      if (columnMapping.Amount_To_Be_Paid === undefined) {
+        alert('Could not detect Amount column. Please ensure your CSV has numeric amounts.');
+        csvFileInputRef.current.value = '';
+        setIsImporting(false);
+        return;
+      }
+
+      // Process data with delay to handle API rate limits
+      const processDataWithDelay = async (rows, batchSize = 10) => {
+        const data = [];
+        const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i];
+          if (!row || row.trim() === '') continue;
+          
+          const cols = parseCSVLine(row);
+          if (cols.length < 2) continue; // Need at least 2 columns
+
+          // Extract data using detected column mapping
+          const clientName = columnMapping.Client_Name !== undefined 
+            ? (cols[columnMapping.Client_Name] || '').trim() 
+            : '';
+          
+          const rawType = columnMapping.Type !== undefined 
+            ? (cols[columnMapping.Type] || '').trim() 
+            : '';
+          
+          const email = columnMapping.Email !== undefined 
+            ? (cols[columnMapping.Email] || '').trim() 
+            : '';
+          
+          const amountStr = columnMapping.Amount_To_Be_Paid !== undefined 
+            ? (cols[columnMapping.Amount_To_Be_Paid] || '0').trim() 
+            : '0';
+
+          // Skip if no client name
+          if (!clientName || clientName === '') continue;
+
+          // Smart type detection and assignment
+          let type = 'GST'; // Default type
+          if (rawType) {
+            const lowerType = rawType.toLowerCase();
+            if (lowerType.includes('it return') || lowerType.includes('itreturn') || lowerType === 'it return') {
+              type = 'IT Return';
+            } else if (lowerType.includes('gst') || lowerType === 'gst') {
+              type = 'GST';
+            }
+          }
+
+          // Parse amount
+          const amount = parseFloat(amountStr.replace(/[^\d.-]/g, ''));
+          if (isNaN(amount) || amount <= 0) continue;
+
+          // Validate email if provided
+          if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            // Skip invalid emails or clear them
+            email = '';
+          }
+
+          data.push({
+            Client_Name: clientName,
+            Type: type,
+            Email: email,
+            Amount_To_Be_Paid: amount,
+          });
+
+          // Add delay every batchSize records to avoid API rate limits
+          if (data.length % batchSize === 0) {
+            console.log(`Processed ${data.length} records...`);
+            await delay(100); // 100ms delay between batches
+          }
+        }
+
+        return data;
+      };
+
+      console.log('Processing CSV data...');
+      const data = await processDataWithDelay(rows);
+
+      if (data.length === 0) {
+        alert('No valid data found in CSV file. Please check your data format.');
+        csvFileInputRef.current.value = '';
+        setIsImporting(false);
+        return;
+      }
+
+      console.log(`Importing ${data.length} records...`);
+
+      // Send data in smaller batches to avoid API limits
+      const sendInBatches = async (data, batchSize = 50) => {
+        const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+        let successCount = 0;
+        
+        for (let i = 0; i < data.length; i += batchSize) {
+          const batch = data.slice(i, i + batchSize);
+          
+          try {
+            console.log(`Sending batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(data.length/batchSize)}...`);
+            
+            const response = await axios.post(`${BASE_URL}/import-csv`, batch, {
+              headers: { 
+                Authorization: `Bearer ${sessionToken}`,
+                'Content-Type': 'application/json'
+              },
+              timeout: 30000 // 30 second timeout
+            });
+            
+            successCount += batch.length;
+            console.log(`Batch ${Math.floor(i/batchSize) + 1} completed successfully`);
+            
+            // Delay between batches to respect API limits
+            if (i + batchSize < data.length) {
+              await delay(500); // 500ms delay between batches
+            }
+            
+          } catch (error) {
+            console.error(`Error in batch ${Math.floor(i/batchSize) + 1}:`, error);
+            
+            // If it's a rate limit error, wait longer and retry
+            if (error.response?.status === 429 || error.code === 'ECONNABORTED') {
+              console.log('Rate limit hit, waiting 2 seconds before retry...');
+              await delay(2000);
+              i -= batchSize; // Retry this batch
+              continue;
+            }
+            
+            throw error; // Re-throw other errors
+          }
+        }
+        
+        return successCount;
+      };
+
+      const importedCount = await sendInBatches(data);
 
       // Refresh data after successful import
+      console.log('Refreshing client and payment data...');
       await Promise.all([
         fetchClients(sessionToken),
         fetchPayments(sessionToken)
       ]);
       
-      alert(`CSV data imported successfully! ${data.length} records processed.`);
+      alert(`CSV import completed successfully! ${importedCount} records imported.`);
       
       // Clear the file input
       csvFileInputRef.current.value = '';
@@ -532,17 +691,13 @@ const importCsv = async (e) => {
     } catch (error) {
       console.error('Import CSV error:', error);
       
-      // Handle different types of errors
       let errorMessage = 'Failed to import CSV data: ';
       
       if (error.response) {
-        // Server responded with error status
         errorMessage += error.response.data?.error || error.response.statusText;
       } else if (error.request) {
-        // Request was made but no response received
         errorMessage += 'No response from server. Please check your connection.';
       } else {
-        // Something else happened
         errorMessage += error.message;
       }
       
@@ -550,7 +705,7 @@ const importCsv = async (e) => {
       handleSessionError(error);
       csvFileInputRef.current.value = '';
     } finally {
-      setIsImporting(false); // End loading state
+      setIsImporting(false);
     }
   };
   
