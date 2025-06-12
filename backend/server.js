@@ -152,8 +152,12 @@ async function readSheet(sheetName, range) {
     });
     return response.data.values || [];
   } catch (error) {
-    console.error(`Error reading sheet ${sheetName}:`, error);
-    throw error;
+    console.error(`Error reading sheet ${sheetName} range ${range}:`, {
+      message: error.message,
+      code: error.code,
+      details: error.errors,
+    });
+    throw new Error(`Failed to read sheet ${sheetName}`);
   }
 }
 
@@ -186,6 +190,7 @@ async function appendSheet(sheetName, values) {
         valueInputOption: 'RAW',
         resource: { values },
       });
+      console.log(`Successfully appended ${values.length} rows to ${sheetName}`);
       return; // Success, exit the function
     } catch (error) {
       if (error.status === 429 && retryCount < maxRetries) {
@@ -195,8 +200,12 @@ async function appendSheet(sheetName, values) {
         await delay(delayMs);
         retryCount++;
       } else {
-        console.error(`Error appending to sheet ${sheetName}:`, error);
-        throw error;
+        console.error(`Error appending to sheet ${sheetName}:`, {
+          message: error.message,
+          code: error.code,
+          details: error.errors,
+        });
+        throw new Error(`Failed to append to sheet ${sheetName}`);
       }
     }
   }
@@ -231,6 +240,7 @@ async function writeSheet(sheetName, range, values) {
         valueInputOption: 'RAW',
         resource: { values },
       });
+      console.log(`Successfully wrote to ${sheetName} range ${range}`);
       return;
     } catch (error) {
       if (error.status === 429 && retryCount < maxRetries) {
@@ -239,8 +249,12 @@ async function writeSheet(sheetName, range, values) {
         await delay(delayMs);
         retryCount++;
       } else {
-        console.error(`Error writing to sheet ${sheetName}:`, error);
-        throw error;
+        console.error(`Error writing to sheet ${sheetName}:`, {
+          message: error.message,
+          code: error.code,
+          details: error.errors,
+        });
+        throw new Error(`Failed to write to sheet ${sheetName}`);
       }
     }
   }
@@ -412,8 +426,11 @@ app.get('/api/get-clients', authenticateToken, async (req, res) => {
       Amount_To_Be_Paid: parseFloat(client[4]) || 0,
     })));
   } catch (error) {
-    console.error('Get clients error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('Get clients error:', {
+      message: error.message,
+      stack: error.stack,
+    });
+    res.status(500).json({ error: 'Failed to fetch clients' });
   }
 });
 
@@ -744,7 +761,7 @@ app.get('/api/get-payments-by-year', authenticateToken, async (req, res) => {
     await ensureSheet('Payments', headers, year);
     const payments = await readSheet(getPaymentSheetName(year), 'A2:R');
     const userPayments = payments.filter(payment => payment[0] === req.user.username);
-    console.log(`Payments for ${year} for user ${req.user.username}:`, userPayments);
+    console.log(`Fetched ${userPayments.length} payments for ${year} for user ${req.user.username}`);
     res.json(userPayments.map(payment => ({
       User: payment[0],
       Client_Name: payment[1],
@@ -765,8 +782,11 @@ app.get('/api/get-payments-by-year', authenticateToken, async (req, res) => {
       Due_Payment: parseFloat(payment[16]) || '0',
     })));
   } catch (error) {
-    console.error(`Get payments for year ${year} error:`, error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error(`Get payments for year ${year} error:`, {
+      message: error.message,
+      stack: error.stack,
+    });
+    res.status(500).json({ error: `Failed to fetch payments for year ${year}` });
   }
 });
 
@@ -832,6 +852,8 @@ app.post('/api/save-payments', authenticateToken, async (req, res) => {
     const headers = ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment'];
     await ensureSheet('Payments', headers, year);
     let payments = await readSheet(getPaymentSheetName(year), 'A2:R');
+    const updatedPayments = [...payments];
+
     for (const data of paymentsData) {
       let { Client_Name, Type, Amount_To_Be_Paid, january, february, march, april, may, june, july, august, september, october, november, december, Due_Payment } = data;
       Client_Name = sanitizeInput(Client_Name);
@@ -841,6 +863,7 @@ app.post('/api/save-payments', authenticateToken, async (req, res) => {
       const months = [january, february, march, april, may, june, july, august, september, october, november, december];
       const sanitizedMonths = months.map(month => month ? sanitizeInput(month.toString()) : '');
       if (isNaN(Amount_To_Be_Paid) || Amount_To_Be_Paid <= 0) {
+        console.warn(`Skipping invalid payment data for ${Client_Name}: Invalid Amount_To_Be_Paid`);
         continue;
       }
       if (isNaN(Due_Payment)) {
