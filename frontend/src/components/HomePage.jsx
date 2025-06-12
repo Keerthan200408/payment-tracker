@@ -213,7 +213,7 @@ const HomePage = ({
                         onChange={(e) =>
                           updatePayment(rowIndex, month, e.target.value)
                         }
-                        className="w-20 p-1 border-gray-300 rounded text-right focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+                        className={`w-20 p-1 border-gray-300 rounded text-right focus:ring-2 focus:ring-blue-500 text-sm sm:text-base ${getInputBackgroundColor(row, month)}`}
                         placeholder="0.00"
                       />
                     </td>
