@@ -80,7 +80,7 @@ const App = () => {
   }, [currentYear]);
 
   useEffect(() => {
-    localStorage.setItem('currentYear', pcurrentYear); // Save the current page to localStorage whenever it changes
+    localStorage.setItem('currentYear', currentYear); // Save the current page to localStorage whenever it changes
   }, [currentYear]);
 
   useEffect(() => {
