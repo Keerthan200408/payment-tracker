@@ -56,24 +56,27 @@ const HomePage = ({
   // Update handleAddNewYear to create sheet and set empty table
 const handleAddNewYear = async () => {
   const newYear = (parseInt(currentYear) + 1).toString();
+  console.log(`Adding new year: ${newYear}`);
   try {
-    await axios.post(
+    const response = await axios.post(
       `${BASE_URL}/add-new-year`,
       { year: newYear },
       { headers: { Authorization: `Bearer ${sessionToken}` } }
     );
+    console.log('Add new year response:', response.data);
     setAvailableYears([...availableYears, newYear]);
     setCurrentYear(newYear);
     setPaymentsData([]); // Initialize empty table
     console.log(`New year ${newYear} added with empty table`);
   } catch (error) {
     console.error('Error adding new year:', error);
-    alert('Failed to add new year');
+    alert(`Failed to add new year: ${error.response?.data?.error || 'Unknown error occurred'}`);
   }
 };
 
 const handleYearChange = async (year) => {
   setCurrentYear(year);
+  console.log(`Fetching payments for year: ${year}`);
   try {
     const response = await axios.get(`${BASE_URL}/get-payments-by-year`, {
       headers: { Authorization: `Bearer ${sessionToken}` },
@@ -82,8 +85,9 @@ const handleYearChange = async (year) => {
     console.log(`Payments for ${year}:`, response.data); // Debug
     setPaymentsData(response.data || []);
   } catch (error) {
-    console.error(`Error fetching payments for year ${year}:`, error);
+    console.error(`Error fetching payments for year ${year}:`, error.response?.data || error.message);
     setPaymentsData([]); // Set empty table on error
+    alert(`Failed to fetch payments for ${year}: ${error.response?.data?.error || 'Unknown error'}`);
   }
 };
   const tableRef = useRef(null);

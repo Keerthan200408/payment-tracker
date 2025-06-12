@@ -882,8 +882,10 @@ app.post('/api/add-new-year', authenticateToken, async (req, res) => {
     const headers = ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment'];
     await ensureSheet('Payments', headers, year);
     
+    
     // Check if sheet already has data
     const existingPayments = await readSheet(getPaymentSheetName(year), 'A2:R');
+    console.log(`Creating sheet for year ${year}`);
     if (existingPayments.length > 0) {
       return res.status(400).json({ error: 'Year already exists' });
     }
@@ -902,13 +904,16 @@ app.post('/api/add-new-year', authenticateToken, async (req, res) => {
     ]);
     
     if (newPayments.length > 0) {
+      console.log(`Appending ${newPayments.length} records to Payments_${year}`);
       await appendSheet(getPaymentSheetName(year), newPayments);
+    } else {
+      console.log(`No client data to append for ${year}, sheet remains empty`);
     }
-    
-    res.status(200).json({ message: `New year ${year} added successfully` });
+
+    res.json({ message: `New year ${year} added successfully` });
   } catch (error) {
-    console.error('Add new year error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error(`Error adding new year ${year}:`, error.message);
+    res.status(500).json({ error: 'Failed to add new year' });
   }
 });
 
