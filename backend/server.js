@@ -418,8 +418,15 @@ app.delete('/api/delete-client', authenticateToken, async (req, res) => {
     const filteredClients = clients.filter(client => !(client[0] === req.user.username && client[1] === Client_Name && client[3] === Type));
     const filteredPayments = payments.filter(payment => !(payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type));
 
-    await writeSheet('Clients', 'A2:E', []);
-    await writeSheet('Payments', 'A2:R', []);
+    // Get the current data size to determine the range to clear
+    const clientsRange = clients.length > 0 ? `A2:E${clients.length + 1}` : 'A2:E2';
+    const paymentsRange = payments.length > 0 ? `A2:R${payments.length + 1}` : 'A2:R2';
+
+    await writeSheet('Clients', clientsRange, []);
+    await writeSheet('Payments', paymentsRange, []);
+
+    // Add a small delay to ensure the clear operation completes
+    await delay(500);
 
     // Write the filtered data back (only if there are records to write)
     if (filteredClients.length > 0) {
@@ -429,7 +436,7 @@ app.delete('/api/delete-client', authenticateToken, async (req, res) => {
     if (filteredPayments.length > 0) {
       await writeSheet('Payments', `A2:R${filteredPayments.length + 1}`, filteredPayments);
     }
-    
+
     res.json({ message: 'Client deleted successfully' });
   } catch (error) {
     console.error('Delete client error:', error);
