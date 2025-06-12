@@ -44,20 +44,45 @@ const HomePage = ({
   const BASE_URL = 'https://payment-tracker-aswa.onrender.com/api';
 
   useEffect(() => {
-    const years = [];
-    const currentYearNum = new Date().getFullYear();
-    
-    for (let y = 2025; y <= currentYearNum + 1; y++) {
-      years.push(y.toString());
+  const loadAvailableYears = async () => {
+    try {
+      const response = await axios.get(`${BASE_URL}/get-available-years`, {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      });
+      
+      if (response.data && Array.isArray(response.data)) {
+        setAvailableYears(response.data);
+      } else {
+        // Fallback to default years if API doesn't return proper data
+        const years = [];
+        const currentYearNum = new Date().getFullYear();
+        for (let y = 2025; y <= currentYearNum + 1; y++) {
+          years.push(y.toString());
+        }
+        setAvailableYears(years);
+      }
+    } catch (error) {
+      console.error('Error loading available years:', error);
+      // Fallback to default years on error
+      const years = [];
+      const currentYearNum = new Date().getFullYear();
+      for (let y = 2025; y <= currentYearNum + 1; y++) {
+        years.push(y.toString());
+      }
+      setAvailableYears(years);
     }
-    setAvailableYears(years);
-  }, []);
+  };
 
-  // Update handleAddNewYear to create sheet and set empty table
+  if (sessionToken) {
+    loadAvailableYears();
+  }
+}, [sessionToken]);
+
+// Replace the existing handleAddNewYear function
 const handleAddNewYear = async () => {
-  const lastYear = availableYears[availableYears.length - 1];
   const newYear = (parseInt(currentYear) + 1).toString();
   console.log(`Adding new year: ${newYear}`);
+  
   try {
     const response = await axios.post(
       `${BASE_URL}/add-new-year`,
@@ -65,32 +90,43 @@ const handleAddNewYear = async () => {
       { headers: { Authorization: `Bearer ${sessionToken}` } }
     );
     console.log('Add new year response:', response.data);
-    const updatedYears = [...availableYears, newYear];
+    
+    // Update available years list
+    const updatedYears = [...availableYears, newYear].sort();
     setAvailableYears(updatedYears);
+    
+    // Switch to the new year and set empty data
     setCurrentYear(newYear);
-    setPaymentsData([]); // Initialize empty table
-    setAvailableYears(updatedYears);
-    console.log(`New year ${newYear} added with empty table`);
+    setPaymentsData([]); // Initialize empty table for new year
+    
+    console.log(`New year ${newYear} added successfully`);
+    alert(`Year ${newYear} added successfully!`);
+    
   } catch (error) {
     console.error('Error adding new year:', error);
     alert(`Failed to add new year: ${error.response?.data?.error || 'Unknown error occurred'}`);
   }
 };
 
+// Replace the existing handleYearChange function
 const handleYearChange = async (year) => {
   setCurrentYear(year);
-  console.log(`Fetching payments for year: ${year}`);
+  console.log(`Switching to year: ${year}`);
+  
   try {
     const response = await axios.get(`${BASE_URL}/get-payments-by-year`, {
       headers: { Authorization: `Bearer ${sessionToken}` },
       params: { year },
     });
-    console.log(`Payments for ${year}:`, response.data); // Debug
-    setPaymentsData(response.data || []);
+    console.log(`Payments for ${year}:`, response.data);
+    setPaymentsData(Array.isArray(response.data) ? response.data : []);
   } catch (error) {
-    console.error(`Error fetching payments for year ${year}:`, error.response?.data || error.message);
+    console.error(`Error fetching payments for year ${year}:`, error);
     setPaymentsData([]); // Set empty table on error
-    alert(`Failed to fetch payments for ${year}: ${error.response?.data?.error || 'Unknown error'}`);
+    // Don't show alert for empty data, just log the error
+    if (error.response?.status !== 404) {
+      alert(`Failed to fetch payments for ${year}: ${error.response?.data?.error || 'Unknown error'}`);
+    }
   }
 };
   const tableRef = useRef(null);
@@ -129,32 +165,33 @@ const handleYearChange = async (year) => {
     return 'bg-white'; // Default for empty or invalid
   };
 
-  const filteredData = paymentsData.filter((row) => {
-    const matchesSearch =
-      !searchQuery ||
-      row.Client_Name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      row.Type.toLowerCase().includes(searchQuery.toLowerCase());
+  // Replace the existing filteredData calculation to handle undefined paymentsData
+const filteredData = (paymentsData || []).filter((row) => {
+  const matchesSearch =
+    !searchQuery ||
+    row.Client_Name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    row.Type.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesMonth =
-      !monthFilter ||
-      (row[monthFilter.toLowerCase()] !== undefined &&
-        row[monthFilter.toLowerCase()] !== null);
+  const matchesMonth =
+    !monthFilter ||
+    (row[monthFilter.toLowerCase()] !== undefined &&
+      row[monthFilter.toLowerCase()] !== null);
 
-    const matchesStatus = !monthFilter
-      ? true // If no month is selected, don't filter by status
-      : !statusFilter ||
-        (statusFilter === "Paid" &&
-          getPaymentStatusForMonth(row, monthFilter.toLowerCase()) ===
-            "Paid") ||
-        (statusFilter === "PartiallyPaid" &&
-          getPaymentStatusForMonth(row, monthFilter.toLowerCase()) ===
-            "PartiallyPaid") ||
-        (statusFilter === "Unpaid" &&
-          getPaymentStatusForMonth(row, monthFilter.toLowerCase()) ===
-            "Unpaid");
+  const matchesStatus = !monthFilter
+    ? true
+    : !statusFilter ||
+      (statusFilter === "Paid" &&
+        getPaymentStatusForMonth(row, monthFilter.toLowerCase()) ===
+          "Paid") ||
+      (statusFilter === "PartiallyPaid" &&
+        getPaymentStatusForMonth(row, monthFilter.toLowerCase()) ===
+          "PartiallyPaid") ||
+      (statusFilter === "Unpaid" &&
+        getPaymentStatusForMonth(row, monthFilter.toLowerCase()) ===
+          "Unpaid");
 
-    return matchesSearch && matchesMonth && matchesStatus;
-  });
+  return matchesSearch && matchesMonth && matchesStatus;
+});
 
   const renderDashboard = () => (
     <>
@@ -320,7 +357,7 @@ const handleYearChange = async (year) => {
   );
 
   const renderReports = () => {
-  const monthStatus = paymentsData.reduce((acc, row) => {
+  const monthStatus = (paymentsData || []).reduce((acc, row) => {
     if (!acc[row.Client_Name]) {
       acc[row.Client_Name] = {};
     }
