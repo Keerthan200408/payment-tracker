@@ -14,6 +14,17 @@ const app = express();
 // Trust Render's proxy
 app.set('trust proxy', 1);
 
+
+
+// CORS configuration
+app.use(cors({
+  origin: ['https://reliable-eclair-abf03c.netlify.app', 'http://localhost:5174'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  preflightContinue: false,
+  optionsSuccessStatus: 204
+}));
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -23,23 +34,13 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// CORS configuration
-app.use(cors({
-  origin: ['https://reliable-eclair-abf03c.netlify.app', 'http://localhost:5174'],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  // preflightContinue: false,
-  // optionsSuccessStatus: 204
-}));
-
 // Handle preflight OPTIONS requests
-app.options('*', cors({
-  origin: ['https://reliable-eclair-abf03c.netlify.app', 'http://localhost:5174'],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}));
+// app.options('*', cors({
+//   origin: ['https://reliable-eclair-abf03c.netlify.app', 'http://localhost:5174'],
+//   credentials: true,
+//   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+//   allowedHeaders: ['Content-Type', 'Authorization'],
+// }));
 
 // Cookie parser
 app.use(cookieParser());
