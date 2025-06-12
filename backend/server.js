@@ -393,7 +393,58 @@ app.post('/api/add-client', authenticateToken, async (req, res) => {
   }
 });
 
-// Delete Client
+// // Delete Client
+// app.delete('/api/delete-client', authenticateToken, async (req, res) => {
+//   let { Client_Name, Type } = req.body;
+//   if (!Client_Name || !Type) {
+//     return res.status(400).json({ error: 'Client name and type are required' });
+//   }
+//   Client_Name = sanitizeInput(Client_Name);
+//   Type = sanitizeInput(Type);
+//   try {
+//     await ensureSheet('Clients', ['User', 'Client_Name', 'Email', 'Type', 'Monthly_Payment']);
+//     await ensureSheet('Payments', ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment']);
+
+//     let clients = await readSheet('Clients', 'A2:E');
+//     let payments = await readSheet('Payments', 'A2:R');
+
+
+//     const clientExists = clients.some(client => client[0] === req.user.username && client[1] === Client_Name && client[3] === Type);
+//     if (!clientExists) {
+//       return res.status(404).json({ error: 'Client not found' });
+//     }
+
+    
+//     const filteredClients = clients.filter(client => !(client[0] === req.user.username && client[1] === Client_Name && client[3] === Type));
+//     const filteredPayments = payments.filter(payment => !(payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type));
+
+//     // Get the current data size to determine the range to clear
+//     const clientsRange = clients.length > 0 ? `A2:E${clients.length + 1}` : 'A2:E2';
+//     const paymentsRange = payments.length > 0 ? `A2:R${payments.length + 1}` : 'A2:R2';
+
+//     await writeSheet('Clients', clientsRange, []);
+//     await writeSheet('Payments', paymentsRange, []);
+
+//     // Add a small delay to ensure the clear operation completes
+//     await delay(500);
+
+//     // Write the filtered data back (only if there are records to write)
+//     if (filteredClients.length > 0) {
+//       await writeSheet('Clients', `A2:E${filteredClients.length + 1}`, filteredClients);
+//     }
+    
+//     if (filteredPayments.length > 0) {
+//       await writeSheet('Payments', `A2:R${filteredPayments.length + 1}`, filteredPayments);
+//     }
+
+//     res.json({ message: 'Client deleted successfully' });
+//   } catch (error) {
+//     console.error('Delete client error:', error);
+//     res.status(500).json({ error: 'Internal server error' });
+//   }
+// });
+
+// Alternative Delete Client Function using Google Sheets clear method
 app.delete('/api/delete-client', authenticateToken, async (req, res) => {
   let { Client_Name, Type } = req.body;
   if (!Client_Name || !Type) {
@@ -404,39 +455,56 @@ app.delete('/api/delete-client', authenticateToken, async (req, res) => {
   try {
     await ensureSheet('Clients', ['User', 'Client_Name', 'Email', 'Type', 'Monthly_Payment']);
     await ensureSheet('Payments', ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment']);
-
+    
     let clients = await readSheet('Clients', 'A2:E');
     let payments = await readSheet('Payments', 'A2:R');
-
-
+    
+    // Check if client exists
     const clientExists = clients.some(client => client[0] === req.user.username && client[1] === Client_Name && client[3] === Type);
     if (!clientExists) {
       return res.status(404).json({ error: 'Client not found' });
     }
-
     
+    // Filter out the client and payment records
     const filteredClients = clients.filter(client => !(client[0] === req.user.username && client[1] === Client_Name && client[3] === Type));
     const filteredPayments = payments.filter(payment => !(payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type));
-
-    // Get the current data size to determine the range to clear
-    const clientsRange = clients.length > 0 ? `A2:E${clients.length + 1}` : 'A2:E2';
-    const paymentsRange = payments.length > 0 ? `A2:R${payments.length + 1}` : 'A2:R2';
-
-    await writeSheet('Clients', clientsRange, []);
-    await writeSheet('Payments', paymentsRange, []);
-
-    // Add a small delay to ensure the clear operation completes
+    
+    // Use Google Sheets API to clear and update
+    const sheets = google.sheets({ version: 'v4', auth });
+    
+    // Clear the data ranges
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId,
+      range: 'Clients!A2:E',
+    });
+    
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId,
+      range: 'Payments!A2:R',
+    });
+    
+    // Add delay
     await delay(500);
-
-    // Write the filtered data back (only if there are records to write)
+    
+    // Write back the filtered data
     if (filteredClients.length > 0) {
-      await writeSheet('Clients', `A2:E${filteredClients.length + 1}`, filteredClients);
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: 'Clients!A2',
+        valueInputOption: 'RAW',
+        resource: { values: filteredClients },
+      });
     }
     
     if (filteredPayments.length > 0) {
-      await writeSheet('Payments', `A2:R${filteredPayments.length + 1}`, filteredPayments);
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: 'Payments!A2',
+        valueInputOption: 'RAW',
+        resource: { values: filteredPayments },
+      });
     }
-
+    
     res.json({ message: 'Client deleted successfully' });
   } catch (error) {
     console.error('Delete client error:', error);
