@@ -47,7 +47,7 @@ const HomePage = ({
     const years = [];
     const currentYearNum = new Date().getFullYear();
     
-    for (let y = 2025; y <= currentYearNum + 1; y++) {
+    for (let y = 2023; y <= currentYearNum + 1; y++) {
       years.push(y.toString());
     }
     setAvailableYears(years);
@@ -55,7 +55,6 @@ const HomePage = ({
 
   // Update handleAddNewYear to create sheet and set empty table
 const handleAddNewYear = async () => {
-  const lastYear = availableYears[availableYears.length - 1];
   const newYear = (parseInt(currentYear) + 1).toString();
   console.log(`Adding new year: ${newYear}`);
   try {
@@ -65,11 +64,9 @@ const handleAddNewYear = async () => {
       { headers: { Authorization: `Bearer ${sessionToken}` } }
     );
     console.log('Add new year response:', response.data);
-    const updatedYears = [...availableYears, newYear];
-    setAvailableYears(updatedYears);
+    setAvailableYears([...availableYears, newYear]);
     setCurrentYear(newYear);
     setPaymentsData([]); // Initialize empty table
-    setAvailableYears(updatedYears);
     console.log(`New year ${newYear} added with empty table`);
   } catch (error) {
     console.error('Error adding new year:', error);

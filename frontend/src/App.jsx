@@ -784,59 +784,6 @@ const importCsv = async (e) => {
   }
 };
 
-  /* App.jsx Changes */
-
-// Add availableYears state and pass to HomePage and PaymentsPage
-const [availableYears, setAvailableYears] = useState(['2025']);
-
-return (
-  <Router>
-    <div className="min-h-screen bg-gray-100">
-      <NavBar />
-      <Routes>
-        <Route path="/" element={<LoginPage setSessionToken={setSessionToken} setUsername={setUsername} />} />
-        <Route path="/signup" element={<SignUpPage />} />
-        <Route
-          path="/home"
-          element={
-            <HomePage
-              paymentsData={paymentsData}
-              setPaymentsData={setPaymentsData}
-              clientsData={clientsData}
-              setClientsData={setClientsData}
-              sessionToken={sessionToken}
-              username={username}
-              fetchClients={fetchClients}
-              fetchPayments={fetchPayments}
-              currentYear={currentYear}
-              setCurrentYear={setCurrentYear}
-              availableYears={availableYears}
-              setAvailableYears={setAvailableYears}
-            />
-          }
-        />
-        <Route
-          path="/payments"
-          element={
-            <PaymentsPage
-              paymentsData={paymentsData}
-              setPaymentsData={setPaymentsData}
-              fetchClients={fetchClients}
-              fetchPayments={fetchPayments}
-              sessionToken={sessionToken}
-              isImporting={isImporting}
-              currentYear={currentYear}
-              setCurrentYear={setCurrentYear}
-              availableYears={availableYears}
-              setAvailableYears={setAvailableYears}
-            />
-          }
-        />
-      </Routes>
-    </div>
-  </Router>
-);
-
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gray-100">
