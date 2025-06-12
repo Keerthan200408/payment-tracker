@@ -29,6 +29,8 @@ app.use(cors({
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 }));
 
 // Handle preflight OPTIONS requests
@@ -872,25 +874,28 @@ app.post('/api/save-payments', authenticateToken, async (req, res) => {
   }
 });
 
-// New endpoint to add new year
 app.post('/api/add-new-year', authenticateToken, async (req, res) => {
   const { year } = req.body;
-  if (!year || isNaN(year)) {
-    return res.status(400).json({ error: 'Valid year is required' });
+  if (!year || isNaN(year) || parseInt(year) < 2025) {
+    return res.status(400).json({ error: 'Valid year >= 2025 is required' });
   }
   try {
     const headers = ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment'];
-    await ensureSheet('Payments', headers, year);
+    const sheetName = getPaymentSheetName(year);
     
+    // Check if sheet already exists
+    const sheets = google.sheets({ version: 'v4', auth });
+    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
+    const sheetExists = spreadsheet.data.sheets.some(sheet => sheet.properties.title === sheetName);
     
-    // Check if sheet already has data
-    const existingPayments = await readSheet(getPaymentSheetName(year), 'A2:R');
-    console.log(`Creating sheet for year ${year}`);
-    if (existingPayments.length > 0) {
+    if (sheetExists) {
       return res.status(400).json({ error: 'Year already exists' });
     }
     
-    // Get clients to populate new year's payment records
+    // Create new sheet
+    await ensureSheet('Payments', headers, year);
+    
+    // Get user clients to initialize payment records
     await ensureSheet('Clients', ['User', 'Client_Name', 'Email', 'Type', 'Monthly_Payment']);
     const clients = await readSheet('Clients', 'A2:E');
     const userClients = clients.filter(client => client[0] === req.user.username);
@@ -904,19 +909,16 @@ app.post('/api/add-new-year', authenticateToken, async (req, res) => {
     ]);
     
     if (newPayments.length > 0) {
-      console.log(`Appending ${newPayments.length} records to Payments_${year}`);
-      await appendSheet(getPaymentSheetName(year), newPayments);
-    } else {
-      console.log(`No client data to append for ${year}, sheet remains empty`);
+      console.log(`Appending ${newPayments.length} records to ${sheetName}`);
+      await appendSheet(sheetName, newPayments);
     }
-
+    
     res.json({ message: `New year ${year} added successfully` });
   } catch (error) {
     console.error(`Error adding new year ${year}:`, error.message);
     res.status(500).json({ error: 'Failed to add new year' });
   }
 });
-
 // Import CSV
 // app.post('/api/import-csv', authenticateToken, async (req, res) => {
 //   const csvData = req.body;
