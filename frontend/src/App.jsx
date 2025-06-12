@@ -232,7 +232,110 @@ const App = () => {
   //   reader.readAsText(file);
   // };
   // changed
-  const importCsv = async (e) => {
+//   const importCsv = async (e) => {
+//   const file = e.target.files[0];
+//   if (!file) return;
+
+//   setIsImporting(true); // Start loading state
+
+//   const reader = new FileReader();
+//   reader.onload = async (event) => {
+//     const text = event.target.result;
+//     const rows = text.split('\n').map(row => row.trim()).filter(row => row);
+//     if (rows.length === 0) {
+//       alert('CSV file is empty.');
+//       csvFileInputRef.current.value = '';
+//       return;
+//     }
+
+//     const fieldAliases = {
+//       Client_Name: ['client name', 'clientname', 'name', 'client'],
+//       Type: ['type', 'category', 'client type'],
+//       Email: ['email', 'e-mail', 'email address'],
+//       Amount_To_Be_Paid: ['amount to be paid', 'amount', 'monthly payment', 'payment', 'monthlypayment'],
+//     };
+
+//     const headers = rows[0].split(',').map(header => header.trim().replace(/\s+/g, ' ').toLowerCase());
+//     let dataRows = [];
+//     let headerMap = {};
+
+//     // Check if the first row contains headers by looking for any known alias
+//     const hasHeaders = Object.keys(fieldAliases).some(field =>
+//       headers.some(header => fieldAliases[field].includes(header))
+//     );
+
+//     if (hasHeaders) {
+//       // Map headers to fields if headers are present
+//       Object.keys(fieldAliases).forEach((field) => {
+//         const aliasIndex = headers.findIndex(header => fieldAliases[field].includes(header));
+//         headerMap[field] = aliasIndex !== -1 ? aliasIndex : -1;
+//       });
+
+//       const requiredFields = ['Client_Name', 'Type', 'Amount_To_Be_Paid'];
+//       const missingRequiredFields = requiredFields.filter(field => headerMap[field] === -1);
+//       if (missingRequiredFields.length > 0) {
+//         alert(`Missing required fields in CSV: ${missingRequiredFields.join(', ')}. Expected fields (or aliases): Client Name, Type, Amount To Be Paid. Email is optional.`);
+//         csvFileInputRef.current.value = '';
+//         return;
+//       }
+
+//       dataRows = rows.slice(1); // Skip header row
+//     } else {
+//       // No headers, assume columns are in order: Client_Name, Type, Email (optional), Amount_To_Be_Paid
+//       headerMap = {
+//         Client_Name: 0,
+//         Type: 1,
+//         Email: rows[0].split(',').length === 3 ? -1 : 2, // Email is optional
+//         Amount_To_Be_Paid: rows[0].split(',').length === 3 ? 2 : 3, // Adjust based on column count
+//       };
+//       dataRows = rows; // All rows are data rows
+//     }
+
+//     const data = dataRows.map(row => {
+//       const cols = row.split(',').map(col => col.trim());
+//       if (cols.length < 3) return null; // Need at least Client_Name, Type, Amount_To_Be_Paid
+//       const amount = parseFloat(cols[headerMap.Amount_To_Be_Paid] || 0);
+//       if (isNaN(amount) || amount <= 0) return null;
+//       const email = headerMap.Email !== -1 ? (cols[headerMap.Email] || '') : '';
+//       if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
+//       return {
+//         Client_Name: cols[headerMap.Client_Name] || 'Unknown Client',
+//         Type: cols[headerMap.Type] || 'Unknown Type',
+//         Email: email,
+//         Amount_To_Be_Paid: amount,
+//       };
+//     }).filter(row => row);
+
+//     if (data.length === 0) {
+//       alert('No valid data found in CSV file.');
+//       csvFileInputRef.current.value = '';
+//       return;
+//     }
+
+//     try {
+//       console.log('Importing CSV data:', data);
+//       await axios.post(`${BASE_URL}/import-csv`, data, {
+//         headers: { Authorization: `Bearer ${sessionToken}` },
+//       });
+//       fetchClients(sessionToken);
+//       fetchPayments(sessionToken);
+//       alert('CSV data imported successfully!');
+//       setTimeout(() => {
+//         window.location.reload();
+//       }, 5000)
+//       csvFileInputRef.current.value = '';
+//     } catch (error) {
+//       console.error('Import CSV error:', error.response?.data?.error || error.message);
+//       handleSessionError(error);
+//       alert('Failed to import CSV data: ' + (error.response?.data?.error || error.message));
+//       csvFileInputRef.current.value = '';
+//     } finally {
+//       setIsImporting(false); // End loading state
+//     }
+//   };
+//   reader.readAsText(file);
+// };
+const importCsv = async (e) => {
   const file = e.target.files[0];
   if (!file) return;
 
@@ -240,99 +343,223 @@ const App = () => {
 
   const reader = new FileReader();
   reader.onload = async (event) => {
-    const text = event.target.result;
-    const rows = text.split('\n').map(row => row.trim()).filter(row => row);
-    if (rows.length === 0) {
-      alert('CSV file is empty.');
-      csvFileInputRef.current.value = '';
-      return;
-    }
+    try {
+      const text = event.target.result;
+      
+      // Better CSV parsing - handle quoted fields and commas within quotes
+      const parseCSVLine = (line) => {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === ',' && !inQuotes) {
+            result.push(current.trim());
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        
+        result.push(current.trim());
+        return result;
+      };
 
-    const fieldAliases = {
-      Client_Name: ['client name', 'clientname', 'name', 'client'],
-      Type: ['type', 'category', 'client type'],
-      Email: ['email', 'e-mail', 'email address'],
-      Amount_To_Be_Paid: ['amount to be paid', 'amount', 'monthly payment', 'payment', 'monthlypayment'],
-    };
-
-    const headers = rows[0].split(',').map(header => header.trim().replace(/\s+/g, ' ').toLowerCase());
-    let dataRows = [];
-    let headerMap = {};
-
-    // Check if the first row contains headers by looking for any known alias
-    const hasHeaders = Object.keys(fieldAliases).some(field =>
-      headers.some(header => fieldAliases[field].includes(header))
-    );
-
-    if (hasHeaders) {
-      // Map headers to fields if headers are present
-      Object.keys(fieldAliases).forEach((field) => {
-        const aliasIndex = headers.findIndex(header => fieldAliases[field].includes(header));
-        headerMap[field] = aliasIndex !== -1 ? aliasIndex : -1;
-      });
-
-      const requiredFields = ['Client_Name', 'Type', 'Amount_To_Be_Paid'];
-      const missingRequiredFields = requiredFields.filter(field => headerMap[field] === -1);
-      if (missingRequiredFields.length > 0) {
-        alert(`Missing required fields in CSV: ${missingRequiredFields.join(', ')}. Expected fields (or aliases): Client Name, Type, Amount To Be Paid. Email is optional.`);
+      const rows = text.split('\n')
+        .map(row => row.trim())
+        .filter(row => row && row.length > 0);
+        
+      if (rows.length === 0) {
+        alert('CSV file is empty.');
         csvFileInputRef.current.value = '';
+        setIsImporting(false);
         return;
       }
 
-      dataRows = rows.slice(1); // Skip header row
-    } else {
-      // No headers, assume columns are in order: Client_Name, Type, Email (optional), Amount_To_Be_Paid
-      headerMap = {
-        Client_Name: 0,
-        Type: 1,
-        Email: rows[0].split(',').length === 3 ? -1 : 2, // Email is optional
-        Amount_To_Be_Paid: rows[0].split(',').length === 3 ? 2 : 3, // Adjust based on column count
+      const fieldAliases = {
+        Client_Name: ['client name', 'clientname', 'name', 'client'],
+        Type: ['type', 'category', 'client type'],
+        Email: ['email', 'e-mail', 'email address'],
+        Amount_To_Be_Paid: ['amount to be paid', 'amount', 'monthly payment', 'payment', 'monthlypayment'],
       };
-      dataRows = rows; // All rows are data rows
-    }
 
-    const data = dataRows.map(row => {
-      const cols = row.split(',').map(col => col.trim());
-      if (cols.length < 3) return null; // Need at least Client_Name, Type, Amount_To_Be_Paid
-      const amount = parseFloat(cols[headerMap.Amount_To_Be_Paid] || 0);
-      if (isNaN(amount) || amount <= 0) return null;
-      const email = headerMap.Email !== -1 ? (cols[headerMap.Email] || '') : '';
-      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
-      return {
-        Client_Name: cols[headerMap.Client_Name] || 'Unknown Client',
-        Type: cols[headerMap.Type] || 'Unknown Type',
-        Email: email,
-        Amount_To_Be_Paid: amount,
-      };
-    }).filter(row => row);
+      // Parse the first row to check for headers
+      const firstRowCols = parseCSVLine(rows[0]);
+      const headers = firstRowCols.map(header => 
+        header.trim().replace(/\s+/g, ' ').toLowerCase().replace(/"/g, '')
+      );
+      
+      let dataRows = [];
+      let headerMap = {};
 
-    if (data.length === 0) {
-      alert('No valid data found in CSV file.');
-      csvFileInputRef.current.value = '';
-      return;
-    }
+      // Check if the first row contains headers
+      const hasHeaders = Object.keys(fieldAliases).some(field =>
+        headers.some(header => fieldAliases[field].includes(header))
+      );
 
-    try {
+      if (hasHeaders) {
+        // Map headers to fields if headers are present
+        Object.keys(fieldAliases).forEach((field) => {
+          const aliasIndex = headers.findIndex(header => fieldAliases[field].includes(header));
+          headerMap[field] = aliasIndex !== -1 ? aliasIndex : -1;
+        });
+
+        const requiredFields = ['Client_Name', 'Type', 'Amount_To_Be_Paid'];
+        const missingRequiredFields = requiredFields.filter(field => headerMap[field] === -1);
+        
+        if (missingRequiredFields.length > 0) {
+          alert(`Missing required fields in CSV: ${missingRequiredFields.join(', ')}. Expected fields (or aliases): Client Name, Type, Amount To Be Paid. Email is optional.`);
+          csvFileInputRef.current.value = '';
+          setIsImporting(false);
+          return;
+        }
+
+        dataRows = rows.slice(1); // Skip header row
+      } else {
+        // No headers, assume columns are in order: Client_Name, Type, Email (optional), Amount_To_Be_Paid
+        const colCount = firstRowCols.length;
+        if (colCount < 3) {
+          alert('CSV must have at least 3 columns: Client Name, Type, Amount To Be Paid. Email is optional.');
+          csvFileInputRef.current.value = '';
+          setIsImporting(false);
+          return;
+        }
+        
+        headerMap = {
+          Client_Name: 0,
+          Type: 1,
+          Email: colCount === 3 ? -1 : 2, // Email is optional
+          Amount_To_Be_Paid: colCount === 3 ? 2 : 3, // Adjust based on column count
+        };
+        dataRows = rows; // All rows are data rows
+      }
+
+      const data = [];
+      
+      for (let i = 0; i < dataRows.length; i++) {
+        const row = dataRows[i];
+        if (!row || row.trim() === '') continue;
+        
+        const cols = parseCSVLine(row).map(col => col.trim().replace(/"/g, ''));
+        
+        // Skip rows that don't have enough columns
+        if (cols.length < 3) {
+          console.warn(`Skipping row ${i + 1}: insufficient columns`);
+          continue;
+        }
+
+        // Extract data based on header mapping
+        const clientName = cols[headerMap.Client_Name] || '';
+        const type = cols[headerMap.Type] || '';
+        const email = headerMap.Email !== -1 ? (cols[headerMap.Email] || '') : '';
+        const amountStr = cols[headerMap.Amount_To_Be_Paid] || '0';
+        
+        // Validate required fields
+        if (!clientName || clientName.trim() === '') {
+          console.warn(`Skipping row ${i + 1}: missing client name`);
+          continue;
+        }
+        
+        if (!type || type.trim() === '') {
+          console.warn(`Skipping row ${i + 1}: missing type`);
+          continue;
+        }
+        
+        // Validate type
+        if (!['GST', 'IT Return'].includes(type)) {
+          console.warn(`Skipping row ${i + 1}: invalid type "${type}". Must be "GST" or "IT Return"`);
+          continue;
+        }
+        
+        // Parse and validate amount
+        const amount = parseFloat(amountStr.replace(/[^\d.-]/g, '')); // Remove currency symbols
+        if (isNaN(amount) || amount <= 0) {
+          console.warn(`Skipping row ${i + 1}: invalid amount "${amountStr}"`);
+          continue;
+        }
+        
+        // Validate email if provided
+        if (email && email.trim() !== '' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          console.warn(`Skipping row ${i + 1}: invalid email "${email}"`);
+          continue;
+        }
+        
+        data.push({
+          Client_Name: clientName.trim(),
+          Type: type.trim(),
+          Email: email.trim(),
+          Amount_To_Be_Paid: amount,
+        });
+      }
+
+      if (data.length === 0) {
+        alert('No valid data found in CSV file. Please check the format and required fields.');
+        csvFileInputRef.current.value = '';
+        setIsImporting(false);
+        return;
+      }
+
       console.log('Importing CSV data:', data);
-      await axios.post(`${BASE_URL}/import-csv`, data, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
+      
+      // Make the API call
+      const response = await axios.post(`${BASE_URL}/import-csv`, data, {
+        headers: { 
+          Authorization: `Bearer ${sessionToken}`,
+          'Content-Type': 'application/json'
+        },
       });
-      fetchClients(sessionToken);
-      fetchPayments(sessionToken);
-      alert('CSV data imported successfully!');
+
+      // Refresh data after successful import
+      await Promise.all([
+        fetchClients(sessionToken),
+        fetchPayments(sessionToken)
+      ]);
+      
+      alert(`CSV data imported successfully! ${data.length} records processed.`);
+      
+      // Clear the file input
+      csvFileInputRef.current.value = '';
+      
+      // Optional: Reload page after delay
       setTimeout(() => {
         window.location.reload();
-      }, 5000)
-      csvFileInputRef.current.value = '';
+      }, 2000);
+      
     } catch (error) {
-      console.error('Import CSV error:', error.response?.data?.error || error.message);
+      console.error('Import CSV error:', error);
+      
+      // Handle different types of errors
+      let errorMessage = 'Failed to import CSV data: ';
+      
+      if (error.response) {
+        // Server responded with error status
+        errorMessage += error.response.data?.error || error.response.statusText;
+      } else if (error.request) {
+        // Request was made but no response received
+        errorMessage += 'No response from server. Please check your connection.';
+      } else {
+        // Something else happened
+        errorMessage += error.message;
+      }
+      
+      alert(errorMessage);
       handleSessionError(error);
-      alert('Failed to import CSV data: ' + (error.response?.data?.error || error.message));
       csvFileInputRef.current.value = '';
     } finally {
       setIsImporting(false); // End loading state
     }
   };
+  
+  reader.onerror = () => {
+    alert('Error reading file. Please try again.');
+    setIsImporting(false);
+    csvFileInputRef.current.value = '';
+  };
+  
   reader.readAsText(file);
 };
 
