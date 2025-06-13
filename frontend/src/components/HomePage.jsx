@@ -44,6 +44,7 @@ const HomePage = ({
   const BASE_URL = 'https://payment-tracker-aswa.onrender.com/api';
 
   
+
 useEffect(() => {
   const fetchYears = async () => {
     try {
@@ -55,32 +56,35 @@ useEffect(() => {
         .filter(year => parseInt(year) >= 2025)
         .sort((a, b) => parseInt(a) - parseInt(b));
       
+      // Ensure 2025 is always included, even if no user data exists for it
+      const yearsToSet = [...new Set(['2025', ...filteredYears])].sort((a, b) => parseInt(a) - parseInt(b));
+      setAvailableYears(yearsToSet);
+      
       // Get stored year from localStorage (for reload persistence)
       const storedYear = localStorage.getItem('currentYear');
       
-      // Set available years, ensuring 2025 is included as fallback
-      const yearsToSet = filteredYears.length > 0 ? filteredYears : ['2025'];
-      setAvailableYears(yearsToSet);
-      
-      // Determine default year: use stored year if valid, else latest user year, else 2025
+      // Determine default year: use stored year if valid and not first login, else 2025
+      const isFirstLogin = !localStorage.getItem('lastLogin');
       let defaultYear = '2025';
-      if (storedYear && yearsToSet.includes(storedYear)) {
+      if (!isFirstLogin && storedYear && yearsToSet.includes(storedYear)) {
         defaultYear = storedYear; // Persist current year on reload
-      } else if (filteredYears.length > 0) {
-        defaultYear = filteredYears[filteredYears.length - 1]; // Latest user year
       }
       
       setCurrentYear(defaultYear);
+      localStorage.setItem('currentYear', defaultYear);
+      localStorage.setItem('lastLogin', Date.now().toString()); // Mark login time
       handleYearChange(defaultYear); // Fetch payments for default year
     } catch (error) {
       console.error('Error fetching user years:', error);
       setAvailableYears(['2025']);
       setCurrentYear('2025');
+      localStorage.setItem('currentYear', '2025');
       handleYearChange('2025');
     }
   };
   if (sessionToken) fetchYears();
 }, [sessionToken]);
+
 
 const handleAddNewYear = async () => {
   const newYear = (parseInt(currentYear) + 1).toString();
