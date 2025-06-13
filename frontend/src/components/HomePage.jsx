@@ -43,7 +43,8 @@ const HomePage = ({
   const [availableYears, setAvailableYears] = useState([currentYear]);
   const BASE_URL = 'https://payment-tracker-aswa.onrender.com/api';
 
-  useEffect(() => {
+  
+useEffect(() => {
   const fetchYears = async () => {
     try {
       const response = await axios.get(`${BASE_URL}/get-user-years`, {
@@ -53,9 +54,22 @@ const HomePage = ({
       const filteredYears = (response.data || [])
         .filter(year => parseInt(year) >= 2025)
         .sort((a, b) => parseInt(a) - parseInt(b));
-      setAvailableYears(filteredYears.length > 0 ? filteredYears : ['2025']);
-      // Set default year to the latest year with user data, or current year
-      const defaultYear = filteredYears.length > 0 ? filteredYears[filteredYears.length - 1] : '2025';
+      
+      // Get stored year from localStorage (for reload persistence)
+      const storedYear = localStorage.getItem('currentYear');
+      
+      // Set available years, ensuring 2025 is included as fallback
+      const yearsToSet = filteredYears.length > 0 ? filteredYears : ['2025'];
+      setAvailableYears(yearsToSet);
+      
+      // Determine default year: use stored year if valid, else latest user year, else 2025
+      let defaultYear = '2025';
+      if (storedYear && yearsToSet.includes(storedYear)) {
+        defaultYear = storedYear; // Persist current year on reload
+      } else if (filteredYears.length > 0) {
+        defaultYear = filteredYears[filteredYears.length - 1]; // Latest user year
+      }
+      
       setCurrentYear(defaultYear);
       handleYearChange(defaultYear); // Fetch payments for default year
     } catch (error) {
