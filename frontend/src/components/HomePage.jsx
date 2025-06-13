@@ -47,9 +47,16 @@ const HomePage = ({
 
 useEffect(() => {
   const fetchYears = async () => {
-    console.log('Fetching years with sessionToken:', sessionToken); // Debug sessionToken
+    if (!sessionToken) {
+      console.log('No sessionToken available, skipping fetchYears');
+      setAvailableYears(['2025']);
+      setCurrentYear('2025');
+      localStorage.setItem('currentYear', '2025');
+      return;
+    }
+    console.log('Fetching years with sessionToken:', sessionToken);
     try {
-      const response = await axios.get(`${BASE_URL}/get-user-years`, {
+      const response = await axios.get(`${BASE_URL}/get-user-years?t=${Date.now()}`, {
         headers: { Authorization: `Bearer ${sessionToken}` },
       });
       console.log('API response for user-specific years:', response.data);
@@ -57,24 +64,20 @@ useEffect(() => {
         .filter(year => parseInt(year) >= 2025)
         .sort((a, b) => parseInt(a) - parseInt(b));
       
-      // Ensure 2025 is always included, even if no user data exists
       const yearsToSet = [...new Set(['2025', ...filteredYears])].sort((a, b) => parseInt(a) - parseInt(b));
       console.log('Years set for dropdown:', yearsToSet);
       setAvailableYears(yearsToSet);
       
-      // Get stored year from localStorage for reload persistence
       const storedYear = localStorage.getItem('currentYear');
-      
-      // Use stored year if valid and exists in available years, otherwise default to 2025
       const defaultYear = (storedYear && yearsToSet.includes(storedYear)) ? storedYear : '2025';
       console.log('Selected default year:', defaultYear);
       
       setCurrentYear(defaultYear);
       localStorage.setItem('currentYear', defaultYear);
-      await handleYearChange(defaultYear); // Fetch payments for the selected year
+      await handleYearChange(defaultYear);
       console.log('Dropdown state after update:', { availableYears: yearsToSet, currentYear: defaultYear });
     } catch (error) {
-      console.error('Error fetching user years:', error);
+      console.error('Error fetching user years:', error.message, error.response?.data);
       setAvailableYears(['2025']);
       setCurrentYear('2025');
       localStorage.setItem('currentYear', '2025');
@@ -82,10 +85,9 @@ useEffect(() => {
       console.log('Dropdown state after error:', { availableYears: ['2025'], currentYear: '2025' });
     }
   };
-  if (sessionToken) fetchYears();
+  fetchYears();
 }, [sessionToken]);
 
-// Add debug for availableYears changes
 useEffect(() => {
   console.log('availableYears state updated:', availableYears);
 }, [availableYears]);

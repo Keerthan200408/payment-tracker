@@ -900,7 +900,7 @@ app.post('/api/save-payments', authenticateToken, async (req, res) => {
 
 app.get('/api/get-user-years', authenticateToken, async (req, res) => {
   try {
-    console.log('Processing /api/get-user-years for user:', req.user); // Debug auth
+    console.log('Processing /api/get-user-years for user:', req.user);
     const sheets = google.sheets({ version: 'v4', auth });
     const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
     const paymentSheets = spreadsheet.data.sheets
@@ -912,7 +912,7 @@ app.get('/api/get-user-years', authenticateToken, async (req, res) => {
       const year = sheetName.split('_')[1];
       if (parseInt(year) < 2025) continue;
       const payments = await readSheet(sheetName, 'A2:R');
-      console.log(`Raw data for ${sheetName} (first 5 rows):`, payments.slice(0, 5)); // Debug sheet data
+      console.log(`Raw data for ${sheetName} (first 5 rows):`, payments.slice(0, 5));
       const hasUserData = payments.some(payment => {
         const isUserData = payment[0] === req.user.username;
         console.log(`Checking ${sheetName} for user ${req.user.username}: ${isUserData}, User column: ${payment[0]}`);
