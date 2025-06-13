@@ -54,12 +54,13 @@ const App = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [editClient, setEditClient] = useState(null);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Add state for sidebar toggle
   const csvFileInputRef = useRef(null);
   const profileMenuRef = useRef(null);
-  const [isImporting, setIsImporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false); // Add loading state for CSV import
+  const [currentYear, setCurrentYear] = useState('2025');
+    // Add this at the top of App.jsx with other useRef declarations
   const saveTimeouts = useRef({});
-  const currentYear = 
 
   axios.defaults.withCredentials = true;
 
@@ -67,16 +68,18 @@ const App = () => {
     const storedUser = localStorage.getItem('currentUser');
     const storedToken = localStorage.getItem('sessionToken');
     const storedPage = localStorage.getItem('currentPage');
+    const storedYear = localStorage.getItem('currentYear');
 
     if (storedUser && storedToken) {
-      console.log('Restoring session for user:', storedUser, 'with token:', storedToken);
+      console.log('Restoring session for user:', storedUser);
       setCurrentUser(storedUser);
       setSessionToken(storedToken);
-      setPage(storedPage || 'home');
+      setPage(storedPage || 'home'); //changes for restoring last page after reload
+      // const yearToSet = storedYear || '2025';
+      // setCurrentYear(yearToSet);
+      // fetchClients(storedToken);
+      // fetchPayments(storedToken, yearToSet);
       fetchClients(storedToken);
-    } else {
-      console.log('No stored session found');
-      setPage('signIn');
     }
   }, []);
 

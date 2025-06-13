@@ -42,56 +42,45 @@ const HomePage = ({
 
   const [availableYears, setAvailableYears] = useState([currentYear]);
   const BASE_URL = 'https://payment-tracker-aswa.onrender.com/api';
-  const [currentYear, setCurrentYear] = useState('2025');
 
   
 
 useEffect(() => {
   const fetchYears = async () => {
-    if (!sessionToken) {
-      console.log('No sessionToken available, skipping fetchYears');
-      setAvailableYears(['2025']);
-      setCurrentYear('2025');
-      localStorage.setItem('currentYear', '2025');
-      return;
-    }
-    console.log('Fetching years with sessionToken:', sessionToken);
     try {
-      const response = await axios.get(`${BASE_URL}/get-user-years?t=${Date.now()}`, {
+      const response = await axios.get(`${BASE_URL}/get-user-years`, {
         headers: { Authorization: `Bearer ${sessionToken}` },
       });
-      console.log('API response for user-specific years:', response.data);
+      console.log('Fetched user-specific years:', response.data);
       const filteredYears = (response.data || [])
         .filter(year => parseInt(year) >= 2025)
         .sort((a, b) => parseInt(a) - parseInt(b));
       
+      // Ensure 2025 is always included, even if no user data exists
       const yearsToSet = [...new Set(['2025', ...filteredYears])].sort((a, b) => parseInt(a) - parseInt(b));
       console.log('Years set for dropdown:', yearsToSet);
       setAvailableYears(yearsToSet);
       
+      // Get stored year from localStorage for reload persistence
       const storedYear = localStorage.getItem('currentYear');
+      
+      // Use stored year if valid and exists in available years, otherwise default to 2025
       const defaultYear = (storedYear && yearsToSet.includes(storedYear)) ? storedYear : '2025';
       console.log('Selected default year:', defaultYear);
       
       setCurrentYear(defaultYear);
       localStorage.setItem('currentYear', defaultYear);
-      await handleYearChange(defaultYear);
-      console.log('Dropdown state after update:', { availableYears: yearsToSet, currentYear: defaultYear });
+      await handleYearChange(defaultYear); // Fetch payments for the selected year
     } catch (error) {
-      console.error('Error fetching user years:', error.message, error.response?.data);
+      console.error('Error fetching user years:', error);
       setAvailableYears(['2025']);
       setCurrentYear('2025');
       localStorage.setItem('currentYear', '2025');
       await handleYearChange('2025');
-      console.log('Dropdown state after error:', { availableYears: ['2025'], currentYear: '2025' });
     }
   };
-  fetchYears();
+  if (sessionToken) fetchYears();
 }, [sessionToken]);
-
-useEffect(() => {
-  console.log('availableYears state updated:', availableYears);
-}, [availableYears]);
 
 const handleAddNewYear = async () => {
   const newYear = (parseInt(currentYear) + 1).toString();
