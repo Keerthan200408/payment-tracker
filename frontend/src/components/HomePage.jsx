@@ -60,10 +60,15 @@ useEffect(() => {
       const yearsToSet = [...new Set(['2025', ...filteredYears])].sort((a, b) => parseInt(a) - parseInt(b));
       setAvailableYears(yearsToSet);
       
-      // Always default to 2025 on login
-      setCurrentYear('2025');
-      localStorage.setItem('currentYear', '2025');
-      handleYearChange('2025'); // Fetch payments for 2025
+      // Get stored year from localStorage for reload persistence
+      const storedYear = localStorage.getItem('currentYear');
+      
+      // Use stored year if valid and exists in available years, otherwise default to 2025
+      const defaultYear = (storedYear && yearsToSet.includes(storedYear)) ? storedYear : '2025';
+      
+      setCurrentYear(defaultYear);
+      localStorage.setItem('currentYear', defaultYear);
+      handleYearChange(defaultYear); // Fetch payments for the selected year
     } catch (error) {
       console.error('Error fetching user years:', error);
       setAvailableYears(['2025']);
