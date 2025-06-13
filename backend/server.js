@@ -911,7 +911,11 @@ app.get('/api/get-user-years', authenticateToken, async (req, res) => {
       const year = sheetName.split('_')[1];
       if (parseInt(year) < 2025) continue; // Skip years before 2025
       const payments = await readSheet(sheetName, 'A2:R');
-      const hasUserData = payments.some(payment => payment[0] === req.user.username);
+      // const hasUserData = payments.some(payment => payment[0] === req.user.username);
+      const hasUserData = payments.some(payment => {
+  console.log('Payment row:', payment[0], 'Looking for:', req.user.username);
+  return payment[0] === req.user.username;
+});
       if (hasUserData) {
         userYears.push(year);
       }
