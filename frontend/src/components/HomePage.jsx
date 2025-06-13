@@ -56,7 +56,7 @@ useEffect(() => {
         .filter(year => parseInt(year) >= 2025)
         .sort((a, b) => parseInt(a) - parseInt(b));
       
-      // Always ensure 2025 is included and set as available years
+      // Ensure 2025 is always included, even if no user data exists
       const yearsToSet = [...new Set(['2025', ...filteredYears])].sort((a, b) => parseInt(a) - parseInt(b));
       setAvailableYears(yearsToSet);
       
@@ -74,7 +74,7 @@ useEffect(() => {
       setAvailableYears(['2025']);
       setCurrentYear('2025');
       localStorage.setItem('currentYear', '2025');
-      handleYearChange('2025');
+      await handleYearChange('2025');
     }
   };
   if (sessionToken) fetchYears();
