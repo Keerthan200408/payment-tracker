@@ -59,6 +59,7 @@ const App = () => {
   const profileMenuRef = useRef(null);
   const [isImporting, setIsImporting] = useState(false);
   const saveTimeouts = useRef({});
+  const currentYear = 
 
   axios.defaults.withCredentials = true;
 

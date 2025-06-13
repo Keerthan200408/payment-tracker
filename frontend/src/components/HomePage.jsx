@@ -42,6 +42,7 @@ const HomePage = ({
 
   const [availableYears, setAvailableYears] = useState([currentYear]);
   const BASE_URL = 'https://payment-tracker-aswa.onrender.com/api';
+  const [currentYear, setCurrentYear] = useState('2025');
 
   
 
