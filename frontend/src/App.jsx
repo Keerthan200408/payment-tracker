@@ -58,7 +58,7 @@ const App = () => {
   const csvFileInputRef = useRef(null);
   const profileMenuRef = useRef(null);
   const [isImporting, setIsImporting] = useState(false); // Add loading state for CSV import
-  const [currentYear, setCurrentYear] = useState(new Date().getFullYear().toString());
+  const [currentYear, setCurrentYear] = useState('2025');
 
   axios.defaults.withCredentials = true;
 
@@ -67,15 +67,16 @@ const App = () => {
     const storedToken = localStorage.getItem('sessionToken');
     const storedPage = localStorage.getItem('currentPage');
     const storedYear = localStorage.getItem('currentYear');
+
     if (storedUser && storedToken) {
       console.log('Restoring session for user:', storedUser);
       setCurrentUser(storedUser);
       setSessionToken(storedToken);
       setPage(storedPage || 'home'); //changes for restoring last page after reload
       const yearToSet = storedYear && parseInt(storedYear) >= 2025 ? storedYear : new Date().getFullYear().toString();
-      setCurrentYear(yearToSet);
+      setCurrentYear('2025');
       fetchClients(storedToken);
-      fetchPayments(storedToken, yearToSet);
+      fetchPayments(storedToken, '2025');
     }
   }, []);
 
