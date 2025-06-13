@@ -75,10 +75,11 @@ const App = () => {
       setCurrentUser(storedUser);
       setSessionToken(storedToken);
       setPage(storedPage || 'home'); //changes for restoring last page after reload
-      const yearToSet = storedYear || '2025';
-      setCurrentYear(yearToSet);
+      // const yearToSet = storedYear || '2025';
+      // setCurrentYear(yearToSet);
+      // fetchClients(storedToken);
+      // fetchPayments(storedToken, yearToSet);
       fetchClients(storedToken);
-      fetchPayments(storedToken, yearToSet);
     }
   }, []);
 
@@ -86,8 +87,13 @@ const App = () => {
   if (sessionToken && currentYear) {
     fetchPayments(sessionToken, currentYear);
   }
-  localStorage.setItem('currentYear', currentYear);
 }, [currentYear, sessionToken]);
+
+useEffect(() => {
+  if (currentYear) {
+    localStorage.setItem('currentYear', currentYear);
+  }
+}, [currentYear]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
