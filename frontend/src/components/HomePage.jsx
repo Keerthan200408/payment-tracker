@@ -47,11 +47,12 @@ const HomePage = ({
 
 useEffect(() => {
   const fetchYears = async () => {
+    console.log('Fetching years with sessionToken:', sessionToken); // Debug sessionToken
     try {
       const response = await axios.get(`${BASE_URL}/get-user-years`, {
         headers: { Authorization: `Bearer ${sessionToken}` },
       });
-      console.log('Fetched user-specific years:', response.data);
+      console.log('API response for user-specific years:', response.data);
       const filteredYears = (response.data || [])
         .filter(year => parseInt(year) >= 2025)
         .sort((a, b) => parseInt(a) - parseInt(b));
@@ -71,16 +72,23 @@ useEffect(() => {
       setCurrentYear(defaultYear);
       localStorage.setItem('currentYear', defaultYear);
       await handleYearChange(defaultYear); // Fetch payments for the selected year
+      console.log('Dropdown state after update:', { availableYears: yearsToSet, currentYear: defaultYear });
     } catch (error) {
       console.error('Error fetching user years:', error);
       setAvailableYears(['2025']);
       setCurrentYear('2025');
       localStorage.setItem('currentYear', '2025');
       await handleYearChange('2025');
+      console.log('Dropdown state after error:', { availableYears: ['2025'], currentYear: '2025' });
     }
   };
   if (sessionToken) fetchYears();
 }, [sessionToken]);
+
+// Add debug for availableYears changes
+useEffect(() => {
+  console.log('availableYears state updated:', availableYears);
+}, [availableYears]);
 
 const handleAddNewYear = async () => {
   const newYear = (parseInt(currentYear) + 1).toString();
