@@ -77,6 +77,13 @@ useEffect(() => {
 
 const handleAddNewYear = async () => {
   const newYear = (parseInt(currentYear) + 1).toString();
+  
+  // Check if year already exists in dropdown
+  if (availableYears.includes(newYear)) {
+    alert(`Year ${newYear} already exists in your account.`);
+    return;
+  }
+  
   console.log(`Attempting to add new year: ${newYear}`);
   try {
     const response = await axios.post(
@@ -85,25 +92,16 @@ const handleAddNewYear = async () => {
       { headers: { Authorization: `Bearer ${sessionToken}` } }
     );
     console.log('Add new year response:', response.data);
-    if (response.data.message === 'Sheet already exists with user data') {
-      alert(`Sheet for ${newYear} already exists with your data.`);
-      // Add year to dropdown if not already present
-      setAvailableYears(prev => {
-        const updatedYears = [...new Set([...prev, newYear])].sort((a, b) => parseInt(a) - parseInt(b));
-        return updatedYears;
-      });
-      setCurrentYear(newYear);
-      handleYearChange(newYear); // Fetch existing data
-    } else {
-      setAvailableYears(prev => {
-        const updatedYears = [...new Set([...prev, newYear])].sort((a, b) => parseInt(a) - parseInt(b));
-        return updatedYears;
-      });
-      setCurrentYear(newYear);
-      setPaymentsData([]);
-      console.log(`New year ${newYear} added with empty table`);
-      alert(`New year ${newYear} created successfully.`);
-    }
+    
+    // Add year to dropdown and switch to it
+    setAvailableYears(prev => {
+      const updatedYears = [...new Set([...prev, newYear])].sort((a, b) => parseInt(a) - parseInt(b));
+      return updatedYears;
+    });
+    setCurrentYear(newYear);
+    setPaymentsData([]);
+    console.log(`New year ${newYear} added with empty table`);
+    alert(`New year ${newYear} created successfully.`);
   } catch (error) {
     console.error('Error adding new year:', error);
     alert(`Failed to add new year: ${error.response?.data?.error || 'Unknown error occurred'}`);
