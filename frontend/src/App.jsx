@@ -75,10 +75,10 @@ const App = () => {
       setCurrentUser(storedUser);
       setSessionToken(storedToken);
       setPage(storedPage || 'home'); //changes for restoring last page after reload
-      const yearToSet = storedYear && parseInt(storedYear) >= 2025 ? storedYear : new Date().getFullYear().toString();
-      setCurrentYear('2025');
+      const yearToSet = storedYear || '2025';
+      setCurrentYear(yearToSet);
       fetchClients(storedToken);
-      fetchPayments(storedToken, '2025');
+      fetchPayments(storedToken, yearToSet);
     }
   }, []);
 
