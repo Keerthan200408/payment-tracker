@@ -58,6 +58,7 @@ useEffect(() => {
       
       // Ensure 2025 is always included, even if no user data exists
       const yearsToSet = [...new Set(['2025', ...filteredYears])].sort((a, b) => parseInt(a) - parseInt(b));
+      console.log('Years set for dropdown:', yearsToSet);
       setAvailableYears(yearsToSet);
       
       // Get stored year from localStorage for reload persistence
@@ -65,6 +66,7 @@ useEffect(() => {
       
       // Use stored year if valid and exists in available years, otherwise default to 2025
       const defaultYear = (storedYear && yearsToSet.includes(storedYear)) ? storedYear : '2025';
+      console.log('Selected default year:', defaultYear);
       
       setCurrentYear(defaultYear);
       localStorage.setItem('currentYear', defaultYear);
