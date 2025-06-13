@@ -68,7 +68,7 @@ useEffect(() => {
       
       setCurrentYear(defaultYear);
       localStorage.setItem('currentYear', defaultYear);
-      handleYearChange(defaultYear); // Fetch payments for the selected year
+      await handleYearChange(defaultYear); // Fetch payments for the selected year
     } catch (error) {
       console.error('Error fetching user years:', error);
       setAvailableYears(['2025']);
@@ -83,12 +83,6 @@ useEffect(() => {
 const handleAddNewYear = async () => {
   const newYear = (parseInt(currentYear) + 1).toString();
   
-  // Check if year already exists in dropdown
-  if (availableYears.includes(newYear)) {
-    alert(`Year ${newYear} already exists in your account.`);
-    return;
-  }
-  
   console.log(`Attempting to add new year: ${newYear}`);
   try {
     const response = await axios.post(
@@ -98,15 +92,27 @@ const handleAddNewYear = async () => {
     );
     console.log('Add new year response:', response.data);
     
-    // Add year to dropdown and switch to it
-    setAvailableYears(prev => {
-      const updatedYears = [...new Set([...prev, newYear])].sort((a, b) => parseInt(a) - parseInt(b));
-      return updatedYears;
-    });
+    if (response.data.message.includes('already exists')) {
+      // Year exists with user data, add to dropdown if not already present
+      setAvailableYears(prev => {
+        if (!prev.includes(newYear)) {
+          const updatedYears = [...new Set([...prev, newYear])].sort((a, b) => parseInt(a) - parseInt(b));
+          return updatedYears;
+        }
+        return prev;
+      });
+    } else {
+      // New year created, add to dropdown and switch to it
+      setAvailableYears(prev => {
+        const updatedYears = [...new Set([...prev, newYear])].sort((a, b) => parseInt(a) - parseInt(b));
+        return updatedYears;
+      });
+      setPaymentsData([]);
+    }
     setCurrentYear(newYear);
-    setPaymentsData([]);
-    console.log(`New year ${newYear} added with empty table`);
-    alert(`New year ${newYear} created successfully.`);
+    localStorage.setItem('currentYear', newYear);
+    await handleYearChange(newYear); // Fetch payments for the new year
+    alert(response.data.message);
   } catch (error) {
     console.error('Error adding new year:', error);
     alert(`Failed to add new year: ${error.response?.data?.error || 'Unknown error occurred'}`);
