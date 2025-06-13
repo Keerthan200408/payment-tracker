@@ -59,6 +59,8 @@ const App = () => {
   const profileMenuRef = useRef(null);
   const [isImporting, setIsImporting] = useState(false); // Add loading state for CSV import
   const [currentYear, setCurrentYear] = useState('2025');
+    // Add this at the top of App.jsx with other useRef declarations
+  const saveTimeouts = useRef({});
 
   axios.defaults.withCredentials = true;
 
@@ -742,11 +744,14 @@ const importCsv = async (e) => {
   reader.readAsText(file);
 };
 
-  const updatePayment = async (rowIndex, month, value, year = currentYear) => {
+
+
+const updatePayment = async (rowIndex, month, value, year = currentYear) => {
   if (value && isNaN(parseFloat(value))) {
     alert('Please enter a valid number');
     return;
   }
+  
   const updatedPayments = [...paymentsData];
   const rowData = updatedPayments[rowIndex];
   const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
@@ -777,18 +782,29 @@ const importCsv = async (e) => {
   const totalPayments = months.reduce((sum, m) => sum + (parseFloat(rowData[m]) || 0), 0);
   rowData.Due_Payment = Math.max(expectedPayment - totalPayments, 0).toFixed(2);
 
+  // Update UI immediately
   setPaymentsData(updatedPayments);
-  try {
-    console.log('Saving payments for:', rowData.Client_Name, month, value, year);
-    await axios.post(`${BASE_URL}/save-payments`, updatedPayments, {
-      headers: { Authorization: `Bearer ${sessionToken}` },
-      params: { year },
-    });
-    fetchPayments(sessionToken, year);
-  } catch (error) {
-    console.error('Save payments error:', error.response?.data?.error || error.message);
-    handleSessionError(error);
+
+  // Debounce the API call
+  const timeoutKey = `${rowIndex}-${month}`;
+  if (saveTimeouts.current[timeoutKey]) {
+    clearTimeout(saveTimeouts.current[timeoutKey]);
   }
+
+  saveTimeouts.current[timeoutKey] = setTimeout(async () => {
+    try {
+      console.log('Saving payments for:', rowData.Client_Name, month, value, year);
+      await axios.post(`${BASE_URL}/save-payments`, updatedPayments, {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+        params: { year },
+      });
+      // Remove the fetchPayments call since we already updated the UI
+    } catch (error) {
+      console.error('Save payments error:', error.response?.data?.error || error.message);
+      handleSessionError(error);
+    }
+    delete saveTimeouts.current[timeoutKey];
+  }, 500); // Wait 500ms after user stops typing
 };
 
   return (
