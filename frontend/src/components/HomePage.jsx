@@ -56,24 +56,14 @@ useEffect(() => {
         .filter(year => parseInt(year) >= 2025)
         .sort((a, b) => parseInt(a) - parseInt(b));
       
-      // Ensure 2025 is always included, even if no user data exists for it
+      // Always ensure 2025 is included and set as available years
       const yearsToSet = [...new Set(['2025', ...filteredYears])].sort((a, b) => parseInt(a) - parseInt(b));
       setAvailableYears(yearsToSet);
       
-      // Get stored year from localStorage (for reload persistence)
-      const storedYear = localStorage.getItem('currentYear');
-      
-      // Determine default year: use stored year if valid and not first login, else 2025
-      const isFirstLogin = !localStorage.getItem('lastLogin');
-      let defaultYear = '2025';
-      if (!isFirstLogin && storedYear && yearsToSet.includes(storedYear)) {
-        defaultYear = storedYear; // Persist current year on reload
-      }
-      
-      setCurrentYear(defaultYear);
-      localStorage.setItem('currentYear', defaultYear);
-      localStorage.setItem('lastLogin', Date.now().toString()); // Mark login time
-      handleYearChange(defaultYear); // Fetch payments for default year
+      // Always default to 2025 on login
+      setCurrentYear('2025');
+      localStorage.setItem('currentYear', '2025');
+      handleYearChange('2025'); // Fetch payments for 2025
     } catch (error) {
       console.error('Error fetching user years:', error);
       setAvailableYears(['2025']);
@@ -84,7 +74,6 @@ useEffect(() => {
   };
   if (sessionToken) fetchYears();
 }, [sessionToken]);
-
 
 const handleAddNewYear = async () => {
   const newYear = (parseInt(currentYear) + 1).toString();
