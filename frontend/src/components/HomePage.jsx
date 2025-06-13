@@ -65,7 +65,7 @@ useEffect(() => {
       const storedYear = localStorage.getItem('currentYear');
       
       // Use stored year if valid and exists in available years, otherwise default to 2025
-      const defaultYear = (storedYear && yearsToSet.includes(storedYear)) ? storedYear : '2025';
+      const defaultYear = (storedYear && yearsToSet.includes(storedYear)) ? storedYear : yearsToSet[yearsToSet.length - 1] || '2025';
       console.log('Selected default year:', defaultYear);
       
       setCurrentYear(defaultYear);
