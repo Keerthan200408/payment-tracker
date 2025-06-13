@@ -768,9 +768,11 @@ const updatePayment = async (rowIndex, month, value, year = currentYear) => {
   } else {
     const hasLaterValues = months.slice(monthIndex + 1).some(m => rowData[m] && rowData[m].trim() !== '');
     if (!hasLaterValues) {
-      for (let i = 0; i < monthIndex; i++) {
+      for (let i = monthIndex - 1; i >= 0; i--) {
         if (rowData[months[i]] === '0') {
           rowData[months[i]] = '';
+        } else {
+          break;
         }
       }
     }
