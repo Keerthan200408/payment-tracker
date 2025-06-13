@@ -46,17 +46,23 @@ const HomePage = ({
   useEffect(() => {
   const fetchYears = async () => {
     try {
-      const response = await axios.get(`${BASE_URL}/get-available-years`, {
+      const response = await axios.get(`${BASE_URL}/get-user-years`, {
         headers: { Authorization: `Bearer ${sessionToken}` },
       });
-      console.log('Fetched available years:', response.data);
+      console.log('Fetched user-specific years:', response.data);
       const filteredYears = (response.data || [])
         .filter(year => parseInt(year) >= 2025)
         .sort((a, b) => parseInt(a) - parseInt(b));
       setAvailableYears(filteredYears.length > 0 ? filteredYears : ['2025']);
+      // Set default year to the latest year with user data, or current year
+      const defaultYear = filteredYears.length > 0 ? filteredYears[filteredYears.length - 1] : '2025';
+      setCurrentYear(defaultYear);
+      handleYearChange(defaultYear); // Fetch payments for default year
     } catch (error) {
-      console.error('Error fetching available years:', error);
+      console.error('Error fetching user years:', error);
       setAvailableYears(['2025']);
+      setCurrentYear('2025');
+      handleYearChange('2025');
     }
   };
   if (sessionToken) fetchYears();
@@ -64,7 +70,7 @@ const HomePage = ({
 
 const handleAddNewYear = async () => {
   const newYear = (parseInt(currentYear) + 1).toString();
-  console.log(`Adding new year: ${newYear}`);
+  console.log(`Attempting to add new year: ${newYear}`);
   try {
     const response = await axios.post(
       `${BASE_URL}/add-new-year`,
@@ -72,13 +78,25 @@ const handleAddNewYear = async () => {
       { headers: { Authorization: `Bearer ${sessionToken}` } }
     );
     console.log('Add new year response:', response.data);
-    setAvailableYears(prev => {
-      const updatedYears = [...new Set([...prev, newYear])].sort((a, b) => parseInt(a) - parseInt(b));
-      return updatedYears;
-    });
-    setCurrentYear(newYear);
-    setPaymentsData([]);
-    console.log(`New year ${newYear} added with empty table`);
+    if (response.data.message === 'Sheet already exists with user data') {
+      alert(`Sheet for ${newYear} already exists with your data.`);
+      // Add year to dropdown if not already present
+      setAvailableYears(prev => {
+        const updatedYears = [...new Set([...prev, newYear])].sort((a, b) => parseInt(a) - parseInt(b));
+        return updatedYears;
+      });
+      setCurrentYear(newYear);
+      handleYearChange(newYear); // Fetch existing data
+    } else {
+      setAvailableYears(prev => {
+        const updatedYears = [...new Set([...prev, newYear])].sort((a, b) => parseInt(a) - parseInt(b));
+        return updatedYears;
+      });
+      setCurrentYear(newYear);
+      setPaymentsData([]);
+      console.log(`New year ${newYear} added with empty table`);
+      alert(`New year ${newYear} created successfully.`);
+    }
   } catch (error) {
     console.error('Error adding new year:', error);
     alert(`Failed to add new year: ${error.response?.data?.error || 'Unknown error occurred'}`);

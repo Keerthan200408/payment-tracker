@@ -897,7 +897,37 @@ app.post('/api/save-payments', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+// New endpoint to get years with user-specific data
+app.get('/api/get-user-years', authenticateToken, async (req, res) => {
+  try {
+    const sheets = google.sheets({ version: 'v4', auth });
+    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
+    const paymentSheets = spreadsheet.data.sheets
+      .filter(sheet => sheet.properties.title.startsWith('Payments_'))
+      .map(sheet => sheet.properties.title);
 
+    const userYears = [];
+    for (const sheetName of paymentSheets) {
+      const year = sheetName.split('_')[1];
+      if (parseInt(year) < 2025) continue; // Skip years before 2025
+      const payments = await readSheet(sheetName, 'A2:R');
+      const hasUserData = payments.some(payment => payment[0] === req.user.username);
+      if (hasUserData) {
+        userYears.push(year);
+      }
+    }
+
+    console.log(`Fetched ${userYears.length} years with data for user ${req.user.username}:`, userYears);
+    res.json(userYears.sort((a, b) => parseInt(a) - parseInt(b)));
+  } catch (error) {
+    console.error('Get user years error:', {
+      message: error.message,
+      stack: error.stack,
+    });
+    res.status(500).json({ error: 'Failed to fetch user years' });
+  }
+});
+// Modified /api/add-new-year
 app.post('/api/add-new-year', authenticateToken, async (req, res) => {
   const { year } = req.body;
   if (!year || isNaN(year) || parseInt(year) < 2025) {
@@ -907,16 +937,21 @@ app.post('/api/add-new-year', authenticateToken, async (req, res) => {
     const headers = ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment'];
     const sheetName = getPaymentSheetName(year);
     
-    // Check if sheet already exists
+    // Check if sheet exists and has user data
     const sheets = google.sheets({ version: 'v4', auth });
     const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
     const sheetExists = spreadsheet.data.sheets.some(sheet => sheet.properties.title === sheetName);
     
     if (sheetExists) {
-      return res.status(400).json({ error: 'Year already exists' });
+      const payments = await readSheet(sheetName, 'A2:R');
+      const hasUserData = payments.some(payment => payment[0] === req.user.username);
+      if (hasUserData) {
+        console.log(`Sheet for ${year} already contains data for user ${req.user.username}`);
+        return res.status(200).json({ message: 'Sheet already exists with user data' });
+      }
     }
     
-    // Create new sheet
+    // Create new sheet if it doesn't exist
     await ensureSheet('Payments', headers, year);
     
     // Get user clients to initialize payment records
