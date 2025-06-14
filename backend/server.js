@@ -898,85 +898,208 @@ app.post('/api/save-payments', authenticateToken, async (req, res) => {
   }
 });
 // Updated get-user-years endpoint in server.js
-app.get('/api/get-user-years', authenticateToken, async (req, res) => {
-  try {
-    const sheets = google.sheets({ version: 'v4', auth });
-    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
-    const paymentSheets = spreadsheet.data.sheets
-      .filter(sheet => sheet.properties.title.startsWith('Payments_'))
-      .map(sheet => sheet.properties.title);
+app.get('/api/get-payments-by-year', authenticateToken, async (req, res) => {
+  const { year } = req.query;
+  if (!year || isNaN(year)) {
+    return res.status(400).json({ error: 'Valid year is required' });
+  }
 
-    const userYears = [];
+  console.log(`Starting get-payments-by-year for user: ${req.user.username}, year: ${year}`);
+
+  try {
+    const headers = ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment'];
+    const sheetName = getPaymentSheetName(year);
     
-    console.log(`Checking years for user: ${req.user.username}`);
-    
-    for (const sheetName of paymentSheets) {
-      const year = sheetName.split('_')[1];
-      if (parseInt(year) < 2025) continue; // Skip years before 2025
+    console.log(`Attempting to access sheet: ${sheetName}`);
+
+    // First, check if the sheet exists
+    try {
+      const sheets = google.sheets({ version: 'v4', auth });
+      const spreadsheet = await sheets.spreadsheets.get({ 
+        spreadsheetId,
+        includeGridData: false // Don't load grid data, just metadata
+      });
       
+      const sheetExists = spreadsheet.data.sheets.some(sheet => 
+        sheet.properties.title === sheetName
+      );
+      
+      if (!sheetExists) {
+        console.log(`Sheet ${sheetName} doesn't exist, creating it...`);
+        await ensureSheet('Payments', headers, year);
+        console.log(`Sheet ${sheetName} created successfully`);
+      } else {
+        console.log(`Sheet ${sheetName} exists`);
+      }
+    } catch (sheetCheckError) {
+      console.error('Error checking/creating sheet:', {
+        message: sheetCheckError.message,
+        code: sheetCheckError.code,
+        status: sheetCheckError.status
+      });
+      
+      // Try to ensure sheet exists anyway
       try {
-        const payments = await readSheet(sheetName, 'A2:R');
-        console.log(`Sheet ${sheetName} has ${payments.length} rows`);
-        
-        // Check if this specific user has any data in this year
-        const userHasData = payments.some(row => {
-          // Check if the first column (User) matches the current user
-          // and the row has meaningful data beyond just the username
-          if (!row || row.length === 0 || !row[0]) return false;
-          
-          const isUserRow = row[0].toString().trim() === req.user.username;
-          if (!isUserRow) return false;
-          
-          // Check if user has meaningful data (client name, amounts, etc.)
-          const hasClientData = row[1] && row[1].toString().trim() !== '';
-          const hasAmountData = row[3] && !isNaN(parseFloat(row[3])) && parseFloat(row[3]) > 0;
-          const hasMonthlyData = row.slice(4, 16).some(cell => 
-            cell && cell.toString().trim() !== '' && cell.toString().trim() !== '0'
-          );
-          
-          return hasClientData || hasAmountData || hasMonthlyData;
-        });
-        
-        console.log(`User ${req.user.username} has data in ${year}: ${userHasData}`);
-        
-        if (userHasData) {
-          userYears.push(year);
-        }
-        
-        // Always include 2025 as default year even if no data
-        if (year === '2025' && !userYears.includes('2025')) {
-          userYears.push(year);
-          console.log(`Added default year 2025 for user ${req.user.username}`);
-        }
-        
-      } catch (sheetError) {
-        console.log(`Sheet ${sheetName} might not exist or is empty, skipping`);
-        // Still add 2025 if it's the current sheet being checked
-        if (year === '2025' && !userYears.includes('2025')) {
-          userYears.push(year);
-        }
+        await ensureSheet('Payments', headers, year);
+        console.log(`Ensured sheet ${sheetName} exists after error`);
+      } catch (ensureError) {
+        console.error('Failed to ensure sheet exists:', ensureError.message);
+        throw new Error(`Failed to access or create sheet for year ${year}: ${ensureError.message}`);
       }
     }
 
-    // Ensure 2025 is always included as fallback
-    if (!userYears.includes('2025')) {
-      userYears.push('2025');
+    // Now try to read the data with retry logic
+    let payments = [];
+    let retryCount = 0;
+    const maxRetries = 3;
+    const retryDelay = 1000; // 1 second
+
+    while (retryCount < maxRetries) {
+      try {
+        console.log(`Reading sheet data, attempt ${retryCount + 1}/${maxRetries}`);
+        payments = await readSheet(sheetName, 'A2:R');
+        console.log(`Successfully read ${payments.length} rows from ${sheetName}`);
+        break; // Success, exit retry loop
+      } catch (readError) {
+        retryCount++;
+        console.error(`Read attempt ${retryCount} failed:`, {
+          message: readError.message,
+          code: readError.code,
+          status: readError.status
+        });
+        
+        if (retryCount >= maxRetries) {
+          // If it's a 500 error and we've exhausted retries, return empty data instead of crashing
+          if (readError.code === 500 || readError.status === 500) {
+            console.log(`Returning empty payments data due to persistent 500 error`);
+            payments = [];
+            break;
+          } else {
+            throw readError;
+          }
+        }
+        
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, retryDelay * retryCount));
+      }
     }
 
-    // Remove duplicates and sort
-    const uniqueYears = [...new Set(userYears)].sort((a, b) => parseInt(a) - parseInt(b));
-    
-    console.log(`Final years for user ${req.user.username}:`, uniqueYears);
-    res.json(uniqueYears);
-  } catch (error) {
-    console.error('Get user years error:', {
-      message: error.message,
-      stack: error.stack,
-      user: req.user?.username
+    // Filter payments for the specific user
+    const userPayments = payments.filter(payment => {
+      return payment && payment[0] && payment[0].toString().trim() === req.user.username;
     });
     
-    // Fallback to just 2025 if everything fails
-    res.json(['2025']);
+    console.log(`Found ${userPayments.length} payments for user ${req.user.username} in year ${year}`);
+
+    // Transform the data
+    const transformedPayments = userPayments.map(payment => ({
+      User: payment[0] || '',
+      Client_Name: payment[1] || '',
+      Type: payment[2] || '',
+      Amount_To_Be_Paid: parseFloat(payment[3]) || 0,
+      january: payment[4] || '',
+      february: payment[5] || '',
+      march: payment[6] || '',
+      april: payment[7] || '',
+      may: payment[8] || '',
+      june: payment[9] || '',
+      july: payment[10] || '',
+      august: payment[11] || '',
+      september: payment[12] || '',
+      october: payment[13] || '',
+      november: payment[14] || '',
+      december: payment[15] || '',
+      Due_Payment: parseFloat(payment[16]) || 0,
+    }));
+
+    res.json(transformedPayments);
+    
+  } catch (error) {
+    console.error(`Get payments for year ${year} error:`, {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      status: error.status,
+      user: req.user.username,
+      year: year
+    });
+
+    // Provide more specific error messages
+    let errorMessage = `Failed to fetch payments for year ${year}`;
+    let statusCode = 500;
+
+    if (error.code === 403) {
+      errorMessage = 'Permission denied. Please check your Google Sheets access permissions.';
+      statusCode = 403;
+    } else if (error.code === 404) {
+      errorMessage = 'Spreadsheet not found. Please check the spreadsheet ID.';
+      statusCode = 404;
+    } else if (error.code === 429) {
+      errorMessage = 'Rate limit exceeded. Please try again later.';
+      statusCode = 429;
+    } else if (error.code === 500 || error.message.includes('Internal error')) {
+      errorMessage = 'Google Sheets is experiencing issues. Please try again in a few moments.';
+      statusCode = 503; // Service unavailable
+    }
+
+    res.status(statusCode).json({ 
+      error: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+// Temporary debug endpoint - add this to test connectivity
+app.get('/api/debug-sheets', authenticateToken, async (req, res) => {
+  try {
+    console.log('Testing Google Sheets connectivity...');
+    
+    const sheets = google.sheets({ version: 'v4', auth });
+    
+    // Test 1: Get spreadsheet metadata
+    const spreadsheet = await sheets.spreadsheets.get({ 
+      spreadsheetId,
+      includeGridData: false 
+    });
+    
+    console.log('Spreadsheet title:', spreadsheet.data.properties.title);
+    console.log('Available sheets:', spreadsheet.data.sheets.map(s => s.properties.title));
+    
+    // Test 2: Check if Payments_2025 exists
+    const paymentsSheet = spreadsheet.data.sheets.find(s => s.properties.title === 'Payments_2025');
+    
+    const result = {
+      spreadsheetTitle: spreadsheet.data.properties.title,
+      availableSheets: spreadsheet.data.sheets.map(s => s.properties.title),
+      payments2025Exists: !!paymentsSheet,
+      user: req.user.username,
+      timestamp: new Date().toISOString()
+    };
+    
+    // Test 3: Try to read a small range if sheet exists
+    if (paymentsSheet) {
+      try {
+        const testRead = await sheets.spreadsheets.values.get({
+          spreadsheetId,
+          range: 'Payments_2025!A1:B2'
+        });
+        result.testReadSuccess = true;
+        result.testReadRows = testRead.data.values?.length || 0;
+      } catch (readError) {
+        result.testReadSuccess = false;
+        result.testReadError = readError.message;
+      }
+    }
+    
+    res.json(result);
+    
+  } catch (error) {
+    console.error('Debug sheets error:', error);
+    res.status(500).json({
+      error: 'Debug failed',
+      message: error.message,
+      code: error.code,
+      status: error.status
+    });
   }
 });
 // Modified /api/add-new-year
