@@ -65,23 +65,28 @@ const App = () => {
   axios.defaults.withCredentials = true;
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('currentUser');
-    const storedToken = localStorage.getItem('sessionToken');
-    const storedPage = localStorage.getItem('currentPage');
-    // const storedYear = localStorage.getItem('currentYear');
+  const storedUser = localStorage.getItem('currentUser');
+  const storedToken = localStorage.getItem('sessionToken');
+  const storedPage = localStorage.getItem('currentPage');
+  const storedYear = localStorage.getItem('currentYear');
+  const storedYears = localStorage.getItem('availableYears');
 
-    if (storedUser && storedToken) {
-      console.log('Restoring session for user:', storedUser);
-      setCurrentUser(storedUser);
-      setSessionToken(storedToken);
-      setPage(storedPage || 'home'); //changes for restoring last page after reload
-      // const yearToSet = storedYear || '2025';
-      // setCurrentYear(yearToSet);
-      // fetchClients(storedToken);
-      // fetchPayments(storedToken, yearToSet);
-      fetchClients(storedToken);
-    }
-  }, []);
+  console.log('App.jsx: Stored sessionToken on load:', storedToken);
+  if (storedUser && storedToken) {
+    console.log('Restoring session for user:', storedUser);
+    setCurrentUser(storedUser);
+    setSessionToken(storedToken);
+    setPage(storedPage || 'home');
+    const yearToSet = storedYear && parseInt(storedYear) >= 2025 ? storedYear : '2025';
+    console.log('App.jsx: Setting sessionToken:', storedToken);
+    console.log('App.jsx: Setting currentYear:', yearToSet);
+    setCurrentYear(yearToSet);
+    fetchClients(storedToken);
+    // Fetch payments will be handled by HomePage's useEffect
+  } else {
+    console.log('App.jsx: No stored user or token, skipping session restoration');
+  }
+}, []);
 
   useEffect(() => {
   if (sessionToken && currentYear) {
@@ -978,9 +983,11 @@ const updatePayment = async (rowIndex, month, value, year = currentYear) => {
                   csvFileInputRef={csvFileInputRef}
                   importCsv={importCsv}
                   isImporting={isImporting}
+                  sessionToken={sessionToken}
                   currentYear={currentYear}
                   setCurrentYear={setCurrentYear}
                   handleYearChange={handleYearChange}
+                  onMount={() => console.log('App.jsx: HomePage mounted with sessionToken:', sessionToken)}
                 />
               )}
               {page === "addClient" && (

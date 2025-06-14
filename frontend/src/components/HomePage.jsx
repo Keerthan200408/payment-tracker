@@ -24,8 +24,14 @@ const HomePage = ({
   sessionToken,
   currentYear,
   setCurrentYear,
-  handleYearChange
+  handleYearChange, 
+  onMount 
 }) => {
+  useEffect(() => {
+    if (onMount) {
+      onMount();
+    }
+  }, [onMount]);
   const months = [
     'january',
     'february',
@@ -40,7 +46,7 @@ const HomePage = ({
     'november',
     'december',
   ];
-  
+
 const [availableYears, setAvailableYears] = useState(() => {
   const storedYears = localStorage.getItem('availableYears');
   console.log('Initializing availableYears from localStorage:', storedYears);
@@ -135,15 +141,15 @@ const searchUserYears = async (forceFetch = false) => {
 };
 
 useEffect(() => {
-  console.log('useEffect for sessionToken triggered. sessionToken:', sessionToken);
+  console.log('HomePage.jsx: useEffect for sessionToken triggered. sessionToken:', sessionToken);
   if (sessionToken) {
     const storedToken = localStorage.getItem('sessionToken');
-    console.log('Stored sessionToken:', storedToken);
+    console.log('HomePage.jsx: Stored sessionToken:', storedToken);
     const isNewSession = sessionToken !== storedToken;
-    console.log('Is new session?', isNewSession);
+    console.log('HomePage.jsx: Is new session?', isNewSession);
     searchUserYears(isNewSession);
   } else {
-    console.log('No sessionToken, skipping searchUserYears');
+    console.log('HomePage.jsx: No sessionToken, skipping searchUserYears');
   }
 }, [sessionToken]);
 
