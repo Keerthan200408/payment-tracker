@@ -897,7 +897,6 @@ app.post('/api/save-payments', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
-// New endpoint to get years with user-specific data
 app.get('/api/get-user-years', authenticateToken, async (req, res) => {
   try {
     const sheets = google.sheets({ version: 'v4', auth });
@@ -910,19 +909,13 @@ app.get('/api/get-user-years', authenticateToken, async (req, res) => {
     for (const sheetName of paymentSheets) {
       const year = sheetName.split('_')[1];
       if (parseInt(year) < 2025) continue; // Skip years before 2025
+      userYears.push(year); // Include all payment sheets, even if empty
       const payments = await readSheet(sheetName, 'A2:R');
-      const hasUserData = payments.some(payment => {
-        const isUserData = payment[0] === req.user.username;
-        console.log(`Checking ${sheetName} for user ${req.user.username}: ${isUserData}`);
-        return isUserData;
-      });
-      if (hasUserData) {
-        userYears.push(year);
-      }
+      console.log(`Sheet ${sheetName} data for user ${req.user.username}:`, payments);
     }
 
-    console.log(`Fetched ${userYears.length} years with data for user ${req.user.username}:`, userYears);
-    res.json(userYears.length > 0 ? userYears : ['2025']);
+    console.log(`Fetched ${userYears.length} years for user ${req.user.username}:`, userYears);
+    res.json(userYears);
   } catch (error) {
     console.error('Get user years error:', {
       message: error.message,
