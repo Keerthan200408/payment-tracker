@@ -53,15 +53,15 @@ const HomePage = ({
     console.log('HomePage.jsx: Initializing availableYears from localStorage:', storedYears);
     return storedYears ? JSON.parse(storedYears) : ['2025'];
   });
-  const [selectedYear, setSelectedYear] = useState(currentYear);
+  // const [selectedYear, setSelectedYear] = useState(currentYear);
 
   // Sync selectedYear with currentYear for Reports view or when currentYear changes
-  useEffect(() => {
-    if (isReportsPage) {
-      console.log('HomePage.jsx: Syncing selectedYear to currentYear:', currentYear, 'for Reports');
-      setSelectedYear(currentYear);
-    }
-  }, [currentYear, isReportsPage]);
+  // useEffect(() => {
+  //   if (isReportsPage) {
+  //     console.log('HomePage.jsx: Syncing selectedYear to currentYear:', currentYear, 'for Reports');
+  //     setSelectedYear(currentYear);
+  //   }
+  // }, [currentYear, isReportsPage]);
 
   // Function to search for user-specific years
   const searchUserYears = async (forceFetch = false) => {
@@ -460,87 +460,88 @@ const HomePage = ({
     }, {});
 
     return (
-      <>
-        <h2 className="text-2xl font-semibold mb-2">
-          Monthly Client Status Report ({selectedYear})
-        </h2>
-        <div className="flex mb-4">
-          <select
-            value={selectedYear}
-            onChange={(e) => {
-              const year = e.target.value;
-              console.log('HomePage.jsx: Reports dropdown year changed to:', year);
-              setSelectedYear(year);
-              if (typeof handleYearChange === 'function') {
-                handleYearChange(year);
-              } else {
-                console.warn('HomePage.jsx: handleYearChange is not a function in reports dropdown onChange');
-              }
-            }}
-            className="p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm sm:text-base"
-          >
-            {availableYears.map((year) => (
-              <option key={year} value={year}>
-                {year}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="overflow-x-auto bg-white rounded-lg shadow-lg">
-          <table className="min-w-full border-collapse">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border p-3 text-left font-semibold">
-                  Client Name
+    <>
+      <h2 className="text-2xl font-semibold mb-2">
+        Monthly Client Status Report ({currentYear})
+      </h2>
+      <div className="flex mb-4">
+        <select
+          value={currentYear}
+          onChange={(e) => {
+            const year = e.target.value;
+            console.log('HomePage.jsx: Reports dropdown year changed to:', year);
+            setCurrentYear(year);
+            localStorage.setItem('currentYear', year);
+            if (typeof handleYearChange === 'function') {
+              handleYearChange(year);
+            } else {
+              console.warn('HomePage.jsx: handleYearChange is not a function in reports dropdown onChange');
+            }
+          }}
+          className="p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm sm:text-base"
+        >
+          {availableYears.map((year) => (
+            <option key={year} value={year}>
+              {year}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="overflow-x-auto bg-white rounded-lg shadow-lg">
+        <table className="min-w-full border-collapse">
+          <thead>
+            <tr className="bg-gray-100">
+              <th className="border p-3 text-left font-semibold">
+                Client Name
+              </th>
+              {months.map((month, index) => (
+                <th
+                  key={index}
+                  className="border p-3 text-center font-semibold"
+                >
+                  {month.charAt(0).toUpperCase() + month.slice(1)}
                 </th>
-                {months.map((month, index) => (
-                  <th
-                    key={index}
-                    className="border p-3 text-center font-semibold"
-                  >
-                    {month.charAt(0).toUpperCase() + month.slice(1)}
-                  </th>
-                ))}
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {Object.keys(monthStatus).length === 0 ? (
+              <tr>
+                <td
+                  colSpan={13}
+                  className="border p-3 text-center text-gray-500"
+                >
+                  No data available.
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {Object.keys(monthStatus).length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={13}
-                    className="border p-3 text-center text-gray-500"
-                  >
-                    No data available.
-                  </td>
+            ) : (
+              Object.keys(monthStatus).map((client, idx) => (
+                <tr key={idx} className="hover:bg-gray-50">
+                  <td className="border p-3">{client}</td>
+                  {months.map((month, mIdx) => (
+                    <td key={mIdx} className="border p-3 text-center">
+                      <span
+                        className={`px-2 py-1 rounded-full text-sm ${
+                          monthStatus[client][month] === "Paid"
+                            ? "bg-green-100 text-green-800"
+                            : monthStatus[client][month] === "PartiallyPaid"
+                            ? "bg-yellow-100 text-yellow-800"
+                            : "bg-red-100 text-red-800"
+                        }`}
+                      >
+                        {monthStatus[client][month] || "Unpaid"}
+                      </span>
+                    </td>
+                  ))}
                 </tr>
-              ) : (
-                Object.keys(monthStatus).map((client, idx) => (
-                  <tr key={idx} className="hover:bg-gray-50">
-                    <td className="border p-3">{client}</td>
-                    {months.map((month, mIdx) => (
-                      <td key={mIdx} className="border p-3 text-center">
-                        <span
-                          className={`px-2 py-1 rounded-full text-sm ${
-                            monthStatus[client][month] === "Paid"
-                              ? "bg-green-100 text-green-800"
-                              : monthStatus[client][month] === "PartiallyPaid"
-                              ? "bg-yellow-100 text-yellow-800"
-                              : "bg-red-100 text-red-800"
-                          }`}
-                        >
-                          {monthStatus[client][month] || "Unpaid"}
-                        </span>
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </>
-    );
-  };
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+};
 
   return (
     <div className="p-6">
