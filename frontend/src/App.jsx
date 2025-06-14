@@ -178,6 +178,8 @@ const handleYearChange = async (year) => {
     localStorage.removeItem('currentUser');
     localStorage.removeItem('sessionToken');
     localStorage.removeItem('currentPage');
+    localStorage.removeItem('availableYears');  // Add this line
+    localStorage.removeItem('currentYear');     // Add this line
     setClientsData([]);
     setPaymentsData([]);
     setPage('signIn');
