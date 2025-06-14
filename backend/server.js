@@ -907,6 +907,9 @@ app.get('/api/get-user-years', authenticateToken, async (req, res) => {
       .map(sheet => sheet.properties.title);
 
     const userYears = [];
+    
+    console.log(`Checking years for user: ${req.user.username}`);
+    
     for (const sheetName of paymentSheets) {
       const year = sheetName.split('_')[1];
       if (parseInt(year) < 2025) continue; // Skip years before 2025
@@ -915,25 +918,47 @@ app.get('/api/get-user-years', authenticateToken, async (req, res) => {
         const payments = await readSheet(sheetName, 'A2:R');
         console.log(`Sheet ${sheetName} has ${payments.length} rows`);
         
-        // Check if this user has any data in this year
+        // Check if this specific user has any data in this year
         const userHasData = payments.some(row => {
-          // Check if any row has data (not just headers)
-          return row && row.length > 0 && row.some(cell => cell && cell.toString().trim() !== '');
+          // Check if the first column (User) matches the current user
+          // and the row has meaningful data beyond just the username
+          if (!row || row.length === 0 || !row[0]) return false;
+          
+          const isUserRow = row[0].toString().trim() === req.user.username;
+          if (!isUserRow) return false;
+          
+          // Check if user has meaningful data (client name, amounts, etc.)
+          const hasClientData = row[1] && row[1].toString().trim() !== '';
+          const hasAmountData = row[3] && !isNaN(parseFloat(row[3])) && parseFloat(row[3]) > 0;
+          const hasMonthlyData = row.slice(4, 16).some(cell => 
+            cell && cell.toString().trim() !== '' && cell.toString().trim() !== '0'
+          );
+          
+          return hasClientData || hasAmountData || hasMonthlyData;
         });
         
-        if (userHasData || year === '2025') { // Always include 2025
+        console.log(`User ${req.user.username} has data in ${year}: ${userHasData}`);
+        
+        if (userHasData) {
           userYears.push(year);
         }
+        
+        // Always include 2025 as default year even if no data
+        if (year === '2025' && !userYears.includes('2025')) {
+          userYears.push(year);
+          console.log(`Added default year 2025 for user ${req.user.username}`);
+        }
+        
       } catch (sheetError) {
         console.log(`Sheet ${sheetName} might not exist or is empty, skipping`);
-        // Still add the year if it's 2025
-        if (year === '2025') {
+        // Still add 2025 if it's the current sheet being checked
+        if (year === '2025' && !userYears.includes('2025')) {
           userYears.push(year);
         }
       }
     }
 
-    // Always ensure 2025 is included
+    // Ensure 2025 is always included as fallback
     if (!userYears.includes('2025')) {
       userYears.push('2025');
     }
@@ -941,14 +966,17 @@ app.get('/api/get-user-years', authenticateToken, async (req, res) => {
     // Remove duplicates and sort
     const uniqueYears = [...new Set(userYears)].sort((a, b) => parseInt(a) - parseInt(b));
     
-    console.log(`Fetched ${uniqueYears.length} years for user ${req.user.username}:`, uniqueYears);
+    console.log(`Final years for user ${req.user.username}:`, uniqueYears);
     res.json(uniqueYears);
   } catch (error) {
     console.error('Get user years error:', {
       message: error.message,
       stack: error.stack,
+      user: req.user?.username
     });
-    res.status(500).json({ error: 'Failed to fetch user years' });
+    
+    // Fallback to just 2025 if everything fails
+    res.json(['2025']);
   }
 });
 // Modified /api/add-new-year

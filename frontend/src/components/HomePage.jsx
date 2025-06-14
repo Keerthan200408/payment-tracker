@@ -48,12 +48,14 @@ const HomePage = ({
     'december',
   ];
 
-  const [availableYears, setAvailableYears] = useState(() => {
-    const storedYears = localStorage.getItem('availableYears');
-    console.log('HomePage.jsx: Initializing availableYears from localStorage:', storedYears);
-    return storedYears ? JSON.parse(storedYears) : ['2025'];
-  });
-  const [selectedYear, setSelectedYear] = useState(currentYear);
+  // const [availableYears, setAvailableYears] = useState(() => {
+  //   const storedYears = localStorage.getItem('availableYears');
+  //   console.log('HomePage.jsx: Initializing availableYears from localStorage:', storedYears);
+  //   return storedYears ? JSON.parse(storedYears) : ['2025'];
+  // });
+  // const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [availableYears, setAvailableYears] = useState(['2025']); // Don't initialize from localStorage
+const [selectedYear, setSelectedYear] = useState(currentYear);
 
   // Sync selectedYear with currentYear for Reports view or when currentYear changes
   useEffect(() => {
@@ -70,107 +72,99 @@ const HomePage = ({
 }, [paymentsData, currentYear, selectedYear, isReportsPage]);
 
   // Function to search for user-specific years
-  const searchUserYears = async (forceFetch = false) => {
-    console.log('HomePage.jsx: searchUserYears called with forceFetch:', forceFetch, 'sessionToken:', sessionToken);
+  const searchUserYears = async () => {
+  console.log('HomePage.jsx: searchUserYears called with sessionToken:', sessionToken);
+  
+  if (!sessionToken) {
+    console.log('HomePage.jsx: No sessionToken available');
+    return;
+  }
+
+  console.log('HomePage.jsx: Fetching user-specific years from API');
+  try {
+    const response = await axios.get(`${BASE_URL}/get-user-years`, {
+      headers: { Authorization: `Bearer ${sessionToken}` },
+    });
+    console.log('HomePage.jsx: API response for user years:', response.data);
     
-    // Skip fetching if we have years in localStorage and not forcing a fetch
-    if (!forceFetch && localStorage.getItem('availableYears')) {
-      console.log('HomePage.jsx: Using cached years from localStorage');
-      const storedYears = JSON.parse(localStorage.getItem('availableYears')) || ['2025'];
-      console.log('HomePage.jsx: Stored years:', storedYears);
-      setAvailableYears(storedYears);
-      const storedYear = localStorage.getItem('currentYear') || '2025';
-      console.log('HomePage.jsx: Stored currentYear:', storedYear);
-      if (storedYears.includes(storedYear) && storedYear !== currentYear) {
-        console.log('HomePage.jsx: Setting currentYear from storedYear:', storedYear);
-        setCurrentYear(storedYear);
-        if (typeof handleYearChange === 'function') {
-          console.log('HomePage.jsx: Calling handleYearChange with:', storedYear);
-          handleYearChange(storedYear);
-        }
-      }
-      return;
-    }
-
-    console.log('HomePage.jsx: Fetching years from API with sessionToken:', sessionToken);
-    try {
-      const response = await axios.get(`${BASE_URL}/get-user-years`, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      });
-      console.log('HomePage.jsx: API response for user years:', response.data);
-      
-      const fetchedYears = (response.data || [])
-        .filter(year => parseInt(year) >= 2025)
-        .sort((a, b) => parseInt(a) - parseInt(b));
-      
-      // Always include 2025
-      const yearsToSet = [...new Set(['2025', ...fetchedYears])]
-        .filter(year => parseInt(year) >= 2025)
-        .sort((a, b) => parseInt(a) - parseInt(b));
-      
-      console.log('HomePage.jsx: Processed years for dropdown:', yearsToSet);
-      setAvailableYears(yearsToSet);
-      console.log('HomePage.jsx: Saving availableYears to localStorage:', yearsToSet);
-      localStorage.setItem('availableYears', JSON.stringify(yearsToSet));
-      
-      // Get stored year or default to 2025
-      const storedYear = localStorage.getItem('currentYear');
-      let yearToSet = storedYear && yearsToSet.includes(storedYear) ? storedYear : '2025';
-      console.log('HomePage.jsx: Selected year to set:', yearToSet);
-      
-      if (yearToSet !== currentYear) {
-        console.log('HomePage.jsx: Updating currentYear to:', yearToSet);
-        setCurrentYear(yearToSet);
-        localStorage.setItem('currentYear', yearToSet);
-        if (typeof handleYearChange === 'function') {
-          console.log('HomePage.jsx: Calling handleYearChange with:', yearToSet);
-          await handleYearChange(yearToSet);
-        }
-      }
-    } catch (error) {
-      console.error('HomePage.jsx: Error searching user years:', error, 'Response:', error.response?.data);
-      
-      const storedYears = JSON.parse(localStorage.getItem('availableYears')) || ['2025'];
-      console.log('HomePage.jsx: Falling back to stored years:', storedYears);
-      setAvailableYears(storedYears);
-      
-      const storedYear = localStorage.getItem('currentYear');
-      const yearToSet = (storedYear && storedYears.includes(storedYear)) ? storedYear : '2025';
-      console.log('HomePage.jsx: Fallback year to set:', yearToSet);
-      
-      if (yearToSet !== currentYear) {
-        console.log('HomePage.jsx: Updating currentYear in fallback to:', yearToSet);
-        setCurrentYear(yearToSet);
-        localStorage.setItem('currentYear', yearToSet);
-        if (typeof handleYearChange === 'function') {
-          console.log('HomePage.jsx: Calling handleYearChange in fallback with:', yearToSet);
-          await handleYearChange(yearToSet);
-        }
-      }
-    }
-  };
-
-  useEffect(() => {
-    console.log('HomePage.jsx: useEffect for sessionToken triggered. sessionToken:', sessionToken);
-    if (sessionToken) {
-      const storedToken = localStorage.getItem('sessionToken');
-      console.log('HomePage.jsx: Stored sessionToken:', storedToken);
-      const isNewSession = sessionToken !== storedToken;
-      console.log('HomePage.jsx: Is new session?', isNewSession);
-      searchUserYears(isNewSession);
+    const fetchedYears = (response.data || [])
+      .filter(year => parseInt(year) >= 2025)
+      .sort((a, b) => parseInt(a) - parseInt(b));
+    
+    // Ensure we have at least 2025
+    const yearsToSet = fetchedYears.length > 0 ? fetchedYears : ['2025'];
+    
+    console.log('HomePage.jsx: Setting availableYears to:', yearsToSet);
+    setAvailableYears(yearsToSet);
+    
+    // Save to localStorage for faster subsequent loads within the same session
+    localStorage.setItem('availableYears', JSON.stringify(yearsToSet));
+    
+    // Set current year logic
+    const storedYear = localStorage.getItem('currentYear');
+    let yearToSet;
+    
+    if (storedYear && yearsToSet.includes(storedYear)) {
+      yearToSet = storedYear;
     } else {
-      console.log('HomePage.jsx: No sessionToken, skipping searchUserYears');
+      // Default to the latest available year or 2025
+      yearToSet = yearsToSet[yearsToSet.length - 1] || '2025';
     }
-  }, [sessionToken]);
+    
+    console.log('HomePage.jsx: Setting currentYear to:', yearToSet);
+    
+    if (yearToSet !== currentYear) {
+      setCurrentYear(yearToSet);
+      localStorage.setItem('currentYear', yearToSet);
+      
+      if (typeof handleYearChange === 'function') {
+        console.log('HomePage.jsx: Calling handleYearChange with:', yearToSet);
+        await handleYearChange(yearToSet);
+      }
+    }
+    
+  } catch (error) {
+    console.error('HomePage.jsx: Error fetching user years:', error);
+    
+    // Fallback to cached data if available, otherwise use 2025
+    const cachedYears = localStorage.getItem('availableYears');
+    const fallbackYears = cachedYears ? JSON.parse(cachedYears) : ['2025'];
+    
+    console.log('HomePage.jsx: Using fallback years:', fallbackYears);
+    setAvailableYears(fallbackYears);
+    
+    const storedYear = localStorage.getItem('currentYear');
+    const yearToSet = (storedYear && fallbackYears.includes(storedYear)) ? storedYear : '2025';
+    
+    if (yearToSet !== currentYear) {
+      setCurrentYear(yearToSet);
+      localStorage.setItem('currentYear', yearToSet);
+      
+      if (typeof handleYearChange === 'function') {
+        await handleYearChange(yearToSet);
+      }
+    }
+  }
+};
 
   useEffect(() => {
-    const serializedYears = JSON.stringify(availableYears);
-    const storedYears = localStorage.getItem('availableYears');
-    if (serializedYears !== storedYears) {
-      console.log('HomePage.jsx: Saving availableYears to localStorage:', availableYears);
-      localStorage.setItem('availableYears', serializedYears);
-    }
-  }, [availableYears]);
+  console.log('HomePage.jsx: useEffect for sessionToken triggered. sessionToken:', sessionToken);
+  if (sessionToken) {
+    searchUserYears(); // Always fetch fresh data from server
+  } else {
+    console.log('HomePage.jsx: No sessionToken, resetting to default');
+    setAvailableYears(['2025']);
+  }
+}, [sessionToken]);
+
+  useEffect(() => {
+  const serializedYears = JSON.stringify(availableYears);
+  const storedYears = localStorage.getItem('availableYears');
+  if (serializedYears !== storedYears) {
+    console.log('HomePage.jsx: Saving availableYears to localStorage:', availableYears);
+    localStorage.setItem('availableYears', serializedYears);
+  }
+}, [availableYears]);
 
   useEffect(() => {
     if (paymentsData?.length) {
@@ -179,40 +173,36 @@ const HomePage = ({
   }, [paymentsData, currentYear, isReportsPage]);
 
   const handleAddNewYear = async () => {
-    const newYear = (parseInt(currentYear) + 1).toString();
+  const newYear = (parseInt(currentYear) + 1).toString();
+  
+  console.log(`HomePage.jsx: Attempting to add new year: ${newYear}`);
+  try {
+    const response = await axios.post(
+      `${BASE_URL}/add-new-year`,
+      { year: newYear },
+      { headers: { Authorization: `Bearer ${sessionToken}` } }
+    );
+    console.log('HomePage.jsx: Add new year response:', response.data);
     
-    console.log(`HomePage.jsx: Attempting to add new year: ${newYear}`);
-    try {
-      const response = await axios.post(
-        `${BASE_URL}/add-new-year`,
-        { year: newYear },
-        { headers: { Authorization: `Bearer ${sessionToken}` } }
-      );
-      console.log('HomePage.jsx: Add new year response:', response.data);
-      
-      // Update available years
-      setAvailableYears(prev => {
-        const updatedYears = [...new Set([...prev, newYear])].sort((a, b) => parseInt(a) - parseInt(b));
-        localStorage.setItem('availableYears', JSON.stringify(updatedYears));
-        return updatedYears;
-      });
-      
-      // Switch to newYear
-      setCurrentYear(newYear);
-      localStorage.setItem('currentYear', newYear);
-      
-      if (typeof handleYearChange === 'function') {
-        await handleYearChange(newYear);
-      } else {
-        console.warn('HomePage.jsx: handleYearChange is not a function when adding new year');
-      }
-      
-      alert(response.data.message);
-    } catch (error) {
-      console.error('HomePage.jsx: Error adding new year:', error);
-      alert(`Failed to add new year: ${error.response?.data?.error || 'Unknown error occurred'}`);
+    // After adding new year, refresh the available years from server
+    await searchUserYears();
+    
+    // Switch to newYear
+    setCurrentYear(newYear);
+    localStorage.setItem('currentYear', newYear);
+    
+    if (typeof handleYearChange === 'function') {
+      await handleYearChange(newYear);
+    } else {
+      console.warn('HomePage.jsx: handleYearChange is not a function when adding new year');
     }
-  };
+    
+    alert(response.data.message);
+  } catch (error) {
+    console.error('HomePage.jsx: Error adding new year:', error);
+    alert(`Failed to add new year: ${error.response?.data?.error || 'Unknown error occurred'}`);
+  }
+};
 
   const tableRef = useRef(null);
 
