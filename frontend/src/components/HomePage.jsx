@@ -175,7 +175,7 @@ const HomePage = ({
     if (paymentsData?.length) {
       console.log('HomePage.jsx: Payments data updated:', paymentsData.length, 'items for year', isReportsPage ? selectedYear : currentYear, 'on', isReportsPage ? 'Reports' : 'Dashboard');
     }
-  }, [paymentsData, currentYear, selectedYear, isReportsPage]);
+  }, [paymentsData, currentYear, isReportsPage]);
 
   const handleAddNewYear = async () => {
     const newYear = (parseInt(currentYear) + 1).toString();
