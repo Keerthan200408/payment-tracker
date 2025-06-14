@@ -44,11 +44,9 @@ const HomePage = ({
   const [availableYears, setAvailableYears] = useState([currentYear]);
 
   // Function to search for user-specific years
+// Updated searchUserYears function in HomePage
 const searchUserYears = async () => {
   try {
-    const storedYear = localStorage.getItem('currentYear');
-    console.log('Stored year from localStorage:', storedYear);
-
     const response = await axios.get(`${BASE_URL}/get-user-years`, {
       headers: { Authorization: `Bearer ${sessionToken}` },
     });
@@ -66,21 +64,25 @@ const searchUserYears = async () => {
     console.log('Years set for dropdown:', yearsToSet);
     setAvailableYears(yearsToSet);
     
-    // Determine which year to set as current
+    // Get stored year or default to 2025
+    const storedYear = localStorage.getItem('currentYear');
     let yearToSet;
+    
     if (storedYear && yearsToSet.includes(storedYear)) {
-      // Use stored year if it exists in available years
       yearToSet = storedYear;
     } else {
-      // Default to 2025 if no stored year or stored year not in available years
       yearToSet = '2025';
     }
     
     console.log('Selected year:', yearToSet);
     
-    setCurrentYear(yearToSet);
-    localStorage.setItem('currentYear', yearToSet);
+    // Only update if year is different from current
+    if (yearToSet !== currentYear) {
+      setCurrentYear(yearToSet);
+      localStorage.setItem('currentYear', yearToSet);
+    }
     
+    // Always fetch payments for the selected year
     if (typeof handleYearChange === 'function') {
       await handleYearChange(yearToSet);
     } else {
@@ -90,14 +92,17 @@ const searchUserYears = async () => {
     console.error('Error searching user years:', error);
     
     const storedYear = localStorage.getItem('currentYear');
-    const yearsToSet = ['2025']; // Fallback to just 2025
+    const yearsToSet = ['2025'];
     
     console.log('Fallback years set for dropdown:', yearsToSet);
     setAvailableYears(yearsToSet);
     
-    const yearToSet = (storedYear && storedYear >= '2025') ? storedYear : '2025';
-    setCurrentYear(yearToSet);
-    localStorage.setItem('currentYear', yearToSet);
+    const yearToSet = (storedYear && parseInt(storedYear) >= 2025) ? storedYear : '2025';
+    
+    if (yearToSet !== currentYear) {
+      setCurrentYear(yearToSet);
+      localStorage.setItem('currentYear', yearToSet);
+    }
     
     if (typeof handleYearChange === 'function') {
       await handleYearChange(yearToSet);

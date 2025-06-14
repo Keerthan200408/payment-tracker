@@ -897,6 +897,7 @@ app.post('/api/save-payments', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+// Updated get-user-years endpoint in server.js
 app.get('/api/get-user-years', authenticateToken, async (req, res) => {
   try {
     const sheets = google.sheets({ version: 'v4', auth });
@@ -909,13 +910,39 @@ app.get('/api/get-user-years', authenticateToken, async (req, res) => {
     for (const sheetName of paymentSheets) {
       const year = sheetName.split('_')[1];
       if (parseInt(year) < 2025) continue; // Skip years before 2025
-      userYears.push(year); // Include all payment sheets, even if empty
-      const payments = await readSheet(sheetName, 'A2:R');
-      console.log(`Sheet ${sheetName} data for user ${req.user.username}:`, payments);
+      
+      try {
+        const payments = await readSheet(sheetName, 'A2:R');
+        console.log(`Sheet ${sheetName} has ${payments.length} rows`);
+        
+        // Check if this user has any data in this year
+        const userHasData = payments.some(row => {
+          // Check if any row has data (not just headers)
+          return row && row.length > 0 && row.some(cell => cell && cell.toString().trim() !== '');
+        });
+        
+        if (userHasData || year === '2025') { // Always include 2025
+          userYears.push(year);
+        }
+      } catch (sheetError) {
+        console.log(`Sheet ${sheetName} might not exist or is empty, skipping`);
+        // Still add the year if it's 2025
+        if (year === '2025') {
+          userYears.push(year);
+        }
+      }
     }
 
-    console.log(`Fetched ${userYears.length} years for user ${req.user.username}:`, userYears);
-    res.json(userYears);
+    // Always ensure 2025 is included
+    if (!userYears.includes('2025')) {
+      userYears.push('2025');
+    }
+
+    // Remove duplicates and sort
+    const uniqueYears = [...new Set(userYears)].sort((a, b) => parseInt(a) - parseInt(b));
+    
+    console.log(`Fetched ${uniqueYears.length} years for user ${req.user.username}:`, uniqueYears);
+    res.json(uniqueYears);
   } catch (error) {
     console.error('Get user years error:', {
       message: error.message,

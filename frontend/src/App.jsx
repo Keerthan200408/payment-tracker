@@ -68,7 +68,7 @@ const App = () => {
     const storedUser = localStorage.getItem('currentUser');
     const storedToken = localStorage.getItem('sessionToken');
     const storedPage = localStorage.getItem('currentPage');
-    const storedYear = localStorage.getItem('currentYear');
+    // const storedYear = localStorage.getItem('currentYear');
 
     if (storedUser && storedToken) {
       console.log('Restoring session for user:', storedUser);
@@ -155,6 +155,16 @@ const fetchPayments = async (token, year) => {
       console.log('Non-auth error:', error.message);
     }
   };
+
+  // Add this handleYearChange function in your App.jsx
+const handleYearChange = async (year) => {
+  console.log('Year changed to:', year);
+  setCurrentYear(year);
+  localStorage.setItem('currentYear', year);
+  if (sessionToken) {
+    await fetchPayments(sessionToken, year);
+  }
+};
 
   const logout = () => {
     console.log('Logging out user:', currentUser);
@@ -970,6 +980,7 @@ const updatePayment = async (rowIndex, month, value, year = currentYear) => {
                   isImporting={isImporting}
                   currentYear={currentYear}
                   setCurrentYear={setCurrentYear}
+                  handleYearChange={handleYearChange}
                 />
               )}
               {page === "addClient" && (
