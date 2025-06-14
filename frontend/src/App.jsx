@@ -828,7 +828,7 @@ const updatePayment = async (rowIndex, month, value, year = currentYear) => {
         value: value
       };
 
-      await axios.post(`${BASE_URL}/api/save-payment`, payloadData, {
+      await axios.post(`${BASE_URL}/save-payment`, payloadData, {
         headers: { Authorization: `Bearer ${sessionToken}` },
         params: { year },
       });
