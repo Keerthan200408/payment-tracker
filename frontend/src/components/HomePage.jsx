@@ -62,6 +62,11 @@ const HomePage = ({
   //     setSelectedYear(currentYear);
   //   }
   // }, [currentYear, isReportsPage]);
+  useEffect(() => {
+  if (paymentsData?.length) {
+    console.log('HomePage.jsx: Payments data updated:', paymentsData.length, 'items for year', currentYear, 'on', isReportsPage ? 'Reports' : 'Dashboard');
+  }
+}, [paymentsData, currentYear, isReportsPage]);
 
   // Function to search for user-specific years
   const searchUserYears = async (forceFetch = false) => {
@@ -449,17 +454,17 @@ const HomePage = ({
   );
 
   const renderReports = () => {
-    const monthStatus = paymentsData.reduce((acc, row) => {
-      if (!acc[row.Client_Name]) {
-        acc[row.Client_Name] = {};
-      }
-      months.forEach((month) => {
-        acc[row.Client_Name][month] = getMonthlyStatus(row, month);
-      });
-      return acc;
-    }, {});
+  const monthStatus = paymentsData.reduce((acc, row) => {
+    if (!acc[row.Client_Name]) {
+      acc[row.Client_Name] = {};
+    }
+    months.forEach((month) => {
+      acc[row.Client_Name][month] = getMonthlyStatus(row, month);
+    });
+    return acc;
+  }, {});
 
-    return (
+  return (
     <>
       <h2 className="text-2xl font-semibold mb-2">
         Monthly Client Status Report ({currentYear})
@@ -542,7 +547,6 @@ const HomePage = ({
     </>
   );
 };
-
   return (
     <div className="p-6">
       {isReportsPage ? renderReports() : renderDashboard()}
