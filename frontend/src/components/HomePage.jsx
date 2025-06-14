@@ -68,13 +68,21 @@ const HomePage = ({
       
       setCurrentYear(defaultYear);
       localStorage.setItem('currentYear', defaultYear);
-      await handleYearChange(defaultYear);
+      if (typeof handleYearChange === 'function') {
+        await handleYearChange(defaultYear);
+      } else {
+        console.warn('handleYearChange is not a function during initial load');
+      }
     } catch (error) {
       console.error('Error searching user years:', error);
       setAvailableYears(['2025']);
       setCurrentYear('2025');
       localStorage.setItem('currentYear', '2025');
-      await handleYearChange('2025');
+      if (typeof handleYearChange === 'function') {
+        await handleYearChange('2025');
+      } else {
+        console.warn('handleYearChange is not a function during error handling');
+      }
     }
   };
 
@@ -115,7 +123,11 @@ const HomePage = ({
       }
       setCurrentYear(newYear);
       localStorage.setItem('currentYear', newYear);
-      await handleYearChange(newYear);
+      if (typeof handleYearChange === 'function') {
+        await handleYearChange(newYear);
+      } else {
+        console.warn('handleYearChange is not a function when adding new year');
+      }
       alert(response.data.message);
     } catch (error) {
       console.error('Error adding new year:', error);
@@ -225,7 +237,16 @@ const HomePage = ({
         </div>
         <select
           value={currentYear}
-          onChange={(e) => handleYearChange(e.target.value)}
+          onChange={(e) => {
+            const selectedYear = e.target.value;
+            setCurrentYear(selectedYear);
+            localStorage.setItem('currentYear', selectedYear);
+            if (typeof handleYearChange === 'function') {
+              handleYearChange(selectedYear);
+            } else {
+              console.warn('handleYearChange is not a function in dropdown onChange');
+            }
+          }}
           className="p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm sm:text-base"
         >
           {availableYears.map((year) => (
@@ -363,7 +384,16 @@ const HomePage = ({
         <div className="flex mb-4">
           <select
             value={currentYear}
-            onChange={(e) => handleYearChange(e.target.value)}
+            onChange={(e) => {
+              const selectedYear = e.target.value;
+              setCurrentYear(selectedYear);
+              localStorage.setItem('currentYear', selectedYear);
+              if (typeof handleYearChange === 'function') {
+                handleYearChange(selectedYear);
+              } else {
+                console.warn('handleYearChange is not a function in reports dropdown onChange');
+              }
+            }}
             className="p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm sm:text-base"
           >
             {availableYears.map((year) => (
