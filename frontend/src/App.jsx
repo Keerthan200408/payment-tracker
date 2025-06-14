@@ -987,7 +987,12 @@ const updatePayment = async (rowIndex, month, value, year = currentYear) => {
                   currentYear={currentYear}
                   setCurrentYear={setCurrentYear}
                   handleYearChange={handleYearChange}
-                  onMount={() => console.log('App.jsx: HomePage mounted with sessionToken:', sessionToken)}
+                  onMount={() =>
+                    console.log(
+                      "App.jsx: HomePage mounted with sessionToken:",
+                      sessionToken
+                    )
+                  }
                 />
               )}
               {page === "addClient" && (
@@ -1015,10 +1020,14 @@ const updatePayment = async (rowIndex, month, value, year = currentYear) => {
               {page === "payments" && (
                 <PaymentsPage
                   paymentsData={paymentsData}
+                  setPaymentsData={setPaymentsData}
                   fetchClients={fetchClients}
                   fetchPayments={fetchPayments}
                   sessionToken={sessionToken}
                   isImporting={isImporting}
+                  currentYear={currentYear}
+                  setCurrentYear={setCurrentYear}
+                  handleYearChange={handleYearChange}
                 />
               )}
               {page === "reports" && (

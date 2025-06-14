@@ -76,7 +76,8 @@ const searchUserYears = async (forceFetch = false) => {
     return;
   }
 
-  console.log('Fetching years from API');
+  console.log('HomePage.jsx: Fetching years from API with sessionToken:', sessionToken);
+
   try {
     const response = await axios.get(`${BASE_URL}/get-user-years`, {
       headers: { Authorization: `Bearer ${sessionToken}` },
@@ -154,9 +155,18 @@ useEffect(() => {
 }, [sessionToken]);
 
 useEffect(() => {
-  console.log('useEffect for availableYears triggered. Saving to localStorage:', availableYears);
-  localStorage.setItem('availableYears', JSON.stringify(availableYears));
+  const serializedYears = JSON.stringify(availableYears);
+  const storedYears = localStorage.getItem('availableYears');
+  if (serializedYears !== storedYears) {
+    console.log('HomePage.jsx: Saving availableYears to localStorage:', availableYears);
+    localStorage.setItem('availableYears', serializedYears);
+  }
 }, [availableYears]);
+useEffect(() => {
+  if (paymentsData?.length) {
+    console.log('HomePage.jsx: Payments data updated:', paymentsData.length, 'items for year', currentYear, 'on', isReportsPage ? 'Reports' : 'Dashboard');
+  }
+}, [paymentsData, currentYear, isReportsPage]);
 
   const handleAddNewYear = async () => {
   const newYear = (parseInt(currentYear) + 1).toString();
@@ -444,21 +454,23 @@ useEffect(() => {
       months.forEach((month) => {
         acc[row.Client_Name][month] = getMonthlyStatus(row, month);
       });
-      console.log('Payments data in HomePage:', paymentsData);
       return acc;
     }, {});
 
     return (
       <>
         <h2 className="text-2xl font-semibold mb-2">
-          Monthly Client Status Report ({currentYear})
+          Monthly Client Status Report {currentYear}
         </h2>
         <div className="flex mb-4">
-          // For the year dropdown in the reports section
           <select
             value={currentYear}
             onChange={(e) => {
               const selectedYear = e.target.value;
+              console.log(
+                "HomePage.jsx: Reports dropdown year changed to:",
+                selectedYear
+              );
               setCurrentYear(selectedYear);
               localStorage.setItem("currentYear", selectedYear);
               if (typeof handleYearChange === "function") {
