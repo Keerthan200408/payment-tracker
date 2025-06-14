@@ -40,33 +40,42 @@ const HomePage = ({
     'november',
     'december',
   ];
-
-  const [availableYears, setAvailableYears] = useState(() => {
+  
+const [availableYears, setAvailableYears] = useState(() => {
   const storedYears = localStorage.getItem('availableYears');
+  console.log('Initializing availableYears from localStorage:', storedYears);
   return storedYears ? JSON.parse(storedYears) : ['2025'];
 });
 
 // Function to search for user-specific years
 const searchUserYears = async (forceFetch = false) => {
+  console.log('searchUserYears called with forceFetch:', forceFetch, 'sessionToken:', sessionToken);
+  
   // Skip fetching if we have years in localStorage and not forcing a fetch
   if (!forceFetch && localStorage.getItem('availableYears')) {
+    console.log('Using cached years from localStorage');
     const storedYears = JSON.parse(localStorage.getItem('availableYears')) || ['2025'];
+    console.log('Stored years:', storedYears);
     setAvailableYears(storedYears);
     const storedYear = localStorage.getItem('currentYear') || '2025';
+    console.log('Stored currentYear:', storedYear);
     if (storedYears.includes(storedYear) && storedYear !== currentYear) {
+      console.log('Setting currentYear from storedYear:', storedYear);
       setCurrentYear(storedYear);
       if (typeof handleYearChange === 'function') {
+        console.log('Calling handleYearChange with:', storedYear);
         handleYearChange(storedYear);
       }
     }
     return;
   }
 
+  console.log('Fetching years from API');
   try {
     const response = await axios.get(`${BASE_URL}/get-user-years`, {
       headers: { Authorization: `Bearer ${sessionToken}` },
     });
-    console.log('Fetched user-specific years:', response.data);
+    console.log('API response for user years:', response.data);
     
     const fetchedYears = (response.data || [])
       .filter(year => parseInt(year) >= 2025)
@@ -77,41 +86,47 @@ const searchUserYears = async (forceFetch = false) => {
       .filter(year => parseInt(year) >= 2025)
       .sort((a, b) => parseInt(a) - parseInt(b));
     
-    console.log('Years set for dropdown:', yearsToSet);
+    console.log('Processed years for dropdown:', yearsToSet);
     setAvailableYears(yearsToSet);
+    console.log('Saving availableYears to localStorage:', yearsToSet);
     localStorage.setItem('availableYears', JSON.stringify(yearsToSet));
     
     // Get stored year or default to 2025
     const storedYear = localStorage.getItem('currentYear');
     let yearToSet = storedYear && yearsToSet.includes(storedYear) ? storedYear : '2025';
-    
-    console.log('Selected year:', yearToSet);
+    console.log('Selected year to set:', yearToSet);
     
     if (yearToSet !== currentYear) {
+      console.log('Updating currentYear to:', yearToSet);
       setCurrentYear(yearToSet);
       localStorage.setItem('currentYear', yearToSet);
     }
     
     if (typeof handleYearChange === 'function') {
+      console.log('Calling handleYearChange with:', yearToSet);
       await handleYearChange(yearToSet);
     } else {
       console.warn('handleYearChange is not a function during initial load');
     }
   } catch (error) {
-    console.error('Error searching user years:', error);
+    console.error('Error searching user years:', error, 'Response:', error.response?.data);
     
     const storedYears = JSON.parse(localStorage.getItem('availableYears')) || ['2025'];
+    console.log('Falling back to stored years:', storedYears);
     setAvailableYears(storedYears);
     
     const storedYear = localStorage.getItem('currentYear');
     const yearToSet = (storedYear && storedYears.includes(storedYear)) ? storedYear : '2025';
+    console.log('Fallback year to set:', yearToSet);
     
     if (yearToSet !== currentYear) {
+      console.log('Updating currentYear in fallback to:', yearToSet);
       setCurrentYear(yearToSet);
       localStorage.setItem('currentYear', yearToSet);
     }
     
     if (typeof handleYearChange === 'function') {
+      console.log('Calling handleYearChange in fallback with:', yearToSet);
       await handleYearChange(yearToSet);
     } else {
       console.warn('handleYearChange is not a function during error handling');
@@ -120,16 +135,20 @@ const searchUserYears = async (forceFetch = false) => {
 };
 
 useEffect(() => {
+  console.log('useEffect for sessionToken triggered. sessionToken:', sessionToken);
   if (sessionToken) {
-    // Force fetch only if new session token
     const storedToken = localStorage.getItem('sessionToken');
+    console.log('Stored sessionToken:', storedToken);
     const isNewSession = sessionToken !== storedToken;
+    console.log('Is new session?', isNewSession);
     searchUserYears(isNewSession);
+  } else {
+    console.log('No sessionToken, skipping searchUserYears');
   }
 }, [sessionToken]);
 
 useEffect(() => {
-  // Update localStorage whenever availableYears changes
+  console.log('useEffect for availableYears triggered. Saving to localStorage:', availableYears);
   localStorage.setItem('availableYears', JSON.stringify(availableYears));
 }, [availableYears]);
 
