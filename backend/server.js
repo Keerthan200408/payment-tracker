@@ -897,6 +897,85 @@ app.post('/api/save-payments', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+// Make sure this endpoint exists in your server file
+app.get('/api/get-user-years', authenticateToken, async (req, res) => {
+  try {
+    console.log(`Fetching years for user: ${req.user.username}`);
+    
+    const sheets = google.sheets({ version: 'v4', auth });
+    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
+    const paymentSheets = spreadsheet.data.sheets
+      .filter(sheet => sheet.properties.title.startsWith('Payments_'))
+      .map(sheet => sheet.properties.title);
+
+    const userYears = [];
+    
+    for (const sheetName of paymentSheets) {
+      const year = sheetName.split('_')[1];
+      if (parseInt(year) < 2025) continue; // Skip years before 2025
+      
+      try {
+        const payments = await readSheet(sheetName, 'A2:R');
+        console.log(`Sheet ${sheetName} has ${payments.length} rows`);
+        
+        // Check if this specific user has any data in this year
+        const userHasData = payments.some(row => {
+          if (!row || row.length === 0 || !row[0]) return false;
+          
+          const isUserRow = row[0].toString().trim() === req.user.username;
+          if (!isUserRow) return false;
+          
+          // Check if user has meaningful data
+          const hasClientData = row[1] && row[1].toString().trim() !== '';
+          const hasAmountData = row[3] && !isNaN(parseFloat(row[3])) && parseFloat(row[3]) > 0;
+          const hasMonthlyData = row.slice(4, 16).some(cell => 
+            cell && cell.toString().trim() !== '' && cell.toString().trim() !== '0'
+          );
+          
+          return hasClientData || hasAmountData || hasMonthlyData;
+        });
+        
+        console.log(`User ${req.user.username} has data in ${year}: ${userHasData}`);
+        
+        if (userHasData) {
+          userYears.push(year);
+        }
+        
+        // Always include 2025 as default year
+        if (year === '2025' && !userYears.includes('2025')) {
+          userYears.push(year);
+        }
+        
+      } catch (sheetError) {
+        console.log(`Sheet ${sheetName} might not exist or is empty, skipping`);
+        if (year === '2025' && !userYears.includes('2025')) {
+          userYears.push(year);
+        }
+      }
+    }
+
+    // Ensure 2025 is always included
+    if (!userYears.includes('2025')) {
+      userYears.push('2025');
+    }
+
+    // Remove duplicates and sort
+    const uniqueYears = [...new Set(userYears)].sort((a, b) => parseInt(a) - parseInt(b));
+    
+    console.log(`Final years for user ${req.user.username}:`, uniqueYears);
+    res.json(uniqueYears);
+    
+  } catch (error) {
+    console.error('Get user years error:', {
+      message: error.message,
+      stack: error.stack,
+      user: req.user?.username
+    });
+    
+    // Fallback to just 2025 if everything fails
+    res.json(['2025']);
+  }
+});
 // Updated get-user-years endpoint in server.js
 app.get('/api/get-payments-by-year', authenticateToken, async (req, res) => {
   const { year } = req.query;
@@ -1101,6 +1180,25 @@ app.get('/api/debug-sheets', authenticateToken, async (req, res) => {
       status: error.status
     });
   }
+});
+app.get('/api/debug-routes', (req, res) => {
+  const routes = [];
+  
+  // Get all registered routes
+  app._router.stack.forEach(function(r){
+    if (r.route && r.route.path){
+      routes.push({
+        method: Object.keys(r.route.methods)[0].toUpperCase(),
+        path: r.route.path
+      });
+    }
+  });
+  
+  res.json({
+    message: 'Available API routes',
+    routes: routes.filter(r => r.path.startsWith('/api')),
+    timestamp: new Date().toISOString()
+  });
 });
 // Modified /api/add-new-year
 app.post('/api/add-new-year', authenticateToken, async (req, res) => {
