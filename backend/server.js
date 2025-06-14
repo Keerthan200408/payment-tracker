@@ -842,61 +842,141 @@ app.get('/api/get-payments-by-year', authenticateToken, async (req, res) => {
 //   }
 // });
 // Modified /api/save-payments
-app.post('/api/save-payments', authenticateToken, async (req, res) => {
-  const paymentsData = req.body;
+// New endpoint for single payment updates
+app.post('/api/save-payment', authenticateToken, async (req, res) => {
+  const { rowIndex, updatedRow, month, value } = req.body;
   const year = req.query.year || new Date().getFullYear().toString();
-  if (!Array.isArray(paymentsData)) {
-    return res.status(400).json({ error: 'Payments data must be an array' });
+  
+  if (!updatedRow || typeof rowIndex !== 'number') {
+    return res.status(400).json({ error: 'Invalid payment data' });
   }
+
   try {
     const headers = ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment'];
     await ensureSheet('Payments', headers, year);
+    
+    // Read current payments
     let payments = await readSheet(getPaymentSheetName(year), 'A2:R');
-    const updatedPayments = [...payments];
-
-    for (const data of paymentsData) {
-      let { Client_Name, Type, Amount_To_Be_Paid, january, february, march, april, may, june, july, august, september, october, november, december, Due_Payment } = data;
-      Client_Name = sanitizeInput(Client_Name);
-      Type = sanitizeInput(Type);
-      Amount_To_Be_Paid = parseFloat(Amount_To_Be_Paid);
-      Due_Payment = parseFloat(Due_Payment);
-      const months = [january, february, march, april, may, june, july, august, september, october, november, december];
-      const sanitizedMonths = months.map(month => month ? sanitizeInput(month.toString()) : '');
-      if (isNaN(Amount_To_Be_Paid) || Amount_To_Be_Paid <= 0) {
-        console.warn(`Skipping invalid payment data for ${Client_Name}: Invalid Amount_To_Be_Paid`);
-        continue;
-      }
-      if (isNaN(Due_Payment)) {
-        Due_Payment = 0;
-      }
-      const index = payments.findIndex(payment => payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type);
-      if (index !== -1) {
-        payments[index] = [
-          req.user.username,
-          Client_Name,
-          Type,
-          Amount_To_Be_Paid,
-          ...sanitizedMonths,
-          Due_Payment.toFixed(2)
-        ];
-      } else {
-        payments.push([
-          req.user.username,
-          Client_Name,
-          Type,
-          Amount_To_Be_Paid,
-          ...sanitizedMonths,
-          Due_Payment.toFixed(2)
-        ]);
-      }
+    
+    // Sanitize the updated row data
+    let { Client_Name, Type, Amount_To_Be_Paid, january, february, march, april, may, june, july, august, september, october, november, december, Due_Payment } = updatedRow;
+    
+    Client_Name = sanitizeInput(Client_Name);
+    Type = sanitizeInput(Type);
+    Amount_To_Be_Paid = parseFloat(Amount_To_Be_Paid);
+    Due_Payment = parseFloat(Due_Payment);
+    
+    const months = [january, february, march, april, may, june, july, august, september, october, november, december];
+    const sanitizedMonths = months.map(month => month ? sanitizeInput(month.toString()) : '');
+    
+    if (isNaN(Amount_To_Be_Paid) || Amount_To_Be_Paid <= 0) {
+      return res.status(400).json({ error: `Invalid Amount_To_Be_Paid for ${Client_Name}` });
     }
+    
+    if (isNaN(Due_Payment)) {
+      Due_Payment = 0;
+    }
+    
+    // Find the existing row in the sheet
+    const existingIndex = payments.findIndex(payment => 
+      payment[0] === req.user.username && 
+      payment[1] === Client_Name && 
+      payment[2] === Type
+    );
+    
+    const updatedRowData = [
+      req.user.username,
+      Client_Name,
+      Type,
+      Amount_To_Be_Paid,
+      ...sanitizedMonths,
+      Due_Payment.toFixed(2)
+    ];
+    
+    if (existingIndex !== -1) {
+      // Update existing row
+      payments[existingIndex] = updatedRowData;
+    } else {
+      // Add new row
+      payments.push(updatedRowData);
+    }
+    
+    // Write only the updated data back to the sheet
     await writeSheet(getPaymentSheetName(year), 'A2:R', payments);
-    res.status(200).json({ message: 'Payments saved successfully' });
+    
+    res.status(200).json({ 
+      message: 'Payment updated successfully',
+      updatedRow: updatedRowData
+    });
+    
   } catch (error) {
-    console.error('Save payments error:', error);
+    console.error('Save payment error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+// Keep your existing bulk update endpoint for other use cases
+// app.post('/api/save-payments', authenticateToken, async (req, res) => {
+//   const paymentsData = req.body;
+//   const year = req.query.year || new Date().getFullYear().toString();
+  
+//   if (!Array.isArray(paymentsData)) {
+//     return res.status(400).json({ error: 'Payments data must be an array' });
+//   }
+  
+//   try {
+//     const headers = ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment'];
+//     await ensureSheet('Payments', headers, year);
+//     let payments = await readSheet(getPaymentSheetName(year), 'A2:R');
+//     const updatedPayments = [...payments];
+
+//     for (const data of paymentsData) {
+//       let { Client_Name, Type, Amount_To_Be_Paid, january, february, march, april, may, june, july, august, september, october, november, december, Due_Payment } = data;
+//       Client_Name = sanitizeInput(Client_Name);
+//       Type = sanitizeInput(Type);
+//       Amount_To_Be_Paid = parseFloat(Amount_To_Be_Paid);
+//       Due_Payment = parseFloat(Due_Payment);
+//       const months = [january, february, march, april, may, june, july, august, september, october, november, december];
+//       const sanitizedMonths = months.map(month => month ? sanitizeInput(month.toString()) : '');
+
+//       if (isNaN(Amount_To_Be_Paid) || Amount_To_Be_Paid <= 0) {
+//         console.warn(`Skipping invalid payment data for ${Client_Name}: Invalid Amount_To_Be_Paid`);
+//         continue;
+//       }
+
+//       if (isNaN(Due_Payment)) {
+//         Due_Payment = 0;
+//       }
+
+//       const index = payments.findIndex(payment => payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type);
+//       if (index !== -1) {
+//         payments[index] = [
+//           req.user.username,
+//           Client_Name,
+//           Type,
+//           Amount_To_Be_Paid,
+//           ...sanitizedMonths,
+//           Due_Payment.toFixed(2)
+//         ];
+//       } else {
+//         payments.push([
+//           req.user.username,
+//           Client_Name,
+//           Type,
+//           Amount_To_Be_Paid,
+//           ...sanitizedMonths,
+//           Due_Payment.toFixed(2)
+//         ]);
+//       }
+//     }
+
+//     await writeSheet(getPaymentSheetName(year), 'A2:R', payments);
+//     res.status(200).json({ message: 'Payments saved successfully' });
+//   } catch (error) {
+//     console.error('Save payments error:', error);
+//     res.status(500).json({ error: 'Internal server error' });
+//   }
+// });
 // Make sure this endpoint exists in your server file
 app.get('/api/get-user-years', authenticateToken, async (req, res) => {
   try {

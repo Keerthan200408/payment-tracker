@@ -774,7 +774,7 @@ const updatePayment = async (rowIndex, month, value, year = currentYear) => {
     alert('Please enter a valid number');
     return;
   }
-  
+
   const updatedPayments = [...paymentsData];
   const rowData = updatedPayments[rowIndex];
   const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
@@ -818,18 +818,28 @@ const updatePayment = async (rowIndex, month, value, year = currentYear) => {
 
   saveTimeouts.current[timeoutKey] = setTimeout(async () => {
     try {
-      console.log('Saving payments for:', rowData.Client_Name, month, value, year);
-      await axios.post(`${BASE_URL}/save-payments`, updatedPayments, {
+      console.log('Saving payment for:', rowData.Client_Name, month, value, year);
+      
+      // Send only the updated row data instead of entire array
+      const payloadData = {
+        rowIndex: rowIndex,
+        updatedRow: rowData,
+        month: month,
+        value: value
+      };
+
+      await axios.post(`${BASE_URL}/api/save-payment`, payloadData, {
         headers: { Authorization: `Bearer ${sessionToken}` },
         params: { year },
       });
-      // Remove the fetchPayments call since we already updated the UI
+      
+      console.log('Payment saved successfully');
     } catch (error) {
-      console.error('Save payments error:', error.response?.data?.error || error.message);
+      console.error('Save payment error:', error.response?.data?.error || error.message);
       handleSessionError(error);
     }
     delete saveTimeouts.current[timeoutKey];
-  }, 500); // Wait 500ms after user stops typing
+  }, 500);
 };
 
   return (
