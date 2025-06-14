@@ -41,11 +41,27 @@ const HomePage = ({
     'december',
   ];
 
-  const [availableYears, setAvailableYears] = useState([currentYear]);
+  const [availableYears, setAvailableYears] = useState(() => {
+  const storedYears = localStorage.getItem('availableYears');
+  return storedYears ? JSON.parse(storedYears) : ['2025'];
+});
 
-  // Function to search for user-specific years
-// Updated searchUserYears function in HomePage
-const searchUserYears = async () => {
+// Function to search for user-specific years
+const searchUserYears = async (forceFetch = false) => {
+  // Skip fetching if we have years in localStorage and not forcing a fetch
+  if (!forceFetch && localStorage.getItem('availableYears')) {
+    const storedYears = JSON.parse(localStorage.getItem('availableYears')) || ['2025'];
+    setAvailableYears(storedYears);
+    const storedYear = localStorage.getItem('currentYear') || '2025';
+    if (storedYears.includes(storedYear) && storedYear !== currentYear) {
+      setCurrentYear(storedYear);
+      if (typeof handleYearChange === 'function') {
+        handleYearChange(storedYear);
+      }
+    }
+    return;
+  }
+
   try {
     const response = await axios.get(`${BASE_URL}/get-user-years`, {
       headers: { Authorization: `Bearer ${sessionToken}` },
@@ -56,33 +72,26 @@ const searchUserYears = async () => {
       .filter(year => parseInt(year) >= 2025)
       .sort((a, b) => parseInt(a) - parseInt(b));
     
-    // Always include 2025 and any fetched years
+    // Always include 2025
     const yearsToSet = [...new Set(['2025', ...fetchedYears])]
       .filter(year => parseInt(year) >= 2025)
       .sort((a, b) => parseInt(a) - parseInt(b));
     
     console.log('Years set for dropdown:', yearsToSet);
     setAvailableYears(yearsToSet);
+    localStorage.setItem('availableYears', JSON.stringify(yearsToSet));
     
     // Get stored year or default to 2025
     const storedYear = localStorage.getItem('currentYear');
-    let yearToSet;
-    
-    if (storedYear && yearsToSet.includes(storedYear)) {
-      yearToSet = storedYear;
-    } else {
-      yearToSet = '2025';
-    }
+    let yearToSet = storedYear && yearsToSet.includes(storedYear) ? storedYear : '2025';
     
     console.log('Selected year:', yearToSet);
     
-    // Only update if year is different from current
     if (yearToSet !== currentYear) {
       setCurrentYear(yearToSet);
       localStorage.setItem('currentYear', yearToSet);
     }
     
-    // Always fetch payments for the selected year
     if (typeof handleYearChange === 'function') {
       await handleYearChange(yearToSet);
     } else {
@@ -91,13 +100,11 @@ const searchUserYears = async () => {
   } catch (error) {
     console.error('Error searching user years:', error);
     
+    const storedYears = JSON.parse(localStorage.getItem('availableYears')) || ['2025'];
+    setAvailableYears(storedYears);
+    
     const storedYear = localStorage.getItem('currentYear');
-    const yearsToSet = ['2025'];
-    
-    console.log('Fallback years set for dropdown:', yearsToSet);
-    setAvailableYears(yearsToSet);
-    
-    const yearToSet = (storedYear && parseInt(storedYear) >= 2025) ? storedYear : '2025';
+    const yearToSet = (storedYear && storedYears.includes(storedYear)) ? storedYear : '2025';
     
     if (yearToSet !== currentYear) {
       setCurrentYear(yearToSet);
@@ -112,11 +119,19 @@ const searchUserYears = async () => {
   }
 };
 
-  useEffect(() => {
-    if (sessionToken) {
-      searchUserYears();
-    }
-  }, [sessionToken]);
+useEffect(() => {
+  if (sessionToken) {
+    // Force fetch only if new session token
+    const storedToken = localStorage.getItem('sessionToken');
+    const isNewSession = sessionToken !== storedToken;
+    searchUserYears(isNewSession);
+  }
+}, [sessionToken]);
+
+useEffect(() => {
+  // Update localStorage whenever availableYears changes
+  localStorage.setItem('availableYears', JSON.stringify(availableYears));
+}, [availableYears]);
 
   const handleAddNewYear = async () => {
   const newYear = (parseInt(currentYear) + 1).toString();
@@ -133,11 +148,11 @@ const searchUserYears = async () => {
     // Update available years
     setAvailableYears(prev => {
       const updatedYears = [...new Set([...prev, newYear])].sort((a, b) => parseInt(a) - parseInt(b));
+      localStorage.setItem('availableYears', JSON.stringify(updatedYears));
       return updatedYears;
     });
     
-    // Clear current data and switch to new year
-    setPaymentsData([]);
+    // Switch to new year
     setCurrentYear(newYear);
     localStorage.setItem('currentYear', newYear);
     
@@ -153,6 +168,7 @@ const searchUserYears = async () => {
     alert(`Failed to add new year: ${error.response?.data?.error || 'Unknown error occurred'}`);
   }
 };
+
 
   const tableRef = useRef(null);
 
