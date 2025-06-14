@@ -199,8 +199,12 @@ const [selectedYear, setSelectedYear] = useState(currentYear);
     
     alert(response.data.message);
   } catch (error) {
-    console.error('HomePage.jsx: Error adding new year:', error);
-    alert(`Failed to add new year: ${error.response?.data?.error || 'Unknown error occurred'}`);
+    console.error('HomePage.jsx: Error adding new year:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status
+    });
+    alert(`Failed to add new year: ${error.response?.data?.error || 'An unknown error occurred. Please try again.'}`);
   }
 };
 

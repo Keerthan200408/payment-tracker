@@ -1209,7 +1209,19 @@ app.post('/api/add-new-year', authenticateToken, async (req, res) => {
   try {
     const headers = ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment'];
     const sheetName = getPaymentSheetName(year);
+    const currentYear = new Date().getFullYear().toString();
+    const currentSheetName = getPaymentSheetName(currentYear);
+
+    // Check if user has payment data in the current year
+    await ensureSheet('Payments', headers, currentYear);
+    const currentPayments = await readSheet(currentSheetName, 'A2:R');
+    const hasCurrentData = currentPayments.some(payment => payment[0] === req.user.username && payment[1] && payment[3] && parseFloat(payment[3]) > 0);
     
+    if (!hasCurrentData) {
+      console.log(`User ${req.user.username} has no payment data in ${currentYear}, blocking new year creation`);
+      return res.status(400).json({ error: 'Please add or import payment data for the current year before creating a new year' });
+    }
+
     // Check if sheet exists and has user data
     const sheets = google.sheets({ version: 'v4', auth });
     const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
