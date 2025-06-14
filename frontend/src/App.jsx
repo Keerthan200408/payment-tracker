@@ -1050,6 +1050,10 @@ const updatePayment = async (rowIndex, month, value, year = currentYear) => {
                   importCsv={importCsv}
                   isReportsPage={true}
                   isImporting={isImporting}
+                  sessionToken={sessionToken}
+                  currentYear={currentYear}
+                  setCurrentYear={setCurrentYear}
+                  handleYearChange={handleYearChange}
                 />
               )}
             </main>
