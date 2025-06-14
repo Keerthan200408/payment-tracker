@@ -44,57 +44,68 @@ const HomePage = ({
   const [availableYears, setAvailableYears] = useState([currentYear]);
 
   // Function to search for user-specific years
-  const searchUserYears = async () => {
-    try {
-      const storedYear = localStorage.getItem('currentYear');
-      console.log('Stored year from localStorage:', storedYear);
+const searchUserYears = async () => {
+  try {
+    const storedYear = localStorage.getItem('currentYear');
+    console.log('Stored year from localStorage:', storedYear);
 
-      const response = await axios.get(`${BASE_URL}/get-user-years`, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      });
-      console.log('Fetched user-specific years:', response.data);
-      const filteredYears = (response.data || [])
-        .filter(year => parseInt(year) >= 2025)
-        .sort((a, b) => parseInt(a) - parseInt(b));
-      
-      // Include stored year and ensure 2025
-      const yearsToSet = [...new Set(['2025', ...(storedYear ? [storedYear] : []), ...filteredYears])]
-        .filter(year => parseInt(year) >= 2025)
-        .sort((a, b) => parseInt(a) - parseInt(b));
-      console.log('Years set for dropdown:', yearsToSet);
-      setAvailableYears(yearsToSet);
-      
-      // Use stored year if valid, else latest year
-      const defaultYear = (storedYear && yearsToSet.includes(storedYear)) 
-        ? storedYear 
-        : yearsToSet[yearsToSet.length - 1] || '2025';
-      console.log('Selected default year:', defaultYear);
-      
-      setCurrentYear(defaultYear);
-      localStorage.setItem('currentYear', defaultYear);
-      if (typeof handleYearChange === 'function') {
-        await handleYearChange(defaultYear);
-      } else {
-        console.warn('handleYearChange is not a function during initial load');
-      }
-    } catch (error) {
-      console.error('Error searching user years:', error);
-      const storedYear = localStorage.getItem('currentYear');
-      const yearsToSet = [...new Set(['2025', ...(storedYear ? [storedYear] : [])])]
-        .filter(year => parseInt(year) >= 2025)
-        .sort((a, b) => parseInt(a) - parseInt(b));
-      console.log('Fallback years set for dropdown:', yearsToSet);
-      setAvailableYears(yearsToSet);
-      const defaultYear = storedYear && yearsToSet.includes(storedYear) ? storedYear : '2025';
-      setCurrentYear(defaultYear);
-      localStorage.setItem('currentYear', defaultYear);
-      if (typeof handleYearChange === 'function') {
-        await handleYearChange(defaultYear);
-      } else {
-        console.warn('handleYearChange is not a function during error handling');
-      }
+    const response = await axios.get(`${BASE_URL}/get-user-years`, {
+      headers: { Authorization: `Bearer ${sessionToken}` },
+    });
+    console.log('Fetched user-specific years:', response.data);
+    
+    const fetchedYears = (response.data || [])
+      .filter(year => parseInt(year) >= 2025)
+      .sort((a, b) => parseInt(a) - parseInt(b));
+    
+    // Always include 2025 and any fetched years
+    const yearsToSet = [...new Set(['2025', ...fetchedYears])]
+      .filter(year => parseInt(year) >= 2025)
+      .sort((a, b) => parseInt(a) - parseInt(b));
+    
+    console.log('Years set for dropdown:', yearsToSet);
+    setAvailableYears(yearsToSet);
+    
+    // Determine which year to set as current
+    let yearToSet;
+    if (storedYear && yearsToSet.includes(storedYear)) {
+      // Use stored year if it exists in available years
+      yearToSet = storedYear;
+    } else {
+      // Default to 2025 if no stored year or stored year not in available years
+      yearToSet = '2025';
     }
-  };
+    
+    console.log('Selected year:', yearToSet);
+    
+    setCurrentYear(yearToSet);
+    localStorage.setItem('currentYear', yearToSet);
+    
+    if (typeof handleYearChange === 'function') {
+      await handleYearChange(yearToSet);
+    } else {
+      console.warn('handleYearChange is not a function during initial load');
+    }
+  } catch (error) {
+    console.error('Error searching user years:', error);
+    
+    const storedYear = localStorage.getItem('currentYear');
+    const yearsToSet = ['2025']; // Fallback to just 2025
+    
+    console.log('Fallback years set for dropdown:', yearsToSet);
+    setAvailableYears(yearsToSet);
+    
+    const yearToSet = (storedYear && storedYear >= '2025') ? storedYear : '2025';
+    setCurrentYear(yearToSet);
+    localStorage.setItem('currentYear', yearToSet);
+    
+    if (typeof handleYearChange === 'function') {
+      await handleYearChange(yearToSet);
+    } else {
+      console.warn('handleYearChange is not a function during error handling');
+    }
+  }
+};
 
   useEffect(() => {
     if (sessionToken) {
@@ -103,35 +114,40 @@ const HomePage = ({
   }, [sessionToken]);
 
   const handleAddNewYear = async () => {
-    const newYear = (parseInt(currentYear) + 1).toString();
+  const newYear = (parseInt(currentYear) + 1).toString();
+  
+  console.log(`Attempting to add new year: ${newYear}`);
+  try {
+    const response = await axios.post(
+      `${BASE_URL}/add-new-year`,
+      { year: newYear },
+      { headers: { Authorization: `Bearer ${sessionToken}` } }
+    );
+    console.log('Add new year response:', response.data);
     
-    console.log(`Attempting to add new year: ${newYear}`);
-    try {
-      const response = await axios.post(
-        `${BASE_URL}/add-new-year`,
-        { year: newYear },
-        { headers: { Authorization: `Bearer ${sessionToken}` } }
-      );
-      console.log('Add new year response:', response.data);
-      
-      setAvailableYears(prev => {
-        const updatedYears = [...new Set([...prev, newYear])].sort((a, b) => parseInt(a) - parseInt(b));
-        return updatedYears;
-      });
-      setPaymentsData([]);
-      setCurrentYear(newYear);
-      localStorage.setItem('currentYear', newYear);
-      if (typeof handleYearChange === 'function') {
-        await handleYearChange(newYear);
-      } else {
-        console.warn('handleYearChange is not a function when adding new year');
-      }
-      alert(response.data.message);
-    } catch (error) {
-      console.error('Error adding new year:', error);
-      alert(`Failed to add new year: ${error.response?.data?.error || 'Unknown error occurred'}`);
+    // Update available years
+    setAvailableYears(prev => {
+      const updatedYears = [...new Set([...prev, newYear])].sort((a, b) => parseInt(a) - parseInt(b));
+      return updatedYears;
+    });
+    
+    // Clear current data and switch to new year
+    setPaymentsData([]);
+    setCurrentYear(newYear);
+    localStorage.setItem('currentYear', newYear);
+    
+    if (typeof handleYearChange === 'function') {
+      await handleYearChange(newYear);
+    } else {
+      console.warn('handleYearChange is not a function when adding new year');
     }
-  };
+    
+    alert(response.data.message);
+  } catch (error) {
+    console.error('Error adding new year:', error);
+    alert(`Failed to add new year: ${error.response?.data?.error || 'Unknown error occurred'}`);
+  }
+};
 
   const tableRef = useRef(null);
 
@@ -238,11 +254,13 @@ const HomePage = ({
           onChange={(e) => {
             const selectedYear = e.target.value;
             setCurrentYear(selectedYear);
-            localStorage.setItem('currentYear', selectedYear);
-            if (typeof handleYearChange === 'function') {
+            localStorage.setItem("currentYear", selectedYear);
+            if (typeof handleYearChange === "function") {
               handleYearChange(selectedYear);
             } else {
-              console.warn('handleYearChange is not a function in dropdown onChange');
+              console.warn(
+                "handleYearChange is not a function in dropdown onChange"
+              );
             }
           }}
           className="p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm sm:text-base"
@@ -331,9 +349,17 @@ const HomePage = ({
                         type="text"
                         value={row[month] || ""}
                         onChange={(e) =>
-                          updatePayment(rowIndex, month, e.target.value, currentYear)
+                          updatePayment(
+                            rowIndex,
+                            month,
+                            e.target.value,
+                            currentYear
+                          )
                         }
-                        className={`w-20 p-1 border-gray-300 rounded text-right focus:ring-2 focus:ring-blue-500 text-sm sm:text-base ${getInputBackgroundColor(row, month)}`}
+                        className={`w-20 p-1 border-gray-300 rounded text-right focus:ring-2 focus:ring-blue-500 text-sm sm:text-base ${getInputBackgroundColor(
+                          row,
+                          month
+                        )}`}
                         placeholder="0.00"
                       />
                     </td>
@@ -378,18 +404,23 @@ const HomePage = ({
 
     return (
       <>
-        <h2 className="text-2xl font-semibold mb-2">Monthly Client Status Report ({currentYear})</h2>
+        <h2 className="text-2xl font-semibold mb-2">
+          Monthly Client Status Report ({currentYear})
+        </h2>
         <div className="flex mb-4">
+          // For the year dropdown in the reports section
           <select
             value={currentYear}
             onChange={(e) => {
               const selectedYear = e.target.value;
               setCurrentYear(selectedYear);
-              localStorage.setItem('currentYear', selectedYear);
-              if (typeof handleYearChange === 'function') {
+              localStorage.setItem("currentYear", selectedYear);
+              if (typeof handleYearChange === "function") {
                 handleYearChange(selectedYear);
               } else {
-                console.warn('handleYearChange is not a function in reports dropdown onChange');
+                console.warn(
+                  "handleYearChange is not a function in reports dropdown onChange"
+                );
               }
             }}
             className="p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm sm:text-base"
@@ -405,9 +436,14 @@ const HomePage = ({
           <table className="min-w-full border-collapse">
             <thead>
               <tr className="bg-gray-100">
-                <th className="border p-3 text-left font-semibold">Client Name</th>
+                <th className="border p-3 text-left font-semibold">
+                  Client Name
+                </th>
                 {months.map((month, index) => (
-                  <th key={index} className="border p-3 text-center font-semibold">
+                  <th
+                    key={index}
+                    className="border p-3 text-center font-semibold"
+                  >
                     {month.charAt(0).toUpperCase() + month.slice(1)}
                   </th>
                 ))}
@@ -416,7 +452,10 @@ const HomePage = ({
             <tbody>
               {Object.keys(monthStatus).length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="border p-3 text-center text-gray-500">
+                  <td
+                    colSpan={13}
+                    className="border p-3 text-center text-gray-500"
+                  >
                     No data available.
                   </td>
                 </tr>
@@ -428,14 +467,14 @@ const HomePage = ({
                       <td key={mIdx} className="border p-3 text-center">
                         <span
                           className={`px-2 py-1 rounded-full text-sm ${
-                            monthStatus[client][month] === 'Paid'
-                              ? 'bg-green-100 text-green-800'
-                              : monthStatus[client][month] === 'PartiallyPaid'
-                              ? 'bg-yellow-100 text-yellow-800'
-                              : 'bg-red-100 text-red-800'
+                            monthStatus[client][month] === "Paid"
+                              ? "bg-green-100 text-green-800"
+                              : monthStatus[client][month] === "PartiallyPaid"
+                              ? "bg-yellow-100 text-yellow-800"
+                              : "bg-red-100 text-red-800"
                           }`}
                         >
-                          {monthStatus[client][month] || 'Unpaid'}
+                          {monthStatus[client][month] || "Unpaid"}
                         </span>
                       </td>
                     ))}
