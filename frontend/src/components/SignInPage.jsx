@@ -116,7 +116,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
       setError('');
       
       // Send Google token to backend
-      const googleResponse = await axios.post(`${BASE_URL}/api/google-signin`, {
+      const googleResponse = await axios.post(`${BASE_URL}/google-signin`, {
         googleToken: response.credential,
       }, {
         timeout: 20000,
@@ -165,7 +165,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
       setIsLoading(true);
       setError('');
 
-      const response = await axios.post(`${BASE_URL}/api/google-signup`, {
+      const response = await axios.post(`${BASE_URL}/google-signup`, {
         email: googleEmail,
         username: chosenUsername.trim(),
       }, {
