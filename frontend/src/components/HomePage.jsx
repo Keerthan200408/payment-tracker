@@ -29,7 +29,11 @@ const HomePage = ({
   onMount,
 }) => {
   // Prevent infinite re-renders by using useCallback for onMount
-  
+  const stableOnMount = useCallback(() => {
+    if (onMount && typeof onMount === 'function') {
+      onMount();
+    }
+  }, [onMount]);
 
   // Only call onMount once when component first mounts
   useEffect(() => {
