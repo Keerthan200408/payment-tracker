@@ -7,8 +7,10 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const sanitizeHtml = require("sanitize-html");
 require("dotenv").config();
+const { OAuth2Client } = require('google-auth-library');
 
 const app = express();
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // Trust Render's proxy
 app.set("trust proxy", 1);
@@ -60,7 +62,7 @@ const spreadsheetId = process.env.SHEET_ID;
 // Helper to get year-specific sheet name
 const getPaymentSheetName = (year) => `Payments_${year}`;
 
-// Modified ensureSheet to handle year-specific sheets
+// Modified ensureSheet for Users to include GoogleEmail
 async function ensureSheet(sheetName, headers, year = null) {
   const sheets = google.sheets({ version: "v4", auth });
   try {
@@ -82,15 +84,107 @@ async function ensureSheet(sheetName, headers, year = null) {
         valueInputOption: "RAW",
         resource: { values: [headers] },
       });
+    } else if (sheetName === "Users") {
+      // Ensure GoogleEmail column exists
+      const existingHeaders = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: `${sheetName}!A1:C1`,
+      });
+      if (!existingHeaders.data.values[0].includes("GoogleEmail")) {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: `${sheetName}!A1`,
+          valueInputOption: "RAW",
+          resource: { values: [["Username", "Password", "GoogleEmail"]] },
+        });
+      }
     }
   } catch (error) {
-    console.error(
-      `Error ensuring sheet ${sheetName}${year ? "_" + year : ""}:`,
-      error
-    );
+    console.error(`Error ensuring sheet ${sheetName}${year ? "_" + year : ""}:`, error);
     throw error;
   }
 }
+
+// Google Sign-In endpoint
+app.post("/api/google-signin", async (req, res) => {
+  const { googleToken } = req.body;
+  if (!googleToken) {
+    return res.status(400).json({ error: "Google token is required" });
+  }
+  try {
+    // Verify Google token
+    const ticket = await googleClient.verifyIdToken({
+      idToken: googleToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    const email = payload.email;
+
+    // Ensure Users sheet exists with GoogleEmail column
+    await ensureSheet("Users", ["Username", "Password", "GoogleEmail"]);
+    const users = await readSheet("Users", "A2:C");
+
+    // Check if user exists
+    const user = users.find((u) => u[2] === email || u[0] === email);
+    if (user) {
+      const username = user[0];
+      const sessionToken = jwt.sign({ username }, process.env.SECRET_KEY, {
+        expiresIn: "24h",
+      });
+      res.cookie("sessionToken", sessionToken, {
+        httpOnly: true,
+        secure: true,
+        maxAge: 86400000,
+        sameSite: "None",
+        path: "/",
+      });
+      return res.json({ username, sessionToken });
+    } else {
+      return res.json({ needsUsername: true });
+    }
+  } catch (error) {
+    console.error("Google sign-in error:", error);
+    res.status(401).json({ error: "Invalid Google token" });
+  }
+});
+
+// Google Signup endpoint
+app.post("/api/google-signup", async (req, res) => {
+  let { email, username } = req.body;
+  if (!email || !username) {
+    return res.status(400).json({ error: "Email and username are required" });
+  }
+  username = sanitizeInput(username);
+  email = sanitizeInput(email);
+  if (username.length < 3 || username.length > 50) {
+    return res.status(400).json({ error: "Username must be between 3 and 50 characters" });
+  }
+  try {
+    await ensureSheet("Users", ["Username", "Password", "GoogleEmail"]);
+    const users = await readSheet("Users", "A2:C");
+    if (users.some((u) => u[0] === username)) {
+      return res.status(400).json({ error: "Username already exists" });
+    }
+    if (users.some((u) => u[2] === email)) {
+      return res.status(400).json({ error: "Google account already linked" });
+    }
+    await appendSheet("Users", [[username, null, email]]);
+    const sessionToken = jwt.sign({ username }, process.env.SECRET_KEY, {
+      expiresIn: "24h",
+    });
+    res.cookie("sessionToken", sessionToken, {
+      httpOnly: true,
+      secure: true,
+      maxAge: 86400000,
+      sameSite: "None",
+      path: "/",
+    });
+    res.json({ username, sessionToken });
+  } catch (error) {
+    console.error("Google signup error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 // Helper to calculate total due payment across years
 async function calculateTotalDuePayment(username, clientName, type) {

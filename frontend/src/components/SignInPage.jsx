@@ -1,16 +1,47 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 
-const BASE_URL = 'https://payment-tracker-aswa.onrender.com/api';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://payment-tracker-aswa.onrender.com/api';
 
-// Add fetchClients and fetchPayments as props
 const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fetchPayments }) => {
   const [isSignup, setIsSignup] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  // const [gmailId, setGmailId] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showUsernameModal, setShowUsernameModal] = useState(false);
+  const [googleEmail, setGoogleEmail] = useState('');
+  const [chosenUsername, setChosenUsername] = useState('');
+
+  // Initialize Google Sign-In
+  useEffect(() => {
+    const initializeGoogleSignIn = () => {
+      if (window.google) {
+        window.google.accounts.id.initialize({
+          client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+          callback: handleGoogleSignIn,
+          auto_select: false,
+          cancel_on_tap_outside: true,
+        });
+        window.google.accounts.id.renderButton(
+          document.getElementById('google-signin-button'),
+          { theme: 'outline', size: 'large', width: 300 }
+        );
+      }
+    };
+
+    // Load Google Identity Services script
+    if (!window.google) {
+      const script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.defer = true;
+      script.onload = initializeGoogleSignIn;
+      document.head.appendChild(script);
+    } else {
+      initializeGoogleSignIn();
+    }
+  }, []);
 
   const handleLogin = async (loginUsername, loginPassword) => {
     if (!loginUsername || !loginPassword) {
@@ -25,16 +56,15 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
         password: loginPassword,
       }, {
         timeout: 20000,
-        withCredentials: true, // Keep for cookie compatibility
+        withCredentials: true,
       });
-      console.log('Login response:', response.data);
+      
       const { username, sessionToken } = response.data;
       setCurrentUser(username);
       setSessionToken(sessionToken);
       localStorage.setItem('currentUser', username);
       localStorage.setItem('sessionToken', sessionToken);
       
-      // Only call fetch functions if they are provided as props
       if (fetchClients && fetchPayments) {
         await Promise.all([
           fetchClients(sessionToken),
@@ -43,10 +73,6 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
       }
       
       setPage('home');
-      // Remove the automatic refresh - it's causing issues
-      // setTimeout(() => {
-      //   window.location.reload();
-      // }, 3000);
     } catch (error) {
       console.error('Login error:', error.response?.data?.error || error.message);
       setError(error.response?.data?.error || 'Error logging in. Please try again.');
@@ -60,6 +86,10 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
       setError('All fields are required.');
       return;
     }
+    if (username.length < 3 || username.length > 50) {
+      setError('Username must be between 3 and 50 characters.');
+      return;
+    }
     setError('');
     setIsLoading(true);
     try {
@@ -70,7 +100,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
         timeout: 20000,
         withCredentials: true,
       });
-      console.log('Signup successful, attempting login');
+      
       await handleLogin(username, password);
     } catch (error) {
       console.error('Signup error:', error.response?.data?.error || error.message);
@@ -80,107 +110,233 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
     }
   };
 
+  const handleGoogleSignIn = async (response) => {
+    try {
+      setIsLoading(true);
+      setError('');
+      
+      // Send Google token to backend
+      const googleResponse = await axios.post(`${BASE_URL}/google-signin`, {
+        googleToken: response.credential,
+      }, {
+        timeout: 20000,
+        withCredentials: true,
+      });
+
+      if (googleResponse.data.needsUsername) {
+        const userInfo = JSON.parse(atob(response.credential.split('.')[1]));
+        setGoogleEmail(userInfo.email);
+        setChosenUsername(userInfo.email.split('@')[0]);
+        setShowUsernameModal(true);
+      } else {
+        const { username, sessionToken } = googleResponse.data;
+        setCurrentUser(username);
+        setSessionToken(sessionToken);
+        localStorage.setItem('currentUser', username);
+        localStorage.setItem('sessionToken', sessionToken);
+        
+        if (fetchClients && fetchPayments) {
+          await Promise.all([
+            fetchClients(sessionToken),
+            fetchPayments(sessionToken, new Date().getFullYear().toString())
+          ]);
+        }
+        
+        setPage('home');
+      }
+    } catch (error) {
+      console.error('Google sign-in error:', error);
+      setError(error.response?.data?.error || 'Error signing in with Google. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleUsernameSubmit = async () => {
+    if (!chosenUsername.trim()) {
+      setError('Please enter a username.');
+      return;
+    }
+    if (chosenUsername.length < 3 || chosenUsername.length > 50) {
+      setError('Username must be between 3 and 50 characters.');
+      return;
+    }
+    try {
+      setIsLoading(true);
+      setError('');
+
+      const response = await axios.post(`${BASE_URL}/google-signup`, {
+        email: googleEmail,
+        username: chosenUsername.trim(),
+      }, {
+        timeout: 20000,
+        withCredentials: true,
+      });
+
+      const { username, sessionToken } = response.data;
+      setCurrentUser(username);
+      setSessionToken(sessionToken);
+      localStorage.setItem('currentUser', username);
+      localStorage.setItem('sessionToken', sessionToken);
+      
+      if (fetchClients && fetchPayments) {
+        await Promise.all([
+          fetchClients(sessionToken),
+          fetchPayments(sessionToken, new Date().getFullYear().toString())
+        ]);
+      }
+      
+      setShowUsernameModal(false);
+      setPage('home');
+    } catch (error) {
+      console.error('Username setup error:', error);
+      setError(error.response?.data?.error || 'Error setting up username. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
-      <div className="w-full sm:max-w-md p-4 sm:p-6 bg-white rounded-lg shadow-md">
-        <h2 className="text-2xl font-semibold text-center mb-4">
-          {isSignup ? 'Sign Up' : 'Sign In'}
+      <div className="w-full max-w-md p-6 bg-white rounded-lg shadow-md">
+        <h2 className="text-2xl font-semibold text-center mb-6">
+          {isSignup ? 'Create Account' : 'Welcome Back'}
         </h2>
+        
         {error && (
-          <div className="mb-4 p-2 bg-red-100 text-red-700 rounded-lg text-center text-sm sm:text-base">
+          <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-center text-sm">
             {error}
           </div>
         )}
-        {isSignup ? (
-          <div>
-            <div className="mb-4">
-              <label className="block mb-1 text-sm sm:text-base">Username</label>
-              <input
-                type="text"
-                className="w-full p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter Username"
-                aria-label="Username"
-                disabled={isLoading}
-              />
-            </div>
-            <div className="mb-4">
-              <label className="block mb-1 text-sm sm:text-base">Password</label>
-              <input
-                type="password"
-                className="w-full p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter Password"
-                aria-label="Password"
-                disabled={isLoading}
-              />
-            </div>
+
+        {/* Google Sign-In Button */}
+        <div className="mb-6 flex justify-center">
+          <div id="google-signin-button" className="w-full max-w-[300px]"></div>
+        </div>
+
+        {/* Divider */}
+        <div className="relative mb-6">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-gray-300"></div>
+          </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="px-2 bg-white text-gray-500">Or continue with</span>
+          </div>
+        </div>
+
+        {/* Traditional Form */}
+        <div>
+          <div className="mb-4">
+            <label className="block mb-2 text-sm font-medium text-gray-700" htmlFor="username">Username</label>
+            <input
+              id="username"
+              type="text"
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Enter your username"
+              aria-label="Username"
+              disabled={isLoading}
+            />
+          </div>
+          
+          <div className="mb-6">
+            <label className="block mb-2 text-sm font-medium text-gray-700" htmlFor="password">Password</label>
+            <input
+              id="password"
+              type="password"
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
+              aria-label="Password"
+              disabled={isLoading}
+            />
+          </div>
+
+          <button
+            onClick={isSignup ? handleSignup : () => handleLogin(username, password)}
+            className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-200 disabled:bg-gray-400 font-medium"
+            disabled={isLoading}
+          >
+            {isLoading ? (isSignup ? 'Creating Account...' : 'Signing In...') : (isSignup ? 'Create Account' : 'Sign In')}
+          </button>
+
+          <p className="text-center mt-4 text-sm text-gray-600">
+            {isSignup ? 'Already have an account?' : "Don't have an account?"}{' '}
             <button
-              onClick={handleSignup}
-              className="w-full px-3 py-1.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200 disabled:bg-gray-400"
+              onClick={() => { 
+                setIsSignup(!isSignup); 
+                setError(''); 
+                setUsername('');
+                setPassword('');
+              }}
+              className="text-blue-600 hover:text-blue-700 font-medium"
               disabled={isLoading}
             >
-              {isLoading ? 'Signing Up...' : 'Sign Up'}
+              {isSignup ? 'Sign In' : 'Sign Up'}
             </button>
-            <p className="text-center mt-2 text-sm sm:text-base">
-              Already have an account?{' '}
-              <button
-                onClick={() => { setIsSignup(false); setError(''); }}
-                className="text-blue-500 hover:underline"
-                disabled={isLoading}
-              >
-                Login
-              </button>
-            </p>
-          </div>
-        ) : (
-          <div>
-            <div className="mb-4">
-              <label className="block mb-1 text-sm sm:text-base">Username</label>
-              <input
-                type="text"
-                className="w-full p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter Username"
-                aria-label="Username"
-                disabled={isLoading}
-              />
-            </div>
-            <div className="mb-4">
-              <label className="block mb-1 text-sm sm:text-base">Password</label>
-              <input
-                type="password"
-                className="w-full p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter Password"
-                aria-label="Password"
-                disabled={isLoading}
-              />
-            </div>
-            <button
-              onClick={() => handleLogin(username, password)}
-              className="w-full px-3 py-1.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition duration-200 disabled:bg-gray-400"
-              disabled={isLoading}
-            >
-              {isLoading ? 'Logging In...' : 'Login'}
-            </button>
-            <p className="text-center mt-2 text-sm sm:text-base">
-              Don't have an account?{' '}
-              <button
-                onClick={() => { setIsSignup(true); setError(''); }}
-                className="text-blue-500 hover:underline"
-                disabled={isLoading}
-              >
-                Sign Up
-              </button>
-            </p>
-          </div>
-        )}
+          </p>
+        </div>
       </div>
+
+      {/* Username Selection Modal */}
+      {showUsernameModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold mb-4">Choose Your Username</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Please choose a username for your account. This will be used for internal operations.
+            </p>
+            
+            <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+              <p className="text-sm text-gray-600">Signing in with: <span className="font-medium">{googleEmail}</span></p>
+            </div>
+
+            <div className="mb-4">
+              <label className="block mb-2 text-sm font-medium text-gray-700" htmlFor="chosen-username">Username</label>
+              <input
+                id="chosen-username"
+                type="text"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                value={chosenUsername}
+                onChange={(e) => setChosenUsername(e.target.value)}
+                placeholder="Enter your preferred username"
+                aria-label="Preferred Username"
+                disabled={isLoading}
+              />
+            </div>
+
+            {error && (
+              <div className="mb-4 p-2 bg-red-100 text-red-700 rounded-lg text-center text-sm">
+                {error}
+              </div>
+            )}
+
+            <div className="flex space-x-3">
+              <button
+                onClick={() => {
+                  setShowUsernameModal(false);
+                  setGoogleEmail('');
+                  setChosenUsername('');
+                  setError('');
+                }}
+                className="flex-1 py-2 px-4 border border-gray-300 rounded-lg hover:bg-gray-50 transition duration-200"
+                disabled={isLoading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUsernameSubmit}
+                className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition duration-200 disabled:bg-gray-400"
+                disabled={isLoading}
+              >
+                {isLoading ? 'Creating...' : 'Continue'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
