@@ -293,13 +293,13 @@ const handleAddNewYear = useCallback(async () => {
     return "PartiallyPaid";
   }, []);
 
-  const getInputBackgroundColor = useCallback((row, month) => {
-    const status = getPaymentStatusForMonth(row, month);
-    if (status === "Unpaid") return "bg-red-100/60";
-    if (status === "PartiallyPaid") return "bg-yellow-100/60";
-    if (status === "Paid") return "bg-green-100/60";
-    return "bg-white";
-  }, [getPaymentStatusForMonth]);
+ const getInputBackgroundColor = useCallback((row, month) => {
+  const status = getPaymentStatusForMonth(row, month);
+  if (status === "Unpaid") return "bg-red-200/50";
+  if (status === "PartiallyPaid") return "bg-yellow-200/50";
+  if (status === "Paid") return "bg-green-200/50";
+  return "bg-white";
+}, [getPaymentStatusForMonth]);
 
   // Memoized filtered data to prevent unnecessary re-calculations
   const filteredData = useMemo(() => {
@@ -530,96 +530,157 @@ const handleAddNewYear = useCallback(async () => {
   );
 
   const renderReports = () => {
-    const monthStatus = useMemo(() => {
-  return paymentsData.reduce((acc, row) => {
-    if (!acc[row.Client_Name]) {
-      acc[row.Client_Name] = {};
-    }
-    months.forEach((month) => {
-      acc[row.Client_Name][month] = getMonthlyStatus(row, month);
-    });
-    return acc;
-  }, {});
-}, [paymentsData, months, getMonthlyStatus]);
+  const monthStatus = useMemo(() => {
+    return paymentsData.reduce((acc, row) => {
+      if (!acc[row.Client_Name]) {
+        acc[row.Client_Name] = {};
+      }
+      months.forEach((month) => {
+        acc[row.Client_Name][month] = getMonthlyStatus(row, month);
+      });
+      return acc;
+    }, {});
+  }, [paymentsData, months, getMonthlyStatus]);
 
-return (
-  <>
-    <h2 className="text-xl font-medium text-gray-900 mb-4">
-      Monthly Client Status Report ({selectedYear})
-    </h2>
-    <div className="flex mb-6">
-      <select
-        value={selectedYear}
-        onChange={(e) => {
-          const year = e.target.value;
-          console.log("HomePage.jsx: Reports dropdown year changed to:", year);
-          setSelectedYear(year);
-          if (typeof handleYearChange === "function") {
-            handleYearChange(year);
-          }
-        }}
-        className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
-        disabled={isLoadingYears}
-      >
-        {availableYears.map((year) => (
-          <option key={year} value={year}>
-            {year}
-          </option>
-        ))}
-      </select>
-    </div>
-    <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Client Name
-              </th>
-              {months.map((month, index) => (
-                <th
-                  key={index}
-                  className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
-                >
-                  {month.charAt(0).toUpperCase() + month.slice(1)}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {Object.keys(monthStatus).length === 0 ? (
-              <tr>
-                <td
-                  colSpan={13}
-                  className="px-6 py-12 text-center text-gray-500"
-                >
-                  No data available.
-                </td>
-              </tr>
-            ) : (
-              Object.keys(monthStatus).map((client, idx) => (
-                <tr key={idx} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">{client}</td>
-                  {months.map((month, mIdx) => (
-                    <td key={mIdx} className="px-6 py-4 whitespace-nowrap text-center">
-                      <span
-                        className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800"
-                      >
-                        {monthStatus[client][month] || "Unpaid"}
-                      </span>
-                    </td>
-                  ))}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </>
-);
+  const getStatusBackgroundColor = (status) => {
+    if (status === "Unpaid") return "bg-red-200/50 text-red-800";
+    if (status === "PartiallyPaid") return "bg-yellow-200/50 text-yellow-800";
+    if (status === "Paid") return "bg-green-200/50 text-green-800";
+    return "bg-gray-100 text-gray-800";
   };
 
+  const entriesPerPage = 10;
+  const totalEntries = Object.keys(monthStatus).length;
+  const totalPages = Math.ceil(totalEntries / entriesPerPage);
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const paginatedClients = Object.keys(monthStatus).slice(
+    (currentPage - 1) * entriesPerPage,
+    currentPage * entriesPerPage
+  );
+
+  return (
+    <>
+      <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 mb-6">
+        <div className="relative flex-1 sm:w-1/3">
+          <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+          <input
+            type="text"
+            placeholder="Search by client..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base"
+          />
+        </div>
+        <select
+          value={selectedYear}
+          onChange={(e) => {
+            const year = e.target.value;
+            console.log("HomePage.jsx: Reports dropdown year changed to:", year);
+            setSelectedYear(year);
+            if (typeof handleYearChange === "function") {
+              handleYearChange(year);
+            }
+          }}
+          className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+          disabled={isLoadingYears}
+        >
+          {availableYears.map((year) => (
+            <option key={year} value={year}>
+              {year}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Client
+                </th>
+                {months.map((month, index) => (
+                  <th
+                    key={index}
+                    className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    {month.charAt(0).toUpperCase() + month.slice(1)} {selectedYear}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {paginatedClients.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={13}
+                    className="px-6 py-12 text-center text-gray-500"
+                  >
+                    No data available.
+                  </td>
+                </tr>
+              ) : (
+                paginatedClients.map((client, idx) => (
+                  <tr key={idx} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap flex items-center text-sm sm:text-base text-gray-900">
+                      <i className="fas fa-user-circle mr-2 text-gray-400"></i>
+                      {client}
+                    </td>
+                    {months.map((month, mIdx) => (
+                      <td key={mIdx} className="px-6 py-4 whitespace-nowrap text-center">
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBackgroundColor(monthStatus[client][month] || "Unpaid")}`}
+                        >
+                          {monthStatus[client][month] || "Unpaid"}
+                        </span>
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="flex flex-col sm:flex-row justify-between items-center mt-6 space-y-3 sm:space-y-0">
+        <p className="text-sm sm:text-base text-gray-700">
+          Showing {(currentPage - 1) * entriesPerPage + 1} to{' '}
+          {Math.min(currentPage * entriesPerPage, totalEntries)} of {totalEntries}{' '}
+          entries
+        </p>
+        <div className="flex space-x-2">
+          <button
+            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+            disabled={currentPage === 1}
+            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base disabled:opacity-50 hover:bg-gray-50 transition duration-200"
+          >
+            Previous
+          </button>
+          {[...Array(totalPages)].map((_, i) => (
+            <button
+              key={i}
+              onClick={() => setCurrentPage(i + 1)}
+              className={`px-4 py-2 border border-gray-300 rounded-md text-sm sm:text-base ${
+                currentPage === i + 1 ? 'bg-gray-800 text-white' : 'text-gray-700 hover:bg-gray-50'
+              } transition duration-200`}
+            >
+              {i + 1}
+            </button>
+          ))}
+          <button
+            onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+            disabled={currentPage === totalPages}
+            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base disabled:opacity-50 hover:bg-gray-50 transition duration-200"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    </>
+  );
+};
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       {isReportsPage ? renderReports() : renderDashboard()}
