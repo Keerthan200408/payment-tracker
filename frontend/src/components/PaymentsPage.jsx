@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
+
 const BASE_URL = 'https://payment-tracker-aswa.onrender.com/api';
 
 const PaymentsPage = ({ paymentsData, setPaymentsData, fetchClients, fetchPayments, sessionToken, isImporting, currentYear, setCurrentYear, handleYearChange }) => {
@@ -151,73 +152,94 @@ const PaymentsPage = ({ paymentsData, setPaymentsData, fetchClients, fetchPaymen
   );
 
   return (
-    <div>
-      <h1 className="text-2xl font-semibold mb-4">Payments</h1>
-      <div className="max-h-[60vh] overflow-y-auto w-full rounded-lg shadow bg-white">
-        <div className="mb-4">
-          <select
-            value={selectedYear}
-            onChange={(e) => {
-              const year = e.target.value;
-              console.log('PaymentsPage.jsx: Dropdown year changed to:', year);
-              setSelectedYear(year);
-              handleYearChange(year);
-            }}
-            className="p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm sm:text-base"
-          >
-            {availableYears.map((year) => (
-              <option key={year} value={year}>
-                {year}
-              </option>
-            ))}
-          </select>
-        </div>
-        <table className="min-w-[1200px] w-full">
-          <thead>
-            <tr className="bg-blue-100 text-left">
-              <th className="p-2 text-center border-gray-200">Client</th>
-              <th className="p-2 text-center border-gray-200">Type</th>
-              <th className="p-2 text-center border-gray-200">Amount To Be Paid</th>
-              {months.map((month) => (
-                <th key={month} className="p-2 text-center border-gray-200">
-                  {month.charAt(0).toUpperCase() + month.slice(1)}
-                </th>
-              ))}
-              <th className="p-2 text-center border-gray-200">Total Due</th>
-            </tr>
-          </thead>
-          <tbody>
-            {paginatedData.map((payment, index) => (
-              <tr key={index} className="border-t border-gray-200">
-                <td className="p-2 flex items-center text-sm sm:text-base">
-                  <i className="fas fa-user-circle mr-2"></i>
-                  {payment.Client_Name}
-                </td>
-                <td className="p-2 text-center text-sm sm:text-base">{payment.Type || 'N/A'}</td>
-                <td className="p-2 text-center text-sm sm:text-base">₹{payment.Amount_To_Be_Paid}</td>
-                {months.map((month) => (
-                  <td key={month} className="p-2 text-center text-sm sm:text-base">
-                    {payment[month] || '—'}
-                  </td>
-                ))}
-                <td className="p-2 text-center text-sm sm:text-base">₹{payment.Due_Payment}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div className="p-6 bg-gray-50 min-h-screen">
+      <h2 className="text-xl font-medium text-gray-700 mb-4">Payments</h2>
+      <div className="mb-6">
+        <select
+          value={selectedYear}
+          onChange={(e) => {
+            const year = e.target.value;
+            console.log('PaymentsPage.jsx: Dropdown year changed to:', year);
+            setSelectedYear(year);
+            handleYearChange(year);
+          }}
+          className="p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+        >
+          {availableYears.map((year) => (
+            <option key={year} value={year}>
+              {year}
+            </option>
+          ))}
+        </select>
       </div>
-
-      <div className="flex flex-col sm:flex-row justify-between items-center mt-4 space-y-3 sm:space-y-0">
-        <p className="text-sm sm:text-base">
+      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Client
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Type
+                </th>
+                <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Amount To Be Paid
+                </th>
+                {months.map((month) => (
+                  <th
+                    key={month}
+                    className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    {month.charAt(0).toUpperCase() + month.slice(1)}
+                  </th>
+                ))}
+                <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Total Due
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {paginatedData.map((payment, index) => (
+                <tr key={index} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm sm:text-base text-gray-900">
+                    <i className="fas fa-user-circle mr-2 text-gray-400"></i>
+                    {payment.Client_Name}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-center text-sm sm:text-base text-gray-900">
+                    {payment.Type || 'N/A'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm sm:text-base text-gray-900">
+                    ₹{payment.Amount_To_Be_Paid}
+                  </td>
+                  {months.map((month) => (
+                    <td
+                      key={month}
+                      className="px-6 py-4 whitespace-nowrap text-right text-sm sm:text-base text-gray-900"
+                    >
+                      {payment[month] || '—'}
+                    </td>
+                  ))}
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm sm:text-base text-gray-900">
+                    ₹{payment.Due_Payment}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div className="flex flex-col sm:flex-row justify-between items-center mt-6 space-y-3 sm:space-y-0">
+        <p className="text-sm sm:text-base text-gray-700">
           Showing {(currentPage - 1) * entriesPerPage + 1} to{' '}
           {Math.min(currentPage * entriesPerPage, totalEntries)} of {totalEntries}{' '}
           entries
         </p>
-        <div className="flex flex-wrap justify-center sm:justify-end space-x-2">
+        <div className="flex space-x-2">
           <button
             onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
             disabled={currentPage === 1}
-            className="px-3 py-1.5 border rounded-md disabled:opacity-50 text-sm sm:text-base"
+            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base disabled:opacity-50 hover:bg-gray-50 transition duration-200"
           >
             Previous
           </button>
@@ -225,9 +247,9 @@ const PaymentsPage = ({ paymentsData, setPaymentsData, fetchClients, fetchPaymen
             <button
               key={i}
               onClick={() => setCurrentPage(i + 1)}
-              className={`px-3 py-1.5 border rounded-md text-sm sm:text-base ${
-                currentPage === i + 1 ? 'bg-blue-500 text-white' : ''
-              }`}
+              className={`px-4 py-2 border border-gray-300 rounded-md text-sm sm:text-base ${
+                currentPage === i + 1 ? 'bg-gray-800 text-white' : 'text-gray-700 hover:bg-gray-50'
+              } transition duration-200`}
             >
               {i + 1}
             </button>
@@ -235,7 +257,7 @@ const PaymentsPage = ({ paymentsData, setPaymentsData, fetchClients, fetchPaymen
           <button
             onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
             disabled={currentPage === totalPages}
-            className="px-3 py-1.5 border rounded-md disabled:opacity-50 text-sm sm:text-base"
+            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base disabled:opacity-50 hover:bg-gray-50 transition duration-200"
           >
             Next
           </button>
