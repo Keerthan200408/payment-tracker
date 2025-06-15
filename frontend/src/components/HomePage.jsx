@@ -276,6 +276,7 @@ const handleAddNewYear = useCallback(async () => {
     return () => document.removeEventListener("click", handleClickOutside);
   }, [hideContextMenu]);
 
+  
   // Memoized helper functions
   const getPaymentStatusForMonth = useCallback((row, month) => {
     const amountToBePaid = parseFloat(row.Amount_To_Be_Paid) || 0;
@@ -438,33 +439,33 @@ const handleAddNewYear = useCallback(async () => {
         </select>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full" ref={tableRef}>
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Client Name
-                </th>
-                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Type
-                </th>
-                <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Amount To Be Paid
-                </th>
-                {months.map((month, index) => (
-                  <th
-                    key={index}
-                    className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    {month.charAt(0).toUpperCase() + month.slice(1)}
-                  </th>
-                ))}
-                <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Due Payment
-                </th>
-              </tr>
-            </thead>
+     <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+  <div className="overflow-x-auto max-h-96 overflow-y-auto">
+    <table className="w-full" ref={tableRef}>
+      <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
+        <tr>
+          <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+            Client Name
+          </th>
+          <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+            Type
+          </th>
+          <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+            Amount To Be Paid
+          </th>
+          {months.map((month, index) => (
+            <th
+              key={index}
+              className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50"
+            >
+              {month.charAt(0).toUpperCase() + month.slice(1)}
+            </th>
+          ))}
+          <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+            Due Payment
+          </th>
+        </tr>
+      </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredData.length === 0 ? (
                 <tr>
@@ -604,23 +605,23 @@ const handleAddNewYear = useCallback(async () => {
         </select>
       </div>
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Client
-                </th>
-                {months.map((month, index) => (
-                  <th
-                    key={index}
-                    className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
-                  >
-                    {month.charAt(0).toUpperCase() + month.slice(1)} {selectedYear}
-                  </th>
-                ))}
-              </tr>
-            </thead>
+  <div className="overflow-x-auto max-h-96 overflow-y-auto">
+    <table className="w-full">
+      <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
+        <tr>
+          <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+            Client
+          </th>
+          {months.map((month, index) => (
+            <th
+              key={index}
+              className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50"
+            >
+              {month.charAt(0).toUpperCase() + month.slice(1)} {selectedYear}
+            </th>
+          ))}
+        </tr>
+      </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {paginatedClients.length === 0 ? (
                 <tr>
