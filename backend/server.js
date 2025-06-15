@@ -29,9 +29,14 @@ app.use(
     optionsSuccessStatus: 204,
   })
 );
-// Add these headers specifically for Google Sign-in
+// Add this middleware BEFORE your routes
 app.use((req, res, next) => {
-  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  // Remove or relax COOP policy for Google Sign-in
+  res.setHeader('Cross-Origin-Opener-Policy', 'unsafe-none');
+  // OR try this alternative:
+  // res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  
+  // Also set these for compatibility
   res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
   next();
 });
