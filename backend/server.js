@@ -609,6 +609,7 @@ app.delete("/api/delete-client", authenticateToken, async (req, res) => {
 });
 
 // Updated get-payments-by-year endpoint
+// Updated get-payments-by-year endpoint
 app.get("/api/get-payments-by-year", authenticateToken, async (req, res) => {
   const { year } = req.query;
   if (!year || isNaN(year)) {
@@ -661,34 +662,56 @@ app.get("/api/get-payments-by-year", authenticateToken, async (req, res) => {
       Due_Payment: parseFloat(payment[16]) || 0,
     }));
 
-    // Add previous year's due payments for years after 2025
+    // Add cumulative due payments for years after 2025
     if (parseInt(year) > 2025) {
-      const prevYear = (parseInt(year) - 1).toString();
-      try {
-        const prevYearPayments = await readSheet(getPaymentSheetName(prevYear), "A2:R");
-        const prevUserPayments = prevYearPayments.filter(
-          (payment) => payment[0] === req.user.username
-        );
-
-        // Create a map of previous year's due payments by client and type
-        const prevDuePaymentMap = new Map();
-        prevUserPayments.forEach((payment) => {
-          const key = `${payment[1]}_${payment[2]}`; // Client_Name_Type
-          prevDuePaymentMap.set(key, parseFloat(payment[16]) || 0);
+      // Recursively calculate cumulative due payments from all previous years
+      const calculateCumulativeDue = async (targetYear) => {
+        if (parseInt(targetYear) <= 2025) {
+          // Base case: 2025 - return just its due payments
+          const payments = await readSheet(getPaymentSheetName(targetYear), "A2:R");
+          const userPayments = payments.filter(p => p[0] === req.user.username);
+          const dueMap = new Map();
+          userPayments.forEach(payment => {
+            const key = `${payment[1]}_${payment[2]}`;
+            dueMap.set(key, parseFloat(payment[16]) || 0);
+          });
+          return dueMap;
+        }
+        
+        // Recursive case: get previous year's cumulative + current year's due
+        const prevYear = (parseInt(targetYear) - 1).toString();
+        const prevCumulativeDue = await calculateCumulativeDue(prevYear);
+        
+        const payments = await readSheet(getPaymentSheetName(targetYear), "A2:R");
+        const userPayments = payments.filter(p => p[0] === req.user.username);
+        
+        const cumulativeMap = new Map();
+        userPayments.forEach(payment => {
+          const key = `${payment[1]}_${payment[2]}`;
+          const currentDue = parseFloat(payment[16]) || 0;
+          const prevCumulative = prevCumulativeDue.get(key) || 0;
+          cumulativeMap.set(key, currentDue + prevCumulative);
         });
+        
+        return cumulativeMap;
+      };
 
-        // Add previous year's due payment to current year's due payment
+      try {
+        const prevYear = (parseInt(year) - 1).toString();
+        const prevYearCumulativeDue = await calculateCumulativeDue(prevYear);
+
+        // Add previous year's cumulative due payment to current year's due payment
         processedPayments = processedPayments.map((payment) => {
           const key = `${payment.Client_Name}_${payment.Type}`;
-          const prevDuePayment = prevDuePaymentMap.get(key) || 0;
+          const prevCumulativeDue = prevYearCumulativeDue.get(key) || 0;
           return {
             ...payment,
-            Due_Payment: payment.Due_Payment + prevDuePayment,
+            Due_Payment: payment.Due_Payment + prevCumulativeDue,
           };
         });
       } catch (error) {
-        console.warn(`Could not fetch previous year ${prevYear} data:`, error.message);
-        // Continue with current year data only if previous year doesn't exist
+        console.warn(`Could not calculate cumulative due for previous years:`, error.message);
+        // Continue with current year data only if calculation fails
       }
     }
 
@@ -704,6 +727,86 @@ app.get("/api/get-payments-by-year", authenticateToken, async (req, res) => {
     res
       .status(500)
       .json({ error: `Failed to fetch payments for year ${year}` });
+  }
+});
+
+// Updated save-payment endpoint to handle cumulative due payments
+app.post("/api/save-payment", authenticateToken, async (req, res) => {
+  const { rowIndex, updatedRow, month, value } = req.body;
+  const year = req.query.year || new Date().getFullYear().toString();
+
+  try {
+    const sheetName = getPaymentSheetName(year);
+    const payments = await readSheet(sheetName, "A2:R");
+    const userPayments = payments.filter(
+      (payment) => payment[0] === req.user.username
+    );
+
+    if (rowIndex < 0 || rowIndex >= userPayments.length) {
+      return res.status(400).json({ error: "Invalid row index" });
+    }
+
+    // Find the actual row in the sheet
+    const targetPayment = userPayments[rowIndex];
+    const actualRowIndex = payments.findIndex(
+      (payment) =>
+        payment[0] === targetPayment[0] &&
+        payment[1] === targetPayment[1] &&
+        payment[2] === targetPayment[2]
+    );
+
+    if (actualRowIndex === -1) {
+      return res.status(404).json({ error: "Payment record not found" });
+    }
+
+    // Calculate current year's due payment (without previous year's)
+    const amountToBePaid = parseFloat(updatedRow.Amount_To_Be_Paid) || 0;
+    const months = [
+      "january", "february", "march", "april", "may", "june",
+      "july", "august", "september", "october", "november", "december"
+    ];
+    
+    const activeMonths = months.filter(
+      (m) => updatedRow[m] && parseFloat(updatedRow[m]) >= 0
+    ).length;
+    
+    const expectedPayment = amountToBePaid * activeMonths;
+    const totalPayments = months.reduce(
+      (sum, m) => sum + (parseFloat(updatedRow[m]) || 0),
+      0
+    );
+    
+    const currentYearDuePayment = Math.max(expectedPayment - totalPayments, 0);
+
+    // Update the row in the sheet with current year's due payment only
+    const updatedRowData = [
+      updatedRow.User,
+      updatedRow.Client_Name,
+      updatedRow.Type,
+      updatedRow.Amount_To_Be_Paid,
+      updatedRow.january || "",
+      updatedRow.february || "",
+      updatedRow.march || "",
+      updatedRow.april || "",
+      updatedRow.may || "",
+      updatedRow.june || "",
+      updatedRow.july || "",
+      updatedRow.august || "",
+      updatedRow.september || "",
+      updatedRow.october || "",
+      updatedRow.november || "",
+      updatedRow.december || "",
+      currentYearDuePayment.toFixed(2),
+    ];
+
+    const range = `${sheetName}!A${actualRowIndex + 2}:Q${actualRowIndex + 2}`;
+    await updateSheet(range, [updatedRowData]);
+
+    console.log(`Payment updated for ${updatedRow.Client_Name} in ${year}`);
+    res.json({ message: "Payment saved successfully" });
+  } catch (error) {
+    console.error("Save payment error:", error);
+    res.status(500).json({ error: "Failed to save payment" });
   }
 });
 
@@ -1310,6 +1413,7 @@ app.post("/api/add-new-year", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Failed to add new year" });
   }
 });
+
 
 // Modified /api/import-csv to handle current year
 app.post("/api/import-csv", authenticateToken, async (req, res) => {

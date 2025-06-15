@@ -732,23 +732,30 @@ const App = () => {
     );
     const currentYearDuePayment = Math.max(expectedPayment - totalPayments, 0);
 
-    // Get previous year's due payment if not 2025
-    let prevYearDuePayment = 0;
+    // Get previous year's cumulative due payment if not 2025
+    let prevYearCumulativeDue = 0;
     if (parseInt(year) > 2025) {
-      // This should be fetched from the server or stored in state
-      // For now, we'll calculate it based on the original Due_Payment minus current year calculation
+      // The original Due_Payment from server already includes cumulative calculation
+      // We need to extract just the current year portion for calculation
       const originalDuePayment = parseFloat(paymentsData[rowIndex].Due_Payment) || 0;
-      const originalCurrentYearDue = Math.max(
-        (parseFloat(paymentsData[rowIndex].Amount_To_Be_Paid) || 0) * 
-        months.filter(m => paymentsData[rowIndex][m] && parseFloat(paymentsData[rowIndex][m]) >= 0).length -
-        months.reduce((sum, m) => sum + (parseFloat(paymentsData[rowIndex][m]) || 0), 0), 
-        0
+      
+      // Calculate what the current year due payment should be
+      const originalAmountToBePaid = parseFloat(paymentsData[rowIndex].Amount_To_Be_Paid) || 0;
+      const originalActiveMonths = months.filter(
+        m => paymentsData[rowIndex][m] && parseFloat(paymentsData[rowIndex][m]) >= 0
+      ).length;
+      const originalExpectedPayment = originalAmountToBePaid * originalActiveMonths;
+      const originalTotalPayments = months.reduce(
+        (sum, m) => sum + (parseFloat(paymentsData[rowIndex][m]) || 0), 0
       );
-      prevYearDuePayment = Math.max(originalDuePayment - originalCurrentYearDue, 0);
+      const originalCurrentYearDue = Math.max(originalExpectedPayment - originalTotalPayments, 0);
+      
+      // Previous cumulative due = Total due - Current year due
+      prevYearCumulativeDue = Math.max(originalDuePayment - originalCurrentYearDue, 0);
     }
 
     // Display cumulative due payment (current + previous years)
-    rowData.Due_Payment = (currentYearDuePayment + prevYearDuePayment).toFixed(2);
+    rowData.Due_Payment = (currentYearDuePayment + prevYearCumulativeDue).toFixed(2);
 
     // Update UI immediately
     setPaymentsData(updatedPayments);
@@ -800,6 +807,7 @@ const App = () => {
       delete saveTimeouts.current[timeoutKey];
     }, 500);
   };
+
 
   return (
     <ErrorBoundary>
