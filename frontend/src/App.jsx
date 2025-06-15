@@ -66,32 +66,39 @@ const App = () => {
 
   axios.defaults.withCredentials = true;
 
-  useEffect(() => {
-    const storedUser = localStorage.getItem("currentUser");
-    const storedToken = localStorage.getItem("sessionToken");
-    const storedPage = localStorage.getItem("currentPage");
-    const storedYear = localStorage.getItem("currentYear");
-    const storedYears = localStorage.getItem("availableYears");
+  
+ useEffect(() => {
+  const storedUser = localStorage.getItem("currentUser");
+  const storedToken = localStorage.getItem("sessionToken");
+  const storedPage = localStorage.getItem("currentPage");
+  const storedYear = localStorage.getItem("currentYear");
 
-    console.log("App.jsx: Stored sessionToken on load:", storedToken);
-    if (storedUser && storedToken) {
-      console.log("Restoring session for user:", storedUser);
-      setCurrentUser(storedUser);
-      setSessionToken(storedToken);
-      setPage(storedPage || "home");
-      const yearToSet =
-        storedYear && parseInt(storedYear) >= 2025 ? storedYear : "2025";
-      console.log("App.jsx: Setting sessionToken:", storedToken);
-      console.log("App.jsx: Setting currentYear:", yearToSet);
-      setCurrentYear(yearToSet);
-      fetchClients(storedToken);
-      // Fetch payments will be handled by HomePage's useEffect
-    } else {
-      console.log(
-        "App.jsx: No stored user or token, skipping session restoration"
-      );
-    }
-  }, []);
+  console.log("App.jsx: Stored sessionToken on load:", storedToken);
+  if (storedUser && storedToken) {
+    console.log("Restoring session for user:", storedUser);
+    setCurrentUser(storedUser);
+    setSessionToken(storedToken);
+    // Set page to storedPage if valid, otherwise default to "home"
+    const validPages = ["home", "clients", "payments", "reports", "addClient"];
+    setPage(validPages.includes(storedPage) ? storedPage : "home");
+    const yearToSet =
+      storedYear && parseInt(storedYear) >= 2025 ? storedYear : "2025";
+    console.log("App.jsx: Setting sessionToken:", storedToken);
+    console.log("App.jsx: Setting currentYear:", yearToSet);
+    setCurrentYear(yearToSet);
+    fetchClients(storedToken);
+  } else {
+    console.log(
+      "App.jsx: No stored user or token, skipping session restoration"
+    );
+    setPage("signIn");
+  }
+}, []);
+  useEffect(() => {
+  if (page !== "signIn") {
+    localStorage.setItem("currentPage", page);
+  }
+}, [page]);
 
   useEffect(() => {
     if (sessionToken && currentYear) {
