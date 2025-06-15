@@ -910,14 +910,7 @@ const App = () => {
                     <i className="fas fa-chart-line mr-3 w-4"></i> Reports
                   </button>
                 </li>
-                <li className="pt-4 mt-4 border-t border-gray-200"> {/* Added separator */}
-                  <button
-                    onClick={logout}
-                    className="w-full text-left p-3 hover:bg-red-50 rounded-lg text-red-600 flex items-center transition-colors" // Updated styling
-                  >
-                    <i className="fas fa-sign-out-alt mr-3 w-4"></i> Logout
-                  </button>
-                </li>
+                
               </ul>
             </nav>
 
@@ -950,7 +943,7 @@ const App = () => {
                         <p className="font-semibold text-gray-900">
                           {currentUser}
                         </p>
-                        <p className="text-sm text-gray-500">Administrator</p> {/* Added role */}
+                        {/* <p className="text-sm text-gray-500">Administrator</p> Added role */}
                       </div>
                       <button
                         onClick={logout}

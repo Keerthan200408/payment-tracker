@@ -20,6 +20,10 @@ const ClientsPage = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const entriesPerPage = 10;
+  const totalEntries = clientsData?.length || 0;
+  const totalPages = Math.ceil(totalEntries / entriesPerPage);
 
   // Ensure data is loaded when component mounts
   useEffect(() => {
@@ -51,6 +55,11 @@ const ClientsPage = ({
       client.Client_Name?.toLowerCase().includes(searchQuery.toLowerCase())
   ) || [];
 
+  const paginatedClients = filteredClients.slice(
+    (currentPage - 1) * entriesPerPage,
+    currentPage * entriesPerPage
+  );
+
   const handleDelete = async (client) => {
     if (
       !confirm(
@@ -75,6 +84,12 @@ const ClientsPage = ({
         (c) => !(c.Client_Name === client.Client_Name && c.Type === client.Type)
       );
       setClientsData(updatedClients);
+
+      // Adjust current page if necessary
+      const newTotalPages = Math.ceil(updatedClients.length / entriesPerPage);
+      if (currentPage > newTotalPages && newTotalPages > 0) {
+        setCurrentPage(newTotalPages);
+      }
 
       // Refresh data with proper year parameter
       const refreshPromises = [fetchClients(sessionToken)];
@@ -162,17 +177,17 @@ const ClientsPage = ({
             disabled={isImporting}
           />
           <label
-  htmlFor="csv-import-clients"
-  className={`px-4 py-2 rounded-lg text-gray-700 bg-white border border-gray-300 flex items-center ${
-    isImporting
-      ? "opacity-50 cursor-not-allowed"
-      : "hover:bg-gray-50 cursor-pointer"
-  } transition duration-200`}
-  disabled={isLoading || deleteInProgress}
->
-  <i className="fas fa-upload mr-2"></i>
-  {isImporting ? "Importing..." : "Bulk Import"}
-</label>
+            htmlFor="csv-import-clients"
+            className={`px-4 py-2 rounded-lg text-gray-700 bg-white border border-gray-300 flex items-center ${
+              isImporting
+                ? "opacity-50 cursor-not-allowed"
+                : "hover:bg-gray-50 cursor-pointer"
+            } transition duration-200`}
+            disabled={isLoading || deleteInProgress}
+          >
+            <i className="fas fa-upload mr-2"></i>
+            {isImporting ? "Importing..." : "Bulk Import"}
+          </label>
         </div>
         
         <div className="flex gap-3 w-full sm:w-auto">
@@ -226,7 +241,7 @@ const ClientsPage = ({
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredClients.length === 0 ? (
+              {paginatedClients.length === 0 ? (
                 <tr>
                   <td
                     colSpan={5}
@@ -244,7 +259,7 @@ const ClientsPage = ({
                   </td>
                 </tr>
               ) : (
-                filteredClients.map((client, index) => (
+                paginatedClients.map((client, index) => (
                   <tr key={`${client.Client_Name}-${client.Type}-${index}`} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
@@ -300,33 +315,93 @@ const ClientsPage = ({
             </tbody>
           </table>
         </div>
-        
-        {/* Table Footer with Pagination */}
-        {filteredClients.length > 0 && (
-          <div className="bg-white px-6 py-3 border-t border-gray-200 flex items-center justify-between">
-            <div className="text-sm text-gray-700">
-              Showing 1 to 10 of {filteredClients.length} entries
-            </div>
-            <div className="flex items-center space-x-2">
-              <button className="px-3 py-1 text-sm border border-gray-300 rounded text-gray-500 bg-white hover:bg-gray-50 disabled:opacity-50" disabled>
-                Previous
-              </button>
-              <button className="px-3 py-1 text-sm bg-gray-800 text-white rounded">
-                1
-              </button>
-              <button className="px-3 py-1 text-sm border border-gray-300 rounded text-gray-700 bg-white hover:bg-gray-50">
-                2
-              </button>
-              <button className="px-3 py-1 text-sm border border-gray-300 rounded text-gray-700 bg-white hover:bg-gray-50">
-                3
-              </button>
-              <button className="px-3 py-1 text-sm border border-gray-300 rounded text-gray-700 bg-white hover:bg-gray-50">
-                Next
-              </button>
-            </div>
-          </div>
-        )}
       </div>
+
+      {/* Pagination Section */}
+      {filteredClients.length > 0 && (
+        <div className="flex flex-col sm:flex-row justify-between items-center mt-6 space-y-3 sm:space-y-0">
+          <p className="text-sm sm:text-base text-gray-700">
+            Showing {(currentPage - 1) * entriesPerPage + 1} to{' '}
+            {Math.min(currentPage * entriesPerPage, filteredClients.length)} of {filteredClients.length}{' '}
+            entries
+          </p>
+          <div className="flex flex-wrap justify-center gap-2 max-w-md">
+            <button
+              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base disabled:opacity-50 hover:bg-gray-50 transition duration-200"
+            >
+              Previous
+            </button>
+            {totalPages <= 5 ? (
+              [...Array(totalPages)].map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setCurrentPage(i + 1)}
+                  className={`px-4 py-2 border border-gray-300 rounded-md text-sm sm:text-base ${
+                    currentPage === i + 1 ? 'bg-gray-800 text-white' : 'text-gray-700 hover:bg-gray-50'
+                  } transition duration-200`}
+                >
+                  {i + 1}
+                </button>
+              ))
+            ) : (
+              <>
+                {currentPage > 3 && (
+                  <>
+                    <button
+                      onClick={() => setCurrentPage(1)}
+                      className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base hover:bg-gray-50 transition duration-200"
+                    >
+                      1
+                    </button>
+                    {currentPage > 4 && (
+                      <span className="px-4 py-2 text-gray-700">...</span>
+                    )}
+                  </>
+                )}
+                {[...Array(5)].map((_, i) => {
+                  const pageNum = currentPage <= 3 ? i + 1 : currentPage - 2 + i;
+                  if (pageNum <= totalPages && pageNum > 0) {
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`px-4 py-2 border border-gray-300 rounded-md text-sm sm:text-base ${
+                          currentPage === pageNum ? 'bg-gray-800 text-white' : 'text-gray-700 hover:bg-gray-50'
+                        } transition duration-200`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  }
+                  return null;
+                })}
+                {currentPage < totalPages - 2 && (
+                  <>
+                    {currentPage < totalPages - 3 && (
+                      <span className="px-4 py-2 text-gray-700">...</span>
+                    )}
+                    <button
+                      onClick={() => setCurrentPage(totalPages)}
+                      className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base hover:bg-gray-50 transition duration-200"
+                    >
+                      {totalPages}
+                    </button>
+                  </>
+                )}
+              </>
+            )}
+            <button
+              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages}
+              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base disabled:opacity-50 hover:bg-gray-50 transition duration-200"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
