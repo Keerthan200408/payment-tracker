@@ -29,11 +29,7 @@ const HomePage = ({
   onMount,
 }) => {
   // Prevent infinite re-renders by using useCallback for onMount
-  const stableOnMount = useCallback(() => {
-    if (onMount && typeof onMount === 'function') {
-      onMount();
-    }
-  }, [onMount]);
+  
 
   // Only call onMount once when component first mounts
   useEffect(() => {
@@ -330,22 +326,17 @@ const handleAddNewYear = useCallback(async () => {
 
   // Memoized year change handler
   const handleYearChangeDebounced = useCallback((year) => {
-    console.log("HomePage.jsx: Year change requested to:", year);
-    
-    // Debounce the year change to prevent rapid updates
-    const timeoutId = setTimeout(() => {
-      setCurrentYear(year);
-      localStorage.setItem("currentYear", year);
-      
-      if (typeof handleYearChange === "function") {
-        handleYearChange(year);
-      } else {
-        console.warn("HomePage.jsx: handleYearChange is not a function");
-      }
-    }, 100);
-
-    return () => clearTimeout(timeoutId);
-  }, [handleYearChange, setCurrentYear]);
+  console.log("HomePage.jsx: Year change requested to:", year);
+  
+  setCurrentYear(year);
+  localStorage.setItem("currentYear", year);
+  
+  if (typeof handleYearChange === "function") {
+    handleYearChange(year);
+  } else {
+    console.warn("HomePage.jsx: handleYearChange is not a function");
+  }
+}, [handleYearChange, setCurrentYear]);
 
   const renderDashboard = () => (
     <>
