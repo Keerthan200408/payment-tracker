@@ -165,7 +165,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
       setIsLoading(true);
       setError('');
 
-      const response = await axios.post(`${BASE_URL}/google-signup`, {
+      const response = await axios.post(`${BASE_URL}/api/google-signup`, {
         email: googleEmail,
         username: chosenUsername.trim(),
       }, {
