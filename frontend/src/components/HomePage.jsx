@@ -345,187 +345,198 @@ const handleAddNewYear = useCallback(async () => {
   const renderDashboard = () => (
     <>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
-  <div className="flex gap-3 mb-4 sm:mb-0">
-    <button
-      onClick={() => setPage("addClient")}
-      className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition duration-200 flex items-center"
-    >
-      <i className="fas fa-plus mr-2"></i> Add Client
-    </button>
-    <input
-      type="file"
-      accept=".csv"
-      ref={csvFileInputRef}
-      onChange={importCsv}
-      className="hidden"
-      id="csv-import"
-      disabled={isImporting}
-    />
-    <label
-      htmlFor="csv-import"
-      className={`px-4 py-2 rounded-lg text-gray-700 bg-white border border-gray-300 flex items-center ${
-        isImporting
-          ? "opacity-50 cursor-not-allowed"
-          : "hover:bg-gray-50 cursor-pointer"
-      } transition duration-200`}
-    >
-      <i className="fas fa-upload mr-2"></i>
-      {isImporting ? "Importing..." : "Bulk Import(in CSV format)"}
-    </label>
-    <button
-      onClick={handleAddNewYear}
-      className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition duration-200 flex items-center"
-      disabled={isLoadingYears}
-    >
-      <i className="fas fa-calendar-plus mr-2"></i>
-      {isLoadingYears ? "Loading..." : "Add New Year"}
-    </button>
-  </div>
-  <select
-    value={currentYear}
-    onChange={(e) => {
-      const year = e.target.value;
-      console.log("HomePage.jsx: Dashboard dropdown year changed to:", year);
-      handleYearChangeDebounced(year);
-    }}
-    className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
-    disabled={isLoadingYears}
-  >
-    {availableYears.map((year) => (
-      <option key={year} value={year}>
-        {year}
-      </option>
-    ))}
-  </select>
-</div>
-
-<div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 mb-6">
-  <div className="relative flex-1 sm:w-1/3">
-    <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-    <input
-      type="text"
-      placeholder="Search by client or type..."
-      value={searchQuery}
-      onChange={(e) => setSearchQuery(e.target.value)}
-      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base"
-    />
-  </div>
-  <select
-    value={monthFilter}
-    onChange={(e) => setMonthFilter(e.target.value)}
-    className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
-  >
-    <option value="">All Months</option>
-    {months.map((month, index) => (
-      <option key={index} value={month}>
-        {month.charAt(0).toUpperCase() + month.slice(1)}
-      </option>
-    ))}
-  </select>
-  <select
-    value={statusFilter}
-    onChange={(e) => setStatusFilter(e.target.value)}
-    className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
-    disabled={!monthFilter}
-  >
-    <option value="">Status</option>
-    <option value="Paid">Paid</option>
-    <option value="PartiallyPaid">Partially Paid</option>
-    <option value="Unpaid">Unpaid</option>
-  </select>
-</div>
-
-<div className="bg-white rounded-lg shadow-sm overflow-hidden">
-  <div className="overflow-x-auto">
-    <table className="w-full" ref={tableRef}>
-      <thead className="bg-gray-50 border-b border-gray-200">
-        <tr>
-          <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-            Client Name
-          </th>
-          <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-            Type
-          </th>
-          <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-            Amount To Be Paid
-          </th>
-          {months.map((month, index) => (
-            <th
-              key={index}
-              className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
-            >
-              {month.charAt(0).toUpperCase() + month.slice(1)}
-            </th>
+        <div className="flex gap-3 mb-4 sm:mb-0">
+          <button
+            onClick={() => setPage("addClient")}
+            className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition duration-200 flex items-center"
+          >
+            <i className="fas fa-plus mr-2"></i> Add Client
+          </button>
+          <input
+            type="file"
+            accept=".csv"
+            ref={csvFileInputRef}
+            onChange={importCsv}
+            className="hidden"
+            id="csv-import"
+            disabled={isImporting}
+          />
+          <label
+            htmlFor="csv-import"
+            className={`px-4 py-2 rounded-lg text-gray-700 bg-white border border-gray-300 flex items-center ${
+              isImporting
+                ? "opacity-50 cursor-not-allowed"
+                : "hover:bg-gray-50 cursor-pointer"
+            } transition duration-200`}
+          >
+            <i className="fas fa-upload mr-2"></i>
+            {isImporting ? "Importing..." : "Bulk Import(in CSV format)"}
+          </label>
+          <button
+            onClick={handleAddNewYear}
+            className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition duration-200 flex items-center"
+            disabled={isLoadingYears}
+          >
+            <i className="fas fa-calendar-plus mr-2"></i>
+            {isLoadingYears ? "Loading..." : "Add New Year"}
+          </button>
+        </div>
+        <select
+          value={currentYear}
+          onChange={(e) => {
+            const year = e.target.value;
+            console.log(
+              "HomePage.jsx: Dashboard dropdown year changed to:",
+              year
+            );
+            handleYearChangeDebounced(year);
+          }}
+          className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+          disabled={isLoadingYears}
+        >
+          {availableYears.map((year) => (
+            <option key={year} value={year}>
+              {year}
+            </option>
           ))}
-          <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-            Due Payment
-          </th>
-        </tr>
-      </thead>
-      <tbody className="bg-white divide-y divide-gray-200">
-        {filteredData.length === 0 ? (
-          <tr>
-            <td
-              colSpan={15}
-              className="px-6 py-12 text-center text-gray-500"
-            >
-              No payments found.
-            </td>
-          </tr>
-        ) : (
-          filteredData.map((row, rowIndex) => (
-            <tr
-              key={`${row.Client_Name}-${rowIndex}`}
-              onContextMenu={(e) => handleContextMenu(e, rowIndex)}
-              className="hover:bg-gray-50"
-            >
-              <td className="px-6 py-4 whitespace-nowrap">{row.Client_Name}</td>
-              <td className="px-6 py-4 whitespace-nowrap">{row.Type}</td>
-              <td className="px-6 py-4 whitespace-nowrap text-right">
-                {parseFloat(row.Amount_To_Be_Paid || 0).toFixed(2)}
-              </td>
-              {months.map((month, colIndex) => (
-                <td key={colIndex} className="px-6 py-4 whitespace-nowrap text-right">
-                  <input
-                    type="text"
-                    value={row[month] || ""}
-                    onChange={(e) =>
-                      updatePayment(
-                        rowIndex,
-                        month,
-                        e.target.value,
-                        currentYear
-                      )
-                    }
-                    className="w-20 p-1 border border-gray-300 rounded text-right focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base bg-white"
-                    placeholder="0.00"
-                  />
-                </td>
-              ))}
-              <td className="px-6 py-4 whitespace-nowrap text-right">
-                {parseFloat(row.Due_Payment || 0).toFixed(2)}
-              </td>
-            </tr>
-          ))
-        )}
-      </tbody>
-    </table>
-  </div>
-</div>
+        </select>
+      </div>
 
-{contextMenu && (
-  <div
-    className="absolute bg-white border border-gray-300 rounded-lg shadow-sm p-2 z-50"
-    style={{ top: contextMenu.y, left: contextMenu.x }}
-  >
-    <button
-      onClick={deleteRow}
-      className="w-full text-left px-4 py-2 hover:bg-gray-50 text-gray-700 flex items-center"
-    >
-      <i className="fas fa-trash mr-2"></i> Delete
-    </button>
-  </div>
-)}
+      <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 mb-6">
+        <div className="relative flex-1 sm:w-1/3">
+          <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+          <input
+            type="text"
+            placeholder="Search by client or type..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base"
+          />
+        </div>
+        <select
+          value={monthFilter}
+          onChange={(e) => setMonthFilter(e.target.value)}
+          className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+        >
+          <option value="">All Months</option>
+          {months.map((month, index) => (
+            <option key={index} value={month}>
+              {month.charAt(0).toUpperCase() + month.slice(1)}
+            </option>
+          ))}
+        </select>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+          disabled={!monthFilter}
+        >
+          <option value="">Status</option>
+          <option value="Paid">Paid</option>
+          <option value="PartiallyPaid">Partially Paid</option>
+          <option value="Unpaid">Unpaid</option>
+        </select>
+      </div>
+
+      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full" ref={tableRef}>
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Client Name
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Type
+                </th>
+                <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Amount To Be Paid
+                </th>
+                {months.map((month, index) => (
+                  <th
+                    key={index}
+                    className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    {month.charAt(0).toUpperCase() + month.slice(1)}
+                  </th>
+                ))}
+                <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Due Payment
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {filteredData.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={15}
+                    className="px-6 py-12 text-center text-gray-500"
+                  >
+                    No payments found.
+                  </td>
+                </tr>
+              ) : (
+                filteredData.map((row, rowIndex) => (
+                  <tr
+                    key={`${row.Client_Name}-${rowIndex}`}
+                    onContextMenu={(e) => handleContextMenu(e, rowIndex)}
+                    className="hover:bg-gray-50"
+                  >
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {row.Client_Name}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">{row.Type}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      {parseFloat(row.Amount_To_Be_Paid || 0).toFixed(2)}
+                    </td>
+                    {months.map((month, colIndex) => (
+                      <td
+                        key={colIndex}
+                        className="px-6 py-4 whitespace-nowrap text-right"
+                      >
+                        <input
+                          type="text"
+                          value={row[month] || ""}
+                          onChange={(e) =>
+                            updatePayment(
+                              rowIndex,
+                              month,
+                              e.target.value,
+                              currentYear
+                            )
+                          }
+                          className={`w-20 p-1 border border-gray-300 rounded text-right focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base ${getInputBackgroundColor(
+                            row,
+                            month
+                          )}`}
+                          placeholder="0.00"
+                        />
+                      </td>
+                    ))}
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      {parseFloat(row.Due_Payment || 0).toFixed(2)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {contextMenu && (
+        <div
+          className="absolute bg-white border border-gray-300 rounded-lg shadow-sm p-2 z-50"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+        >
+          <button
+            onClick={deleteRow}
+            className="w-full text-left px-4 py-2 hover:bg-gray-50 text-gray-700 flex items-center"
+          >
+            <i className="fas fa-trash mr-2"></i> Delete
+          </button>
+        </div>
+      )}
     </>
   );
 
