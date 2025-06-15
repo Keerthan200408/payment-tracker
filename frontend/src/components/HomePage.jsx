@@ -112,7 +112,7 @@ const retryWithBackoff = async (fn, retries = 3, delay = 1000) => {
 };
 
 const searchUserYears = useCallback(async (cancelToken) => {
-  if (!sessionToken || isLoadingYears) {
+  if (!sessionToken) {
     console.log("HomePage.jsx: No sessionToken or already loading years");
     return;
   }
@@ -191,22 +191,20 @@ const searchUserYears = useCallback(async (cancelToken) => {
       setIsLoadingYears(false);
     }
   }
-}, [sessionToken, currentYear, handleYearChange, isLoadingYears]);
+}, [sessionToken, currentYear, handleYearChange, setCurrentYear]);
 
 useEffect(() => {
   const controller = axios.CancelToken.source();
 
-  if (sessionToken && !isLoadingYears) {
+  if (sessionToken) {
     console.log("HomePage.jsx: SessionToken available, fetching years");
     searchUserYears(controller.token);
-  } else {
-    console.log("HomePage.jsx: No sessionToken or already loading years, skipping fetch");
   }
 
   return () => {
     controller.cancel("Component unmounted or sessionToken changed");
   };
-}, [sessionToken, searchUserYears, isLoadingYears]);
+}, [sessionToken]);
 
   // Memoized function to handle adding new year
 const handleAddNewYear = useCallback(async () => {
