@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://payment-tracker-aswa.onrender.com/api';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://payment-tracker-aswa.onrender.com';
 
 const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fetchPayments }) => {
   const [isSignup, setIsSignup] = useState(false);
@@ -51,7 +51,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
     setError('');
     setIsLoading(true);
     try {
-      const response = await axios.post(`${BASE_URL}/login`, {
+      const response = await axios.post(`${BASE_URL}/api/login`, {
         username: loginUsername,
         password: loginPassword,
       }, {
@@ -93,7 +93,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
     setError('');
     setIsLoading(true);
     try {
-      await axios.post(`${BASE_URL}/signup`, {
+      await axios.post(`${BASE_URL}/api/signup`, {
         username,
         password,
       }, {
@@ -116,7 +116,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
       setError('');
       
       // Send Google token to backend
-      const googleResponse = await axios.post(`${BASE_URL}/google-signin`, {
+      const googleResponse = await axios.post(`${BASE_URL}/api/google-signin`, {
         googleToken: response.credential,
       }, {
         timeout: 20000,
@@ -165,7 +165,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
       setIsLoading(true);
       setError('');
 
-      const response = await axios.post(`${BASE_URL}/google-signup`, {
+      const response = await axios.post(`${BASE_URL}/api/google-signup`, {
         email: googleEmail,
         username: chosenUsername.trim(),
       }, {

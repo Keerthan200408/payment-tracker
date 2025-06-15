@@ -796,7 +796,7 @@ const App = () => {
         console.log("Payment saved successfully");
         
         // Refresh the data to get accurate cumulative calculations
-        await fetchPayments(year);
+        await fetchPayments(sessionToken, year);
       } catch (error) {
         console.error(
           "Save payment error:",
