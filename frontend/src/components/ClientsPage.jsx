@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 
 const BASE_URL = 'https://payment-tracker-aswa.onrender.com/api';
@@ -12,6 +12,9 @@ const ClientsPage = ({
   fetchPayments,
   sessionToken,
   currentYear = new Date().getFullYear(),
+  csvFileInputRef,
+  importCsv,
+  isImporting,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -149,12 +152,27 @@ const ClientsPage = ({
           >
             <i className="fas fa-plus mr-2"></i> Add Client
           </button>
-          <button
-            className="bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition duration-200 flex items-center"
+          <input
+            type="file"
+            accept=".csv"
+            ref={csvFileInputRef}
+            onChange={importCsv}
+            className="hidden"
+            id="csv-import-clients"
+            disabled={isImporting}
+          />
+          <label
+            htmlFor="csv-import-clients"
+            className={`px-4 py-2 rounded-lg text-white flex items-center ${
+              isImporting
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-green-600 hover:bg-green-700 cursor-pointer"
+            } transition duration-200 border-0`}
             disabled={isLoading || deleteInProgress}
           >
-            <i className="fas fa-upload mr-2"></i> Bulk Import
-          </button>
+            <i className="fas fa-upload mr-2"></i>
+            {isImporting ? "Importing..." : "Bulk Import"}
+          </label>
         </div>
         
         <div className="flex gap-3 w-full sm:w-auto">
@@ -194,7 +212,7 @@ const ClientsPage = ({
                   Client
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Email
+                  Type
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Monthly Amount
@@ -235,13 +253,12 @@ const ClientsPage = ({
                         </div>
                         <div>
                           <div className="text-sm font-medium text-gray-900">{client.Client_Name}</div>
-                          <div className="text-sm text-gray-500">Client ID: #{index + 1234}</div>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
-                        {client.email || `${client.Client_Name.toLowerCase().replace(' ', '')}@example.com`}
+                        {client.Type}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
