@@ -18,6 +18,12 @@
   [headers.values]
     Content-Type = "text/css"
 
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cross-Origin-Opener-Policy = "same-origin-allow-popups"
+    Cross-Origin-Embedder-Policy = "require-corp"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
