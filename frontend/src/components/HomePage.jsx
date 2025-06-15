@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import axios from "axios";
 
 const BASE_URL = "https://payment-tracker-aswa.onrender.com/api";
@@ -28,15 +28,21 @@ const HomePage = ({
   handleYearChange,
   onMount,
 }) => {
-  useEffect(() => {
-    if (onMount) {
+  // Prevent infinite re-renders by using useCallback for onMount
+  const stableOnMount = useCallback(() => {
+    if (onMount && typeof onMount === 'function') {
       onMount();
     }
   }, [onMount]);
 
-  const months = [
+  // Only call onMount once when component first mounts
+  useEffect(() => {
+    stableOnMount();
+  }, [stableOnMount]);
+
+  const months = useMemo(() => [
     "january",
-    "february",
+    "february", 
     "march",
     "april",
     "may",
@@ -47,97 +53,89 @@ const HomePage = ({
     "october",
     "november",
     "december",
-  ];
+  ], []);
 
-  const [availableYears, setAvailableYears] = useState(["2025"]); // Don't initialize from localStorage
+  const [availableYears, setAvailableYears] = useState(["2025"]);
   const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [isLoadingYears, setIsLoadingYears] = useState(false);
 
-  // Sync selectedYear with currentYear for Reports view or when currentYear changes
+  // Sync selectedYear with currentYear for Reports view
   useEffect(() => {
-    if (isReportsPage) {
-      console.log(
-        "HomePage.jsx: Syncing selectedYear to currentYear:",
-        currentYear,
-        "for Reports"
-      );
+    if (isReportsPage && currentYear !== selectedYear) {
+      console.log("HomePage.jsx: Syncing selectedYear to currentYear:", currentYear, "for Reports");
       setSelectedYear(currentYear);
     }
-  }, [currentYear, isReportsPage]);
+  }, [currentYear, isReportsPage, selectedYear]);
 
+  // Log payments data updates (with debouncing to prevent spam)
   useEffect(() => {
     if (paymentsData?.length) {
-      console.log(
-        "HomePage.jsx: Payments data updated:",
-        paymentsData.length,
-        "items for year",
-        isReportsPage ? selectedYear : currentYear,
-        "on",
-        isReportsPage ? "Reports" : "Dashboard"
-      );
+      const timeoutId = setTimeout(() => {
+        console.log(
+          "HomePage.jsx: Payments data updated:",
+          paymentsData.length,
+          "items for year",
+          isReportsPage ? selectedYear : currentYear,
+          "on",
+          isReportsPage ? "Reports" : "Dashboard"
+        );
+      }, 100);
+      return () => clearTimeout(timeoutId);
     }
-  }, [paymentsData, currentYear, selectedYear, isReportsPage]);
+  }, [paymentsData?.length, currentYear, selectedYear, isReportsPage]);
 
-  // Function to search for user-specific years
-  const searchUserYears = async () => {
-    console.log(
-      "HomePage.jsx: searchUserYears called with sessionToken:",
-      sessionToken
-    );
-
-    if (!sessionToken) {
-      console.log("HomePage.jsx: No sessionToken available");
+  // Memoized function to search for user-specific years
+  const searchUserYears = useCallback(async () => {
+    if (!sessionToken || isLoadingYears) {
+      console.log("HomePage.jsx: No sessionToken or already loading years");
       return;
     }
 
+    setIsLoadingYears(true);
     console.log("HomePage.jsx: Fetching user-specific years from API");
+    
     try {
       const response = await axios.get(`${BASE_URL}/get-user-years`, {
         headers: { Authorization: `Bearer ${sessionToken}` },
+        timeout: 10000 // Add timeout to prevent hanging requests
       });
+      
       console.log("HomePage.jsx: API response for user years:", response.data);
 
       const fetchedYears = (response.data || [])
         .filter((year) => parseInt(year) >= 2025)
         .sort((a, b) => parseInt(a) - parseInt(b));
 
-      // Ensure we have at least 2025
       const yearsToSet = fetchedYears.length > 0 ? fetchedYears : ["2025"];
-
       console.log("HomePage.jsx: Setting availableYears to:", yearsToSet);
+      
       setAvailableYears(yearsToSet);
-
-      // Save to localStorage for faster subsequent loads within the same session
       localStorage.setItem("availableYears", JSON.stringify(yearsToSet));
 
-      // Set current year logic
+      // Set current year logic - only if not already set correctly
       const storedYear = localStorage.getItem("currentYear");
       let yearToSet;
 
       if (storedYear && yearsToSet.includes(storedYear)) {
         yearToSet = storedYear;
       } else {
-        // Default to the latest available year or 2025
         yearToSet = yearsToSet[yearsToSet.length - 1] || "2025";
       }
 
-      console.log("HomePage.jsx: Setting currentYear to:", yearToSet);
-
       if (yearToSet !== currentYear) {
+        console.log("HomePage.jsx: Setting currentYear to:", yearToSet);
         setCurrentYear(yearToSet);
         localStorage.setItem("currentYear", yearToSet);
 
         if (typeof handleYearChange === "function") {
-          console.log(
-            "HomePage.jsx: Calling handleYearChange with:",
-            yearToSet
-          );
+          console.log("HomePage.jsx: Calling handleYearChange with:", yearToSet);
           await handleYearChange(yearToSet);
         }
       }
     } catch (error) {
       console.error("HomePage.jsx: Error fetching user years:", error);
 
-      // Fallback to cached data if available, otherwise use 2025
+      // Fallback to cached data if available
       const cachedYears = localStorage.getItem("availableYears");
       const fallbackYears = cachedYears ? JSON.parse(cachedYears) : ["2025"];
 
@@ -145,8 +143,7 @@ const HomePage = ({
       setAvailableYears(fallbackYears);
 
       const storedYear = localStorage.getItem("currentYear");
-      const yearToSet =
-        storedYear && fallbackYears.includes(storedYear) ? storedYear : "2025";
+      const yearToSet = storedYear && fallbackYears.includes(storedYear) ? storedYear : "2025";
 
       if (yearToSet !== currentYear) {
         setCurrentYear(yearToSet);
@@ -156,48 +153,24 @@ const HomePage = ({
           await handleYearChange(yearToSet);
         }
       }
+    } finally {
+      setIsLoadingYears(false);
     }
-  };
+  }, [sessionToken, currentYear, handleYearChange, isLoadingYears]);
 
+  // Fetch years when sessionToken changes
   useEffect(() => {
-    console.log(
-      "HomePage.jsx: useEffect for sessionToken triggered. sessionToken:",
-      sessionToken
-    );
     if (sessionToken) {
-      searchUserYears(); // Always fetch fresh data from server
+      console.log("HomePage.jsx: SessionToken available, fetching years");
+      searchUserYears();
     } else {
       console.log("HomePage.jsx: No sessionToken, resetting to default");
       setAvailableYears(["2025"]);
     }
-  }, [sessionToken]);
+  }, [sessionToken, searchUserYears]);
 
-  useEffect(() => {
-    const serializedYears = JSON.stringify(availableYears);
-    const storedYears = localStorage.getItem("availableYears");
-    if (serializedYears !== storedYears) {
-      console.log(
-        "HomePage.jsx: Saving availableYears to localStorage:",
-        availableYears
-      );
-      localStorage.setItem("availableYears", serializedYears);
-    }
-  }, [availableYears]);
-
-  useEffect(() => {
-    if (paymentsData?.length) {
-      console.log(
-        "HomePage.jsx: Payments data updated:",
-        paymentsData.length,
-        "items for year",
-        isReportsPage ? selectedYear : currentYear,
-        "on",
-        isReportsPage ? "Reports" : "Dashboard"
-      );
-    }
-  }, [paymentsData, currentYear, isReportsPage]);
-
-  const handleAddNewYear = async () => {
+  // Memoized function to handle adding new year
+  const handleAddNewYear = useCallback(async () => {
     const newYear = (parseInt(currentYear) + 1).toString();
 
     console.log(`HomePage.jsx: Attempting to add new year: ${newYear}`);
@@ -205,7 +178,10 @@ const HomePage = ({
       const response = await axios.post(
         `${BASE_URL}/add-new-year`,
         { year: newYear },
-        { headers: { Authorization: `Bearer ${sessionToken}` } }
+        { 
+          headers: { Authorization: `Bearer ${sessionToken}` },
+          timeout: 10000
+        }
       );
       console.log("HomePage.jsx: Add new year response:", response.data);
 
@@ -218,10 +194,6 @@ const HomePage = ({
 
       if (typeof handleYearChange === "function") {
         await handleYearChange(newYear);
-      } else {
-        console.warn(
-          "HomePage.jsx: handleYearChange is not a function when adding new year"
-        );
       }
 
       alert(response.data.message);
@@ -238,10 +210,11 @@ const HomePage = ({
         }`
       );
     }
-  };
+  }, [currentYear, sessionToken, handleYearChange, searchUserYears]);
 
   const tableRef = useRef(null);
 
+  // Handle clicks outside table for context menu
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (tableRef.current && !tableRef.current.contains(e.target)) {
@@ -252,339 +225,357 @@ const HomePage = ({
     return () => document.removeEventListener("click", handleClickOutside);
   }, [hideContextMenu]);
 
-  const getPaymentStatusForMonth = (row, month) => {
+  // Memoized helper functions
+  const getPaymentStatusForMonth = useCallback((row, month) => {
     const amountToBePaid = parseFloat(row.Amount_To_Be_Paid) || 0;
     const paidInMonth = parseFloat(row[month]) || 0;
     if (paidInMonth === 0) return "Unpaid";
     if (paidInMonth >= amountToBePaid) return "Paid";
     return "PartiallyPaid";
-  };
+  }, []);
 
-  const getMonthlyStatus = (row, month) => {
+  const getMonthlyStatus = useCallback((row, month) => {
     const amountToBePaid = parseFloat(row.Amount_To_Be_Paid) || 0;
     const paidInMonth = parseFloat(row[month]) || 0;
     if (paidInMonth === 0) return "Unpaid";
     if (paidInMonth >= amountToBePaid) return "Paid";
     return "PartiallyPaid";
-  };
+  }, []);
 
-  const getInputBackgroundColor = (row, month) => {
+  const getInputBackgroundColor = useCallback((row, month) => {
     const status = getPaymentStatusForMonth(row, month);
     if (status === "Unpaid") return "bg-red-100/60";
     if (status === "PartiallyPaid") return "bg-yellow-100/60";
     if (status === "Paid") return "bg-green-100/60";
     return "bg-white";
-  };
+  }, [getPaymentStatusForMonth]);
 
-  const filteredData = paymentsData.filter((row) => {
-    const matchesSearch =
-      !searchQuery ||
-      row.Client_Name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      row.Type.toLowerCase().includes(searchQuery.toLowerCase());
+  // Memoized filtered data to prevent unnecessary re-calculations
+  const filteredData = useMemo(() => {
+    return paymentsData.filter((row) => {
+      const matchesSearch =
+        !searchQuery ||
+        row.Client_Name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        row.Type?.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesMonth =
-      !monthFilter ||
-      (row[monthFilter.toLowerCase()] !== undefined &&
-        row[monthFilter.toLowerCase()] !== null);
+      const matchesMonth =
+        !monthFilter ||
+        (row[monthFilter.toLowerCase()] !== undefined &&
+          row[monthFilter.toLowerCase()] !== null);
 
-    const matchesStatus = !monthFilter
-      ? true
-      : !statusFilter ||
-        (statusFilter === "Paid" &&
-          getPaymentStatusForMonth(row, monthFilter.toLowerCase()) ===
-            "Paid") ||
-        (statusFilter === "PartiallyPaid" &&
-          getPaymentStatusForMonth(row, monthFilter.toLowerCase()) ===
-            "PartiallyPaid") ||
-        (statusFilter === "Unpaid" &&
-          getPaymentStatusForMonth(row, monthFilter.toLowerCase()) ===
-            "Unpaid");
+      const matchesStatus = !monthFilter
+        ? true
+        : !statusFilter ||
+          (statusFilter === "Paid" &&
+            getPaymentStatusForMonth(row, monthFilter.toLowerCase()) === "Paid") ||
+          (statusFilter === "PartiallyPaid" &&
+            getPaymentStatusForMonth(row, monthFilter.toLowerCase()) === "PartiallyPaid") ||
+          (statusFilter === "Unpaid" &&
+            getPaymentStatusForMonth(row, monthFilter.toLowerCase()) === "Unpaid");
 
-    return matchesSearch && matchesMonth && matchesStatus;
-  });
+      return matchesSearch && matchesMonth && matchesStatus;
+    });
+  }, [paymentsData, searchQuery, monthFilter, statusFilter, getPaymentStatusForMonth]);
+
+  // Memoized year change handler
+  const handleYearChangeDebounced = useCallback((year) => {
+    console.log("HomePage.jsx: Year change requested to:", year);
+    
+    // Debounce the year change to prevent rapid updates
+    const timeoutId = setTimeout(() => {
+      setCurrentYear(year);
+      localStorage.setItem("currentYear", year);
+      
+      if (typeof handleYearChange === "function") {
+        handleYearChange(year);
+      } else {
+        console.warn("HomePage.jsx: handleYearChange is not a function");
+      }
+    }, 100);
+
+    return () => clearTimeout(timeoutId);
+  }, [handleYearChange, setCurrentYear]);
 
   const renderDashboard = () => (
     <>
-      <div className="flex flex-col sm:flex-row justify-between items-center mb-6 space-y-3 sm:space-y-0">
-        <div className="flex flex-col sm:flex-row space-x-0 sm:space-x-3 space-y-3 sm:space-y-0 w-full sm:w-auto">
-          <button
-            onClick={() => setPage("addClient")}
-            className="bg-blue-500 text-white px-3 py-1.5 rounded-md hover:bg-blue-600 transition duration-200 flex items-center w-full sm:w-auto"
-          >
-            <i className="fas fa-plus mr-2"></i> Add Client
-          </button>
-          <input
-            type="file"
-            accept=".csv"
-            ref={csvFileInputRef}
-            onChange={importCsv}
-            className="hidden"
-            id="csv-import"
-            disabled={isImporting}
-          />
-          <label
-            htmlFor="csv-import"
-            className={`px-4 py-2 rounded-lg text-white flex items-center w-full sm:w-auto ${
-              isImporting
-                ? "bg-gray-400 cursor-not-allowed"
-                : "bg-green-600 hover:bg-green-700 cursor-pointer"
-            } transition duration-200`}
-          >
-            <i className="fas fa-upload mr-2"></i>
-            {isImporting ? "Importing..." : "Bulk Import(in CSV format)"}
-          </label>
-          <button
-            onClick={handleAddNewYear}
-            className="bg-purple-500 text-white px-3 py-1.5 rounded-md hover:bg-purple-600 transition duration-200 flex items-center w-full sm:w-auto"
-          >
-            <i className="fas fa-calendar-plus mr-2"></i> Add New Year
-          </button>
-        </div>
-        <select
-          value={currentYear}
-          onChange={(e) => {
-            const year = e.target.value;
-            console.log(
-              "HomePage.jsx: Dashboard dropdown year changed to:",
-              year
-            );
-            setCurrentYear(year);
-            localStorage.setItem("currentYear", year);
-            if (typeof handleYearChange === "function") {
-              handleYearChange(year);
-            } else {
-              console.warn(
-                "HomePage.jsx: handleYearChange is not a function in dashboard dropdown onChange"
-              );
-            }
-          }}
-          className="p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm sm:text-base"
-        >
-          {availableYears.map((year) => (
-            <option key={year} value={year}>
-              {year}
-            </option>
-          ))}
-        </select>
-      </div>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+  <div className="flex gap-3 mb-4 sm:mb-0">
+    <button
+      onClick={() => setPage("addClient")}
+      className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition duration-200 flex items-center"
+    >
+      <i className="fas fa-plus mr-2"></i> Add Client
+    </button>
+    <input
+      type="file"
+      accept=".csv"
+      ref={csvFileInputRef}
+      onChange={importCsv}
+      className="hidden"
+      id="csv-import"
+      disabled={isImporting}
+    />
+    <label
+      htmlFor="csv-import"
+      className={`px-4 py-2 rounded-lg text-gray-700 bg-white border border-gray-300 flex items-center ${
+        isImporting
+          ? "opacity-50 cursor-not-allowed"
+          : "hover:bg-gray-50 cursor-pointer"
+      } transition duration-200`}
+    >
+      <i className="fas fa-upload mr-2"></i>
+      {isImporting ? "Importing..." : "Bulk Import(in CSV format)"}
+    </label>
+    <button
+      onClick={handleAddNewYear}
+      className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition duration-200 flex items-center"
+      disabled={isLoadingYears}
+    >
+      <i className="fas fa-calendar-plus mr-2"></i> 
+      {isLoadingYears ? "Loading..." : "Add New Year"}
+    </button>
+  </div>
+  <select
+    value={currentYear}
+    onChange={(e) => {
+      const year = e.target.value;
+      console.log("HomePage.jsx: Dashboard dropdown year changed to:", year);
+      handleYearChangeDebounced(year);
+    }}
+    className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+    disabled={isLoadingYears}
+  >
+    {availableYears.map((year) => (
+      <option key={year} value={year}>
+        {year}
+      </option>
+    ))}
+  </select>
+</div>
 
-      <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 mb-6">
-        <input
-          type="text"
-          placeholder="Search by client or type..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="p-2 border-gray-300 rounded-lg w-full sm:w-1/3 focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-        />
-        <select
-          value={monthFilter}
-          onChange={(e) => setMonthFilter(e.target.value)}
-          className="p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm sm:text-base"
-        >
-          <option value="">All Months</option>
+<div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 mb-6">
+  <div className="relative flex-1 sm:w-1/3">
+    <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+    <input
+      type="text"
+      placeholder="Search by client or type..."
+      value={searchQuery}
+      onChange={(e) => setSearchQuery(e.target.value)}
+      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base"
+    />
+  </div>
+  <select
+    value={monthFilter}
+    onChange={(e) => setMonthFilter(e.target.value)}
+    className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+  >
+    <option value="">All Months</option>
+    {months.map((month, index) => (
+      <option key={index} value={month}>
+        {month.charAt(0).toUpperCase() + month.slice(1)}
+      </option>
+    ))}
+  </select>
+  <select
+    value={statusFilter}
+    onChange={(e) => setStatusFilter(e.target.value)}
+    className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+    disabled={!monthFilter}
+  >
+    <option value="">Status</option>
+    <option value="Paid">Paid</option>
+    <option value="PartiallyPaid">Partially Paid</option>
+    <option value="Unpaid">Unpaid</option>
+  </select>
+</div>
+
+<div className="bg-white rounded-lg shadow-sm overflow-hidden">
+  <div className="overflow-x-auto">
+    <table className="w-full" ref={tableRef}>
+      <thead className="bg-gray-50 border-b border-gray-200">
+        <tr>
+          <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            Client Name
+          </th>
+          <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            Type
+          </th>
+          <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+            Amount To Be Paid
+          </th>
           {months.map((month, index) => (
-            <option key={index} value={month}>
+            <th
+              key={index}
+              className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
+            >
               {month.charAt(0).toUpperCase() + month.slice(1)}
-            </option>
+            </th>
           ))}
-        </select>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm sm:text-base"
-          disabled={!monthFilter}
-        >
-          <option value="">Status</option>
-          <option value="Paid">Paid</option>
-          <option value="PartiallyPaid">Partially Paid</option>
-          <option value="Unpaid">Unpaid</option>
-        </select>
-      </div>
-
-      <div className="overflow-x-auto bg-white rounded-lg shadow-lg">
-        <table className="min-w-full border-collapse" ref={tableRef}>
-          <thead>
-            <tr className="bg-blue-100">
-              <th className="border p-3 text-left">Client Name</th>
-              <th className="border p-3 text-left">Type</th>
-              <th className="border p-3 text-right">Amount To Be Paid</th>
-              {months.map((month, index) => (
-                <th key={index} className="border p-3 text-right">
-                  {month.charAt(0).toUpperCase() + month.slice(1)}
-                </th>
-              ))}
-              <th className="border p-3 text-right">Due Payment</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredData.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={15}
-                  className="border p-3 text-center text-gray-500"
-                >
-                  No payments found.
+          <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+            Due Payment
+          </th>
+        </tr>
+      </thead>
+      <tbody className="bg-white divide-y divide-gray-200">
+        {filteredData.length === 0 ? (
+          <tr>
+            <td
+              colSpan={15}
+              className="px-6 py-12 text-center text-gray-500"
+            >
+              No payments found.
+            </td>
+          </tr>
+        ) : (
+          filteredData.map((row, rowIndex) => (
+            <tr
+              key={`${row.Client_Name}-${rowIndex}`}
+              onContextMenu={(e) => handleContextMenu(e, rowIndex)}
+              className="hover:bg-gray-50"
+            >
+              <td className="px-6 py-4 whitespace-nowrap">{row.Client_Name}</td>
+              <td className="px-6 py-4 whitespace-nowrap">{row.Type}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-right">
+                {parseFloat(row.Amount_To_Be_Paid || 0).toFixed(2)}
+              </td>
+              {months.map((month, colIndex) => (
+                <td key={colIndex} className="px-6 py-4 whitespace-nowrap text-right">
+                  <input
+                    type="text"
+                    value={row[month] || ""}
+                    onChange={(e) =>
+                      updatePayment(
+                        rowIndex,
+                        month,
+                        e.target.value,
+                        currentYear
+                      )
+                    }
+                    className={`w-20 p-1 border border-gray-300 rounded text-right focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base bg-white`}
+                    placeholder="0.00"
+                  />
                 </td>
-              </tr>
-            ) : (
-              filteredData.map((row, rowIndex) => (
-                <tr
-                  key={rowIndex}
-                  onContextMenu={(e) => handleContextMenu(e, rowIndex)}
-                  className="hover:bg-blue-50"
-                >
-                  <td className="border p-3">{row.Client_Name}</td>
-                  <td className="border p-3">{row.Type}</td>
-                  <td className="border p-3 text-right">
-                    {row.Amount_To_Be_Paid.toFixed(2)}
-                  </td>
-                  {months.map((month, colIndex) => (
-                    <td key={colIndex} className="border p-1 text-right">
-                      <input
-                        type="text"
-                        value={row[month] || ""}
-                        onChange={(e) =>
-                          updatePayment(
-                            rowIndex,
-                            month,
-                            e.target.value,
-                            currentYear
-                          )
-                        }
-                        className={`w-20 p-1 border-gray-300 rounded text-right focus:ring-2 focus:ring-blue-500 text-sm sm:text-base ${getInputBackgroundColor(
-                          row,
-                          month
-                        )}`}
-                        placeholder="0.00"
-                      />
-                    </td>
-                  ))}
-                  <td className="border p-3 text-right">
-                    {parseFloat(row.Due_Payment).toFixed(2)}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ))}
+              <td className="px-6 py-4 whitespace-nowrap text-right">
+                {parseFloat(row.Due_Payment || 0).toFixed(2)}
+              </td>
+            </tr>
+          ))
+        )}
+      </tbody>
+    </table>
+  </div>
+</div>
 
-      {contextMenu && (
-        <div
-          className="absolute bg-white border rounded-lg shadow-lg p-2 z-50"
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-        >
-          <button
-            onClick={deleteRow}
-            className="w-full text-left px-4 py-2 hover:bg-gray-100 text-red-500 flex items-center"
-          >
-            <i className="fas fa-trash mr-2"></i> Delete
-          </button>
-        </div>
-      )}
+{contextMenu && (
+  <div
+    className="absolute bg-white border border-gray-300 rounded-lg shadow-sm p-2 z-50"
+    style={{ top: contextMenu.y, left: contextMenu.x }}
+  >
+    <button
+      onClick={deleteRow}
+      className="w-full text-left px-4 py-2 hover:bg-gray-50 text-gray-700 flex items-center"
+    >
+      <i className="fas fa-trash mr-2"></i> Delete
+    </button>
+  </div>
+)}
     </>
   );
 
   const renderReports = () => {
-    const monthStatus = paymentsData.reduce((acc, row) => {
-      if (!acc[row.Client_Name]) {
-        acc[row.Client_Name] = {};
-      }
-      months.forEach((month) => {
-        acc[row.Client_Name][month] = getMonthlyStatus(row, month);
-      });
-      return acc;
-    }, {});
+    const monthStatus = useMemo(() => {
+      return paymentsData.reduce((acc, row) => {
+        if (!acc[row.Client_Name]) {
+          acc[row.Client_Name] = {};
+        }
+        months.forEach((month) => {
+          acc[row.Client_Name][month] = getMonthlyStatus(row, month);
+        });
+        return acc;
+      }, {});
+    }, [paymentsData, months, getMonthlyStatus]);
 
     return (
       <>
-        <h2 className="text-2xl font-semibold mb-2">
-          Monthly Client Status Report ({selectedYear})
-        </h2>
-        <div className="flex mb-4">
-          <select
-            value={selectedYear}
-            onChange={(e) => {
-              const year = e.target.value;
-              console.log(
-                "HomePage.jsx: Reports dropdown year changed to:",
-                year
-              );
-              setSelectedYear(year);
-              if (typeof handleYearChange === "function") {
-                handleYearChange(year);
-              } else {
-                console.warn(
-                  "HomePage.jsx: handleYearChange is not a function in reports dropdown onChange"
-                );
-              }
-            }}
-            className="p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm sm:text-base"
-          >
-            {availableYears.map((year) => (
-              <option key={year} value={year}>
-                {year}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="overflow-x-auto bg-white rounded-lg shadow-lg">
-          <table className="min-w-full border-collapse">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border p-3 text-left font-semibold">
-                  Client Name
-                </th>
-                {months.map((month, index) => (
-                  <th
-                    key={index}
-                    className="border p-3 text-center font-semibold"
+        <h2 className="text-xl font-medium text-gray-900 mb-4">
+  Monthly Client Status Report ({selectedYear})
+</h2>
+<div className="flex mb-6">
+  <select
+    value={selectedYear}
+    onChange={(e) => {
+      const year = e.target.value;
+      console.log("HomePage.jsx: Reports dropdown year changed to:", year);
+      setSelectedYear(year);
+      if (typeof handleYearChange === "function") {
+        handleYearChange(year);
+      }
+    }}
+    className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+    disabled={isLoadingYears}
+  >
+    {availableYears.map((year) => (
+      <option key={year} value={year}>
+        {year}
+      </option>
+    ))}
+  </select>
+</div>
+<div className="bg-white rounded-lg shadow-sm overflow-hidden">
+  <div className="overflow-x-auto">
+    <table className="w-full">
+      <thead className="bg-gray-50 border-b border-gray-200">
+        <tr>
+          <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            Client Name
+          </th>
+          {months.map((month, index) => (
+            <th
+              key={index}
+              className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
+            >
+              {month.charAt(0).toUpperCase() + month.slice(1)}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody className="bg-white divide-y divide-gray-200">
+        {Object.keys(monthStatus).length === 0 ? (
+          <tr>
+            <td
+              colSpan={13}
+              className="px-6 py-12 text-center text-gray-500"
+            >
+              No data available.
+            </td>
+          </tr>
+        ) : (
+          Object.keys(monthStatus).map((client, idx) => (
+            <tr key={idx} className="hover:bg-gray-50">
+              <td className="px-6 py-4 whitespace-nowrap">{client}</td>
+              {months.map((month, mIdx) => (
+                <td key={mIdx} className="px-6 py-4 whitespace-nowrap text-center">
+                  <span
+                    className={`px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800`}
                   >
-                    {month.charAt(0).toUpperCase() + month.slice(1)}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {Object.keys(monthStatus).length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={13}
-                    className="border p-3 text-center text-gray-500"
-                  >
-                    No data available.
-                  </td>
-                </tr>
-              ) : (
-                Object.keys(monthStatus).map((client, idx) => (
-                  <tr key={idx} className="hover:bg-gray-50">
-                    <td className="border p-3">{client}</td>
-                    {months.map((month, mIdx) => (
-                      <td key={mIdx} className="border p-3 text-center">
-                        <span
-                          className={`px-2 py-1 rounded-full text-sm ${
-                            monthStatus[client][month] === "Paid"
-                              ? "bg-green-100 text-green-800"
-                              : monthStatus[client][month] === "PartiallyPaid"
-                              ? "bg-yellow-100 text-yellow-800"
-                              : "bg-red-100 text-red-800"
-                          }`}
-                        >
-                          {monthStatus[client][month] || "Unpaid"}
-                        </span>
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                    {monthStatus[client][month] || "Unpaid"}
+                  </span>
+                </td>
+              ))}
+            </tr>
+          ))
+        )}
+      </tbody>
+    </table>
+  </div>
+</div>
       </>
     );
   };
+
   return (
-    <div className="p-6">
+    <div className="p-6 bg-gray-50 min-h-screen">
       {isReportsPage ? renderReports() : renderDashboard()}
     </div>
   );
