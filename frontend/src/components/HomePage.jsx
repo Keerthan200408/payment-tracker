@@ -93,7 +93,25 @@ useEffect(() => {
   };
 }, []);
 
-const searchUserYears = useCallback(async () => {
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const retryWithBackoff = async (fn, retries = 3, delay = 1000) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (error.response?.status === 429 && i < retries - 1) {
+        console.log(`HomePage.jsx: Rate limit hit, retrying in ${delay}ms...`);
+        await sleep(delay);
+        delay *= 2; // Exponential backoff
+      } else {
+        throw error;
+      }
+    }
+  }
+};
+
+const searchUserYears = useCallback(async (cancelToken) => {
   if (!sessionToken || isLoadingYears) {
     console.log("HomePage.jsx: No sessionToken or already loading years");
     return;
@@ -106,6 +124,7 @@ const searchUserYears = useCallback(async () => {
     const response = await axios.get(`${BASE_URL}/get-user-years`, {
       headers: { Authorization: `Bearer ${sessionToken}` },
       timeout: 10000,
+      cancelToken,
     });
 
     console.log("HomePage.jsx: API response for user years:", response.data);
@@ -142,6 +161,10 @@ const searchUserYears = useCallback(async () => {
       }
     }
   } catch (error) {
+    if (axios.isCancel(error)) {
+      console.log("HomePage.jsx: Fetch years request cancelled");
+      return;
+    }
     console.error("HomePage.jsx: Error fetching user years:", error);
 
     const cachedYears = localStorage.getItem("availableYears");
@@ -169,32 +192,32 @@ const searchUserYears = useCallback(async () => {
     }
   }
 }, [sessionToken, currentYear, handleYearChange, isLoadingYears]);
-useEffect(() => {
-  let cancelTokenSource = axios.CancelToken.source();
 
-  if (sessionToken) {
+useEffect(() => {
+  const controller = axios.CancelToken.source();
+
+  if (sessionToken && !isLoadingYears) {
     console.log("HomePage.jsx: SessionToken available, fetching years");
-    searchUserYears();
+    searchUserYears(controller.token);
   } else {
-    console.log("HomePage.jsx: No sessionToken, resetting to default");
-    if (mountedRef.current) {
-      setAvailableYears(["2025"]);
-    }
+    console.log("HomePage.jsx: No sessionToken or already loading years, skipping fetch");
   }
 
   return () => {
-    cancelTokenSource.cancel("Component unmounted or sessionToken changed");
+    controller.cancel("Component unmounted or sessionToken changed");
   };
-}, [sessionToken, searchUserYears]);
+}, [sessionToken, searchUserYears, isLoadingYears]);
 
   // Memoized function to handle adding new year
-  const handleAddNewYear = useCallback(async () => {
+const handleAddNewYear = useCallback(async () => {
   const newYear = (parseInt(currentYear) + 1).toString();
   console.log(`HomePage.jsx: Attempting to add new year: ${newYear}`);
 
   if (mountedRef.current) {
     setIsLoadingYears(true);
   }
+
+  const controller = axios.CancelToken.source();
 
   try {
     const response = await axios.post(
@@ -203,11 +226,12 @@ useEffect(() => {
       {
         headers: { Authorization: `Bearer ${sessionToken}` },
         timeout: 10000,
+        cancelToken: controller.token,
       }
     );
     console.log("HomePage.jsx: Add new year response:", response.data);
 
-    await searchUserYears();
+    await searchUserYears(controller.token);
 
     if (mountedRef.current) {
       setCurrentYear(newYear);
@@ -220,6 +244,10 @@ useEffect(() => {
       alert(response.data.message);
     }
   } catch (error) {
+    if (axios.isCancel(error)) {
+      console.log("HomePage.jsx: Add new year request cancelled");
+      return;
+    }
     console.error("HomePage.jsx: Error adding new year:", {
       message: error.message,
       response: error.response?.data,
