@@ -162,17 +162,17 @@ const ClientsPage = ({
             disabled={isImporting}
           />
           <label
-            htmlFor="csv-import-clients"
-            className={`px-4 py-2 rounded-lg text-white flex items-center ${
-              isImporting
-                ? "bg-gray-400 cursor-not-allowed"
-                : "bg-green-600 hover:bg-green-700 cursor-pointer"
-            } transition duration-200 border-0`}
-            disabled={isLoading || deleteInProgress}
-          >
-            <i className="fas fa-upload mr-2"></i>
-            {isImporting ? "Importing..." : "Bulk Import"}
-          </label>
+  htmlFor="csv-import-clients"
+  className={`px-4 py-2 rounded-lg text-gray-700 bg-white border border-gray-300 flex items-center ${
+    isImporting
+      ? "opacity-50 cursor-not-allowed"
+      : "hover:bg-gray-50 cursor-pointer"
+  } transition duration-200`}
+  disabled={isLoading || deleteInProgress}
+>
+  <i className="fas fa-upload mr-2"></i>
+  {isImporting ? "Importing..." : "Bulk Import"}
+</label>
         </div>
         
         <div className="flex gap-3 w-full sm:w-auto">
