@@ -720,6 +720,7 @@ const App = () => {
       }
     }
 
+    // Calculate current year's due payment only
     const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
     const activeMonths = months.filter(
       (m) => rowData[m] && parseFloat(rowData[m]) >= 0
@@ -729,9 +730,25 @@ const App = () => {
       (sum, m) => sum + (parseFloat(rowData[m]) || 0),
       0
     );
-    rowData.Due_Payment = Math.max(expectedPayment - totalPayments, 0).toFixed(
-      2
-    );
+    const currentYearDuePayment = Math.max(expectedPayment - totalPayments, 0);
+
+    // Get previous year's due payment if not 2025
+    let prevYearDuePayment = 0;
+    if (parseInt(year) > 2025) {
+      // This should be fetched from the server or stored in state
+      // For now, we'll calculate it based on the original Due_Payment minus current year calculation
+      const originalDuePayment = parseFloat(paymentsData[rowIndex].Due_Payment) || 0;
+      const originalCurrentYearDue = Math.max(
+        (parseFloat(paymentsData[rowIndex].Amount_To_Be_Paid) || 0) * 
+        months.filter(m => paymentsData[rowIndex][m] && parseFloat(paymentsData[rowIndex][m]) >= 0).length -
+        months.reduce((sum, m) => sum + (parseFloat(paymentsData[rowIndex][m]) || 0), 0), 
+        0
+      );
+      prevYearDuePayment = Math.max(originalDuePayment - originalCurrentYearDue, 0);
+    }
+
+    // Display cumulative due payment (current + previous years)
+    rowData.Due_Payment = (currentYearDuePayment + prevYearDuePayment).toFixed(2);
 
     // Update UI immediately
     setPaymentsData(updatedPayments);
@@ -755,7 +772,11 @@ const App = () => {
         // Send only the updated row data instead of entire array
         const payloadData = {
           rowIndex: rowIndex,
-          updatedRow: rowData,
+          updatedRow: {
+            ...rowData,
+            // Send only current year's due payment to server for storage
+            Due_Payment: currentYearDuePayment.toFixed(2)
+          },
           month: month,
           value: value,
         };
@@ -766,6 +787,9 @@ const App = () => {
         });
 
         console.log("Payment saved successfully");
+        
+        // Refresh the data to get accurate cumulative calculations
+        await fetchPayments(year);
       } catch (error) {
         console.error(
           "Save payment error:",

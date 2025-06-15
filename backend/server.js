@@ -608,7 +608,7 @@ app.delete("/api/delete-client", authenticateToken, async (req, res) => {
   }
 });
 
-// New endpoint to get payments by specific year
+// Updated get-payments-by-year endpoint
 app.get("/api/get-payments-by-year", authenticateToken, async (req, res) => {
   const { year } = req.query;
   if (!year || isNaN(year)) {
@@ -639,30 +639,63 @@ app.get("/api/get-payments-by-year", authenticateToken, async (req, res) => {
     const userPayments = payments.filter(
       (payment) => payment[0] === req.user.username
     );
+
+    // Calculate cumulative due payments for years after 2025
+    let processedPayments = userPayments.map((payment) => ({
+      User: payment[0],
+      Client_Name: payment[1],
+      Type: payment[2],
+      Amount_To_Be_Paid: parseFloat(payment[3]) || 0,
+      january: payment[4] || "",
+      february: payment[5] || "",
+      march: payment[6] || "",
+      april: payment[7] || "",
+      may: payment[8] || "",
+      june: payment[9] || "",
+      july: payment[10] || "",
+      august: payment[11] || "",
+      september: payment[12] || "",
+      october: payment[13] || "",
+      november: payment[14] || "",
+      december: payment[15] || "",
+      Due_Payment: parseFloat(payment[16]) || 0,
+    }));
+
+    // Add previous year's due payments for years after 2025
+    if (parseInt(year) > 2025) {
+      const prevYear = (parseInt(year) - 1).toString();
+      try {
+        const prevYearPayments = await readSheet(getPaymentSheetName(prevYear), "A2:R");
+        const prevUserPayments = prevYearPayments.filter(
+          (payment) => payment[0] === req.user.username
+        );
+
+        // Create a map of previous year's due payments by client and type
+        const prevDuePaymentMap = new Map();
+        prevUserPayments.forEach((payment) => {
+          const key = `${payment[1]}_${payment[2]}`; // Client_Name_Type
+          prevDuePaymentMap.set(key, parseFloat(payment[16]) || 0);
+        });
+
+        // Add previous year's due payment to current year's due payment
+        processedPayments = processedPayments.map((payment) => {
+          const key = `${payment.Client_Name}_${payment.Type}`;
+          const prevDuePayment = prevDuePaymentMap.get(key) || 0;
+          return {
+            ...payment,
+            Due_Payment: payment.Due_Payment + prevDuePayment,
+          };
+        });
+      } catch (error) {
+        console.warn(`Could not fetch previous year ${prevYear} data:`, error.message);
+        // Continue with current year data only if previous year doesn't exist
+      }
+    }
+
     console.log(
-      `Fetched ${userPayments.length} payments for ${year} for user ${req.user.username}`
+      `Fetched ${processedPayments.length} payments for ${year} for user ${req.user.username}`
     );
-    res.json(
-      userPayments.map((payment) => ({
-        User: payment[0],
-        Client_Name: payment[1],
-        Type: payment[2],
-        Amount_To_Be_Paid: parseFloat(payment[3]) || 0,
-        january: payment[4] || "",
-        february: payment[5] || "",
-        march: payment[6] || "",
-        april: payment[7] || "",
-        may: payment[8] || "",
-        june: payment[9] || "",
-        july: payment[10] || "",
-        august: payment[11] || "",
-        september: payment[12] || "",
-        october: payment[13] || "",
-        november: payment[14] || "",
-        december: payment[15] || "",
-        Due_Payment: parseFloat(payment[16]) || "0",
-      }))
-    );
+    res.json(processedPayments);
   } catch (error) {
     console.error(`Get payments for year ${year} error:`, {
       message: error.message,
@@ -1152,7 +1185,8 @@ app.get("/api/debug-routes", (req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
-// Modified /api/add-new-year
+
+// Updated add-new-year endpoint to carry forward due payments
 app.post("/api/add-new-year", authenticateToken, async (req, res) => {
   const { year } = req.body;
   if (!year || isNaN(year) || parseInt(year) < 2025) {
@@ -1243,6 +1277,8 @@ app.post("/api/add-new-year", authenticateToken, async (req, res) => {
       (client) => client[0] === req.user.username
     );
 
+    // For new years, initialize with current year's due payment as starting due payment
+    // This will be 0 for the new year, and previous year's due will be added during display
     const newPayments = userClients.map((client) => [
       req.user.username,
       client[1], // Client_Name
@@ -1250,6 +1286,7 @@ app.post("/api/add-new-year", authenticateToken, async (req, res) => {
       parseFloat(client[4]) || 0, // Amount_To_Be_Paid
       "",
       "",
+      "", 
       "",
       "",
       "",
@@ -1259,8 +1296,7 @@ app.post("/api/add-new-year", authenticateToken, async (req, res) => {
       "",
       "",
       "",
-      "",
-      "0", // Empty months and Due_Payment
+      "0", // Initialize Due_Payment as 0 for new year
     ]);
 
     if (newPayments.length > 0) {
