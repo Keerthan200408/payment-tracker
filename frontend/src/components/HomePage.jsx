@@ -276,7 +276,6 @@ const handleAddNewYear = useCallback(async () => {
     return () => document.removeEventListener("click", handleClickOutside);
   }, [hideContextMenu]);
 
-  
   // Memoized helper functions
   const getPaymentStatusForMonth = useCallback((row, month) => {
     const amountToBePaid = parseFloat(row.Amount_To_Be_Paid) || 0;
@@ -605,7 +604,7 @@ const handleAddNewYear = useCallback(async () => {
         </select>
       </div>
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-  <div className="overflow-x-auto max-h-96 overflow-y-auto">
+  <div className="max-h-96 overflow-y-auto">
     <table className="w-full">
       <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
         <tr>
@@ -622,6 +621,7 @@ const handleAddNewYear = useCallback(async () => {
           ))}
         </tr>
       </thead>
+      {/* Rest of tbody remains the same */}
             <tbody className="bg-white divide-y divide-gray-200">
               {paginatedClients.length === 0 ? (
                 <tr>
