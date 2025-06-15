@@ -11,10 +11,12 @@ const ClientsPage = ({
   fetchClients,
   fetchPayments,
   sessionToken,
+  currentYear = new Date().getFullYear(), // Add currentYear prop with default
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [deleteInProgress, setDeleteInProgress] = useState(false);
 
   // Ensure data is loaded when component mounts
   useEffect(() => {
@@ -56,7 +58,7 @@ const ClientsPage = ({
       return;
     }
     
-    setIsLoading(true);
+    setDeleteInProgress(true);
     try {
       console.log("Deleting client:", client.Client_Name, client.Type);
       const response = await axios.delete(`${BASE_URL}/delete-client`, {
@@ -66,15 +68,24 @@ const ClientsPage = ({
 
       console.log("Delete response:", response.data);
 
-      // Update local state immediately
+      // Update local state immediately for better UX
       const updatedClients = clientsData.filter(
         (c) => !(c.Client_Name === client.Client_Name && c.Type === client.Type)
       );
       setClientsData(updatedClients);
 
-      // Refresh data to ensure consistency
-      await fetchClients(sessionToken);
-      await fetchPayments(sessionToken);
+      // Refresh data with proper year parameter
+      const refreshPromises = [fetchClients(sessionToken)];
+      
+      // Only refresh payments if fetchPayments function expects year parameter
+      if (fetchPayments.length >= 2) {
+        refreshPromises.push(fetchPayments(sessionToken, currentYear));
+      } else {
+        refreshPromises.push(fetchPayments(sessionToken));
+      }
+      
+      await Promise.all(refreshPromises);
+      
     } catch (error) {
       console.error(
         "Delete client error:",
@@ -85,8 +96,11 @@ const ClientsPage = ({
           error.response?.data?.error || error.message
         }`
       );
+      
+      // Revert local state on error
+      await fetchClients(sessionToken);
     } finally {
-      setIsLoading(false);
+      setDeleteInProgress(false);
     }
   };
 
@@ -132,7 +146,7 @@ const ClientsPage = ({
           <button
             onClick={() => setPage("addClient")}
             className="bg-blue-500 text-white px-3 py-1.5 rounded-md hover:bg-blue-600 transition duration-200 flex items-center w-full sm:w-auto"
-            disabled={isLoading}
+            disabled={isLoading || deleteInProgress}
           >
             <i className="fas fa-plus mr-2"></i> Add Client
           </button>
@@ -147,16 +161,16 @@ const ClientsPage = ({
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="p-2 border-gray-300 rounded-lg w-full sm:w-1/3 focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
-          disabled={isLoading}
+          disabled={isLoading || deleteInProgress}
         />
       </div>
 
       {/* Loading overlay for delete operations */}
-      {isLoading && clientsData && clientsData.length > 0 && (
+      {deleteInProgress && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-4 rounded-lg">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
-            <p className="mt-2 text-center">Processing...</p>
+            <p className="mt-2 text-center">Deleting client...</p>
           </div>
         </div>
       )}
@@ -208,14 +222,14 @@ const ClientsPage = ({
                           setPage("addClient");
                         }}
                         className="text-blue-500 hover:text-blue-700 mr-4 text-sm sm:text-base"
-                        disabled={isLoading}
+                        disabled={isLoading || deleteInProgress}
                       >
                         <i className="fas fa-edit"></i> Edit
                       </button>
                       <button
                         onClick={() => handleDelete(client)}
                         className="text-red-500 hover:text-red-700 text-sm sm:text-base"
-                        disabled={isLoading}
+                        disabled={isLoading || deleteInProgress}
                       >
                         <i className="fas fa-trash"></i> Delete
                       </button>

@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
-import axios from 'axios';
-const BASE_URL = 'https://payment-tracker-aswa.onrender.com/api';
+import React, { useEffect, useRef, useState } from "react";
+import axios from "axios";
+const BASE_URL = "https://payment-tracker-aswa.onrender.com/api";
 
 const HomePage = ({
   paymentsData,
@@ -24,8 +24,8 @@ const HomePage = ({
   sessionToken,
   currentYear,
   setCurrentYear,
-  handleYearChange, 
-  onMount 
+  handleYearChange,
+  onMount,
 }) => {
   useEffect(() => {
     if (onMount) {
@@ -34,179 +34,210 @@ const HomePage = ({
   }, [onMount]);
 
   const months = [
-    'january',
-    'february',
-    'march',
-    'april',
-    'may',
-    'june',
-    'july',
-    'august',
-    'september',
-    'october',
-    'november',
-    'december',
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
   ];
 
-  // const [availableYears, setAvailableYears] = useState(() => {
-  //   const storedYears = localStorage.getItem('availableYears');
-  //   console.log('HomePage.jsx: Initializing availableYears from localStorage:', storedYears);
-  //   return storedYears ? JSON.parse(storedYears) : ['2025'];
-  // });
-  // const [selectedYear, setSelectedYear] = useState(currentYear);
-  const [availableYears, setAvailableYears] = useState(['2025']); // Don't initialize from localStorage
-const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [availableYears, setAvailableYears] = useState(["2025"]); // Don't initialize from localStorage
+  const [selectedYear, setSelectedYear] = useState(currentYear);
 
   // Sync selectedYear with currentYear for Reports view or when currentYear changes
   useEffect(() => {
     if (isReportsPage) {
-      console.log('HomePage.jsx: Syncing selectedYear to currentYear:', currentYear, 'for Reports');
+      console.log(
+        "HomePage.jsx: Syncing selectedYear to currentYear:",
+        currentYear,
+        "for Reports"
+      );
       setSelectedYear(currentYear);
     }
   }, [currentYear, isReportsPage]);
-  
-  useEffect(() => {
-  if (paymentsData?.length) {
-    console.log('HomePage.jsx: Payments data updated:', paymentsData.length, 'items for year', isReportsPage ? selectedYear : currentYear, 'on', isReportsPage ? 'Reports' : 'Dashboard');
-  }
-}, [paymentsData, currentYear, selectedYear, isReportsPage]);
-
-  // Function to search for user-specific years
-  const searchUserYears = async () => {
-  console.log('HomePage.jsx: searchUserYears called with sessionToken:', sessionToken);
-  
-  if (!sessionToken) {
-    console.log('HomePage.jsx: No sessionToken available');
-    return;
-  }
-
-  console.log('HomePage.jsx: Fetching user-specific years from API');
-  try {
-    const response = await axios.get(`${BASE_URL}/get-user-years`, {
-      headers: { Authorization: `Bearer ${sessionToken}` },
-    });
-    console.log('HomePage.jsx: API response for user years:', response.data);
-    
-    const fetchedYears = (response.data || [])
-      .filter(year => parseInt(year) >= 2025)
-      .sort((a, b) => parseInt(a) - parseInt(b));
-    
-    // Ensure we have at least 2025
-    const yearsToSet = fetchedYears.length > 0 ? fetchedYears : ['2025'];
-    
-    console.log('HomePage.jsx: Setting availableYears to:', yearsToSet);
-    setAvailableYears(yearsToSet);
-    
-    // Save to localStorage for faster subsequent loads within the same session
-    localStorage.setItem('availableYears', JSON.stringify(yearsToSet));
-    
-    // Set current year logic
-    const storedYear = localStorage.getItem('currentYear');
-    let yearToSet;
-    
-    if (storedYear && yearsToSet.includes(storedYear)) {
-      yearToSet = storedYear;
-    } else {
-      // Default to the latest available year or 2025
-      yearToSet = yearsToSet[yearsToSet.length - 1] || '2025';
-    }
-    
-    console.log('HomePage.jsx: Setting currentYear to:', yearToSet);
-    
-    if (yearToSet !== currentYear) {
-      setCurrentYear(yearToSet);
-      localStorage.setItem('currentYear', yearToSet);
-      
-      if (typeof handleYearChange === 'function') {
-        console.log('HomePage.jsx: Calling handleYearChange with:', yearToSet);
-        await handleYearChange(yearToSet);
-      }
-    }
-    
-  } catch (error) {
-    console.error('HomePage.jsx: Error fetching user years:', error);
-    
-    // Fallback to cached data if available, otherwise use 2025
-    const cachedYears = localStorage.getItem('availableYears');
-    const fallbackYears = cachedYears ? JSON.parse(cachedYears) : ['2025'];
-    
-    console.log('HomePage.jsx: Using fallback years:', fallbackYears);
-    setAvailableYears(fallbackYears);
-    
-    const storedYear = localStorage.getItem('currentYear');
-    const yearToSet = (storedYear && fallbackYears.includes(storedYear)) ? storedYear : '2025';
-    
-    if (yearToSet !== currentYear) {
-      setCurrentYear(yearToSet);
-      localStorage.setItem('currentYear', yearToSet);
-      
-      if (typeof handleYearChange === 'function') {
-        await handleYearChange(yearToSet);
-      }
-    }
-  }
-};
-
-  useEffect(() => {
-  console.log('HomePage.jsx: useEffect for sessionToken triggered. sessionToken:', sessionToken);
-  if (sessionToken) {
-    searchUserYears(); // Always fetch fresh data from server
-  } else {
-    console.log('HomePage.jsx: No sessionToken, resetting to default');
-    setAvailableYears(['2025']);
-  }
-}, [sessionToken]);
-
-  useEffect(() => {
-  const serializedYears = JSON.stringify(availableYears);
-  const storedYears = localStorage.getItem('availableYears');
-  if (serializedYears !== storedYears) {
-    console.log('HomePage.jsx: Saving availableYears to localStorage:', availableYears);
-    localStorage.setItem('availableYears', serializedYears);
-  }
-}, [availableYears]);
 
   useEffect(() => {
     if (paymentsData?.length) {
-      console.log('HomePage.jsx: Payments data updated:', paymentsData.length, 'items for year', isReportsPage ? selectedYear : currentYear, 'on', isReportsPage ? 'Reports' : 'Dashboard');
+      console.log(
+        "HomePage.jsx: Payments data updated:",
+        paymentsData.length,
+        "items for year",
+        isReportsPage ? selectedYear : currentYear,
+        "on",
+        isReportsPage ? "Reports" : "Dashboard"
+      );
+    }
+  }, [paymentsData, currentYear, selectedYear, isReportsPage]);
+
+  // Function to search for user-specific years
+  const searchUserYears = async () => {
+    console.log(
+      "HomePage.jsx: searchUserYears called with sessionToken:",
+      sessionToken
+    );
+
+    if (!sessionToken) {
+      console.log("HomePage.jsx: No sessionToken available");
+      return;
+    }
+
+    console.log("HomePage.jsx: Fetching user-specific years from API");
+    try {
+      const response = await axios.get(`${BASE_URL}/get-user-years`, {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      });
+      console.log("HomePage.jsx: API response for user years:", response.data);
+
+      const fetchedYears = (response.data || [])
+        .filter((year) => parseInt(year) >= 2025)
+        .sort((a, b) => parseInt(a) - parseInt(b));
+
+      // Ensure we have at least 2025
+      const yearsToSet = fetchedYears.length > 0 ? fetchedYears : ["2025"];
+
+      console.log("HomePage.jsx: Setting availableYears to:", yearsToSet);
+      setAvailableYears(yearsToSet);
+
+      // Save to localStorage for faster subsequent loads within the same session
+      localStorage.setItem("availableYears", JSON.stringify(yearsToSet));
+
+      // Set current year logic
+      const storedYear = localStorage.getItem("currentYear");
+      let yearToSet;
+
+      if (storedYear && yearsToSet.includes(storedYear)) {
+        yearToSet = storedYear;
+      } else {
+        // Default to the latest available year or 2025
+        yearToSet = yearsToSet[yearsToSet.length - 1] || "2025";
+      }
+
+      console.log("HomePage.jsx: Setting currentYear to:", yearToSet);
+
+      if (yearToSet !== currentYear) {
+        setCurrentYear(yearToSet);
+        localStorage.setItem("currentYear", yearToSet);
+
+        if (typeof handleYearChange === "function") {
+          console.log(
+            "HomePage.jsx: Calling handleYearChange with:",
+            yearToSet
+          );
+          await handleYearChange(yearToSet);
+        }
+      }
+    } catch (error) {
+      console.error("HomePage.jsx: Error fetching user years:", error);
+
+      // Fallback to cached data if available, otherwise use 2025
+      const cachedYears = localStorage.getItem("availableYears");
+      const fallbackYears = cachedYears ? JSON.parse(cachedYears) : ["2025"];
+
+      console.log("HomePage.jsx: Using fallback years:", fallbackYears);
+      setAvailableYears(fallbackYears);
+
+      const storedYear = localStorage.getItem("currentYear");
+      const yearToSet =
+        storedYear && fallbackYears.includes(storedYear) ? storedYear : "2025";
+
+      if (yearToSet !== currentYear) {
+        setCurrentYear(yearToSet);
+        localStorage.setItem("currentYear", yearToSet);
+
+        if (typeof handleYearChange === "function") {
+          await handleYearChange(yearToSet);
+        }
+      }
+    }
+  };
+
+  useEffect(() => {
+    console.log(
+      "HomePage.jsx: useEffect for sessionToken triggered. sessionToken:",
+      sessionToken
+    );
+    if (sessionToken) {
+      searchUserYears(); // Always fetch fresh data from server
+    } else {
+      console.log("HomePage.jsx: No sessionToken, resetting to default");
+      setAvailableYears(["2025"]);
+    }
+  }, [sessionToken]);
+
+  useEffect(() => {
+    const serializedYears = JSON.stringify(availableYears);
+    const storedYears = localStorage.getItem("availableYears");
+    if (serializedYears !== storedYears) {
+      console.log(
+        "HomePage.jsx: Saving availableYears to localStorage:",
+        availableYears
+      );
+      localStorage.setItem("availableYears", serializedYears);
+    }
+  }, [availableYears]);
+
+  useEffect(() => {
+    if (paymentsData?.length) {
+      console.log(
+        "HomePage.jsx: Payments data updated:",
+        paymentsData.length,
+        "items for year",
+        isReportsPage ? selectedYear : currentYear,
+        "on",
+        isReportsPage ? "Reports" : "Dashboard"
+      );
     }
   }, [paymentsData, currentYear, isReportsPage]);
 
   const handleAddNewYear = async () => {
-  const newYear = (parseInt(currentYear) + 1).toString();
-  
-  console.log(`HomePage.jsx: Attempting to add new year: ${newYear}`);
-  try {
-    const response = await axios.post(
-      `${BASE_URL}/add-new-year`,
-      { year: newYear },
-      { headers: { Authorization: `Bearer ${sessionToken}` } }
-    );
-    console.log('HomePage.jsx: Add new year response:', response.data);
-    
-    // After adding new year, refresh the available years from server
-    await searchUserYears();
-    
-    // Switch to newYear
-    setCurrentYear(newYear);
-    localStorage.setItem('currentYear', newYear);
-    
-    if (typeof handleYearChange === 'function') {
-      await handleYearChange(newYear);
-    } else {
-      console.warn('HomePage.jsx: handleYearChange is not a function when adding new year');
+    const newYear = (parseInt(currentYear) + 1).toString();
+
+    console.log(`HomePage.jsx: Attempting to add new year: ${newYear}`);
+    try {
+      const response = await axios.post(
+        `${BASE_URL}/add-new-year`,
+        { year: newYear },
+        { headers: { Authorization: `Bearer ${sessionToken}` } }
+      );
+      console.log("HomePage.jsx: Add new year response:", response.data);
+
+      // After adding new year, refresh the available years from server
+      await searchUserYears();
+
+      // Switch to newYear
+      setCurrentYear(newYear);
+      localStorage.setItem("currentYear", newYear);
+
+      if (typeof handleYearChange === "function") {
+        await handleYearChange(newYear);
+      } else {
+        console.warn(
+          "HomePage.jsx: handleYearChange is not a function when adding new year"
+        );
+      }
+
+      alert(response.data.message);
+    } catch (error) {
+      console.error("HomePage.jsx: Error adding new year:", {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+      });
+      alert(
+        `Failed to add new year: ${
+          error.response?.data?.error ||
+          "An unknown error occurred. Please try again."
+        }`
+      );
     }
-    
-    alert(response.data.message);
-  } catch (error) {
-    console.error('HomePage.jsx: Error adding new year:', {
-      message: error.message,
-      response: error.response?.data,
-      status: error.response?.status
-    });
-    alert(`Failed to add new year: ${error.response?.data?.error || 'An unknown error occurred. Please try again.'}`);
-  }
-};
+  };
 
   const tableRef = useRef(null);
 
@@ -216,32 +247,32 @@ const [selectedYear, setSelectedYear] = useState(currentYear);
         hideContextMenu();
       }
     };
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
   }, [hideContextMenu]);
 
   const getPaymentStatusForMonth = (row, month) => {
     const amountToBePaid = parseFloat(row.Amount_To_Be_Paid) || 0;
     const paidInMonth = parseFloat(row[month]) || 0;
-    if (paidInMonth === 0) return 'Unpaid';
-    if (paidInMonth >= amountToBePaid) return 'Paid';
-    return 'PartiallyPaid';
+    if (paidInMonth === 0) return "Unpaid";
+    if (paidInMonth >= amountToBePaid) return "Paid";
+    return "PartiallyPaid";
   };
 
   const getMonthlyStatus = (row, month) => {
     const amountToBePaid = parseFloat(row.Amount_To_Be_Paid) || 0;
     const paidInMonth = parseFloat(row[month]) || 0;
-    if (paidInMonth === 0) return 'Unpaid';
-    if (paidInMonth >= amountToBePaid) return 'Paid';
-    return 'PartiallyPaid';
+    if (paidInMonth === 0) return "Unpaid";
+    if (paidInMonth >= amountToBePaid) return "Paid";
+    return "PartiallyPaid";
   };
 
   const getInputBackgroundColor = (row, month) => {
     const status = getPaymentStatusForMonth(row, month);
-    if (status === 'Unpaid') return 'bg-red-100/60';
-    if (status === 'PartiallyPaid') return 'bg-yellow-100/60';
-    if (status === 'Paid') return 'bg-green-100/60';
-    return 'bg-white';
+    if (status === "Unpaid") return "bg-red-100/60";
+    if (status === "PartiallyPaid") return "bg-yellow-100/60";
+    if (status === "Paid") return "bg-green-100/60";
+    return "bg-white";
   };
 
   const filteredData = paymentsData.filter((row) => {
@@ -312,13 +343,18 @@ const [selectedYear, setSelectedYear] = useState(currentYear);
           value={currentYear}
           onChange={(e) => {
             const year = e.target.value;
-            console.log('HomePage.jsx: Dashboard dropdown year changed to:', year);
+            console.log(
+              "HomePage.jsx: Dashboard dropdown year changed to:",
+              year
+            );
             setCurrentYear(year);
             localStorage.setItem("currentYear", year);
-            if (typeof handleYearChange === 'function') {
+            if (typeof handleYearChange === "function") {
               handleYearChange(year);
             } else {
-              console.warn('HomePage.jsx: handleYearChange is not a function in dashboard dropdown onChange');
+              console.warn(
+                "HomePage.jsx: handleYearChange is not a function in dashboard dropdown onChange"
+              );
             }
           }}
           className="p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm sm:text-base"
@@ -449,98 +485,103 @@ const [selectedYear, setSelectedYear] = useState(currentYear);
   );
 
   const renderReports = () => {
-  const monthStatus = paymentsData.reduce((acc, row) => {
-    if (!acc[row.Client_Name]) {
-      acc[row.Client_Name] = {};
-    }
-    months.forEach((month) => {
-      acc[row.Client_Name][month] = getMonthlyStatus(row, month);
-    });
-    return acc;
-  }, {});
+    const monthStatus = paymentsData.reduce((acc, row) => {
+      if (!acc[row.Client_Name]) {
+        acc[row.Client_Name] = {};
+      }
+      months.forEach((month) => {
+        acc[row.Client_Name][month] = getMonthlyStatus(row, month);
+      });
+      return acc;
+    }, {});
 
-  return (
-    <>
-      <h2 className="text-2xl font-semibold mb-2">
-        Monthly Client Status Report ({selectedYear})
-      </h2>
-      <div className="flex mb-4">
-        <select
-          value={selectedYear}
-          onChange={(e) => {
-            const year = e.target.value;
-            console.log('HomePage.jsx: Reports dropdown year changed to:', year);
-            setSelectedYear(year);
-            if (typeof handleYearChange === 'function') {
-              handleYearChange(year);
-            } else {
-              console.warn('HomePage.jsx: handleYearChange is not a function in reports dropdown onChange');
-            }
-          }}
-          className="p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm sm:text-base"
-        >
-          {availableYears.map((year) => (
-            <option key={year} value={year}>
-              {year}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="overflow-x-auto bg-white rounded-lg shadow-lg">
-        <table className="min-w-full border-collapse">
-          <thead>
-            <tr className="bg-gray-100">
-              <th className="border p-3 text-left font-semibold">
-                Client Name
-              </th>
-              {months.map((month, index) => (
-                <th
-                  key={index}
-                  className="border p-3 text-center font-semibold"
-                >
-                  {month.charAt(0).toUpperCase() + month.slice(1)}
+    return (
+      <>
+        <h2 className="text-2xl font-semibold mb-2">
+          Monthly Client Status Report ({selectedYear})
+        </h2>
+        <div className="flex mb-4">
+          <select
+            value={selectedYear}
+            onChange={(e) => {
+              const year = e.target.value;
+              console.log(
+                "HomePage.jsx: Reports dropdown year changed to:",
+                year
+              );
+              setSelectedYear(year);
+              if (typeof handleYearChange === "function") {
+                handleYearChange(year);
+              } else {
+                console.warn(
+                  "HomePage.jsx: handleYearChange is not a function in reports dropdown onChange"
+                );
+              }
+            }}
+            className="p-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm sm:text-base"
+          >
+            {availableYears.map((year) => (
+              <option key={year} value={year}>
+                {year}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="overflow-x-auto bg-white rounded-lg shadow-lg">
+          <table className="min-w-full border-collapse">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="border p-3 text-left font-semibold">
+                  Client Name
                 </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {Object.keys(monthStatus).length === 0 ? (
-              <tr>
-                <td
-                  colSpan={13}
-                  className="border p-3 text-center text-gray-500"
-                >
-                  No data available.
-                </td>
+                {months.map((month, index) => (
+                  <th
+                    key={index}
+                    className="border p-3 text-center font-semibold"
+                  >
+                    {month.charAt(0).toUpperCase() + month.slice(1)}
+                  </th>
+                ))}
               </tr>
-            ) : (
-              Object.keys(monthStatus).map((client, idx) => (
-                <tr key={idx} className="hover:bg-gray-50">
-                  <td className="border p-3">{client}</td>
-                  {months.map((month, mIdx) => (
-                    <td key={mIdx} className="border p-3 text-center">
-                      <span
-                        className={`px-2 py-1 rounded-full text-sm ${
-                          monthStatus[client][month] === "Paid"
-                            ? "bg-green-100 text-green-800"
-                            : monthStatus[client][month] === "PartiallyPaid"
-                            ? "bg-yellow-100 text-yellow-800"
-                            : "bg-red-100 text-red-800"
-                        }`}
-                      >
-                        {monthStatus[client][month] || "Unpaid"}
-                      </span>
-                    </td>
-                  ))}
+            </thead>
+            <tbody>
+              {Object.keys(monthStatus).length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={13}
+                    className="border p-3 text-center text-gray-500"
+                  >
+                    No data available.
+                  </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </>
-  );
-};
+              ) : (
+                Object.keys(monthStatus).map((client, idx) => (
+                  <tr key={idx} className="hover:bg-gray-50">
+                    <td className="border p-3">{client}</td>
+                    {months.map((month, mIdx) => (
+                      <td key={mIdx} className="border p-3 text-center">
+                        <span
+                          className={`px-2 py-1 rounded-full text-sm ${
+                            monthStatus[client][month] === "Paid"
+                              ? "bg-green-100 text-green-800"
+                              : monthStatus[client][month] === "PartiallyPaid"
+                              ? "bg-yellow-100 text-yellow-800"
+                              : "bg-red-100 text-red-800"
+                          }`}
+                        >
+                          {monthStatus[client][month] || "Unpaid"}
+                        </span>
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </>
+    );
+  };
   return (
     <div className="p-6">
       {isReportsPage ? renderReports() : renderDashboard()}
