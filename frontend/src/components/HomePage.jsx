@@ -84,35 +84,43 @@ const HomePage = ({
     }
   }, [paymentsData?.length, currentYear, selectedYear, isReportsPage]);
 
-  // Memoized function to search for user-specific years
-  const searchUserYears = useCallback(async () => {
-    if (!sessionToken || isLoadingYears) {
-      console.log("HomePage.jsx: No sessionToken or already loading years");
-      return;
-    }
+  const mountedRef = useRef(true);
 
-    setIsLoadingYears(true);
-    console.log("HomePage.jsx: Fetching user-specific years from API");
-    
-    try {
-      const response = await axios.get(`${BASE_URL}/get-user-years`, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-        timeout: 10000 // Add timeout to prevent hanging requests
-      });
-      
-      console.log("HomePage.jsx: API response for user years:", response.data);
+useEffect(() => {
+  mountedRef.current = true;
+  return () => {
+    mountedRef.current = false;
+  };
+}, []);
 
-      const fetchedYears = (response.data || [])
-        .filter((year) => parseInt(year) >= 2025)
-        .sort((a, b) => parseInt(a) - parseInt(b));
+const searchUserYears = useCallback(async () => {
+  if (!sessionToken || isLoadingYears) {
+    console.log("HomePage.jsx: No sessionToken or already loading years");
+    return;
+  }
 
-      const yearsToSet = fetchedYears.length > 0 ? fetchedYears : ["2025"];
-      console.log("HomePage.jsx: Setting availableYears to:", yearsToSet);
-      
+  setIsLoadingYears(true);
+  console.log("HomePage.jsx: Fetching user-specific years from API");
+
+  try {
+    const response = await axios.get(`${BASE_URL}/get-user-years`, {
+      headers: { Authorization: `Bearer ${sessionToken}` },
+      timeout: 10000,
+    });
+
+    console.log("HomePage.jsx: API response for user years:", response.data);
+
+    const fetchedYears = (response.data || [])
+      .filter((year) => parseInt(year) >= 2025)
+      .sort((a, b) => parseInt(a) - parseInt(b));
+
+    const yearsToSet = fetchedYears.length > 0 ? fetchedYears : ["2025"];
+    console.log("HomePage.jsx: Setting availableYears to:", yearsToSet);
+
+    if (mountedRef.current) {
       setAvailableYears(yearsToSet);
       localStorage.setItem("availableYears", JSON.stringify(yearsToSet));
 
-      // Set current year logic - only if not already set correctly
       const storedYear = localStorage.getItem("currentYear");
       let yearToSet;
 
@@ -132,14 +140,15 @@ const HomePage = ({
           await handleYearChange(yearToSet);
         }
       }
-    } catch (error) {
-      console.error("HomePage.jsx: Error fetching user years:", error);
+    }
+  } catch (error) {
+    console.error("HomePage.jsx: Error fetching user years:", error);
 
-      // Fallback to cached data if available
-      const cachedYears = localStorage.getItem("availableYears");
-      const fallbackYears = cachedYears ? JSON.parse(cachedYears) : ["2025"];
+    const cachedYears = localStorage.getItem("availableYears");
+    const fallbackYears = cachedYears ? JSON.parse(cachedYears) : ["2025"];
+    console.log("HomePage.jsx: Using fallback years:", fallbackYears);
 
-      console.log("HomePage.jsx: Using fallback years:", fallbackYears);
+    if (mountedRef.current) {
       setAvailableYears(fallbackYears);
 
       const storedYear = localStorage.getItem("currentYear");
@@ -153,42 +162,54 @@ const HomePage = ({
           await handleYearChange(yearToSet);
         }
       }
-    } finally {
+    }
+  } finally {
+    if (mountedRef.current) {
       setIsLoadingYears(false);
     }
-  }, [sessionToken, currentYear, handleYearChange, isLoadingYears]);
+  }
+}, [sessionToken, currentYear, handleYearChange, isLoadingYears]);
+useEffect(() => {
+  let cancelTokenSource = axios.CancelToken.source();
 
-  // Fetch years when sessionToken changes
-  useEffect(() => {
-    if (sessionToken) {
-      console.log("HomePage.jsx: SessionToken available, fetching years");
-      searchUserYears();
-    } else {
-      console.log("HomePage.jsx: No sessionToken, resetting to default");
+  if (sessionToken) {
+    console.log("HomePage.jsx: SessionToken available, fetching years");
+    searchUserYears();
+  } else {
+    console.log("HomePage.jsx: No sessionToken, resetting to default");
+    if (mountedRef.current) {
       setAvailableYears(["2025"]);
     }
-  }, [sessionToken, searchUserYears]);
+  }
+
+  return () => {
+    cancelTokenSource.cancel("Component unmounted or sessionToken changed");
+  };
+}, [sessionToken, searchUserYears]);
 
   // Memoized function to handle adding new year
   const handleAddNewYear = useCallback(async () => {
-    const newYear = (parseInt(currentYear) + 1).toString();
+  const newYear = (parseInt(currentYear) + 1).toString();
+  console.log(`HomePage.jsx: Attempting to add new year: ${newYear}`);
 
-    console.log(`HomePage.jsx: Attempting to add new year: ${newYear}`);
-    try {
-      const response = await axios.post(
-        `${BASE_URL}/add-new-year`,
-        { year: newYear },
-        { 
-          headers: { Authorization: `Bearer ${sessionToken}` },
-          timeout: 10000
-        }
-      );
-      console.log("HomePage.jsx: Add new year response:", response.data);
+  if (mountedRef.current) {
+    setIsLoadingYears(true);
+  }
 
-      // After adding new year, refresh the available years from server
-      await searchUserYears();
+  try {
+    const response = await axios.post(
+      `${BASE_URL}/add-new-year`,
+      { year: newYear },
+      {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+        timeout: 10000,
+      }
+    );
+    console.log("HomePage.jsx: Add new year response:", response.data);
 
-      // Switch to newYear
+    await searchUserYears();
+
+    if (mountedRef.current) {
       setCurrentYear(newYear);
       localStorage.setItem("currentYear", newYear);
 
@@ -197,20 +218,24 @@ const HomePage = ({
       }
 
       alert(response.data.message);
-    } catch (error) {
-      console.error("HomePage.jsx: Error adding new year:", {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-      });
-      alert(
-        `Failed to add new year: ${
-          error.response?.data?.error ||
-          "An unknown error occurred. Please try again."
-        }`
-      );
     }
-  }, [currentYear, sessionToken, handleYearChange, searchUserYears]);
+  } catch (error) {
+    console.error("HomePage.jsx: Error adding new year:", {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+    });
+    alert(
+      `Failed to add new year: ${
+        error.response?.data?.error || "An unknown error occurred. Please try again."
+      }`
+    );
+  } finally {
+    if (mountedRef.current) {
+      setIsLoadingYears(false);
+    }
+  }
+}, [currentYear, sessionToken, handleYearChange, searchUserYears]);
 
   const tableRef = useRef(null);
 
