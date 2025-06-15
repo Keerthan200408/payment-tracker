@@ -811,7 +811,7 @@ const App = () => {
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-gray-100">
+      <div className="min-h-screen bg-gray-50"> {/* Changed from bg-gray-100 */}
         {page === "signIn" && (
           <SignInPage
             setSessionToken={setSessionToken}
@@ -822,16 +822,16 @@ const App = () => {
         {page !== "signIn" && (
           <div className="flex flex-col sm:flex-row">
             {/* Navbar for Mobile */}
-            <nav className="bg-gray-800 w-full p-4 sm:hidden flex justify-between items-center">
+            <nav className="bg-white shadow-sm w-full p-4 sm:hidden flex justify-between items-center border-b border-gray-200"> {/* Updated styling */}
               <div className="flex items-center">
-                <i className="fas fa-money-bill-wave text-2xl mr-2 text-white"></i>
-                <h1 className="text-xl font-semibold text-white">
+                <i className="fas fa-money-bill-wave text-2xl mr-2 text-gray-800"></i> {/* Changed text color */}
+                <h1 className="text-xl font-semibold text-gray-800"> {/* Changed text color */}
                   Payment Tracker
                 </h1>
               </div>
               <button
                 onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className="text-white focus:outline-none"
+                className="text-gray-800 focus:outline-none" // Changed text color
               >
                 <i className="fas fa-bars text-2xl"></i>
               </button>
@@ -839,26 +839,30 @@ const App = () => {
 
             {/* Sidebar */}
             <nav
-              className={`bg-blue-900 w-full sm:w-64 p-4 fixed top-0 left-0 h-auto sm:h-full border-r border-gray-200 z-50 ${
+              className={`bg-white shadow-lg w-full sm:w-64 p-4 fixed top-0 left-0 h-auto sm:h-full border-r border-gray-200 z-50 ${
                 isSidebarOpen ? "block" : "hidden sm:block"
-              }`}
+              }`} // Changed from bg-blue-900 to bg-white with shadow
             >
-              <div className="flex items-center mb-6">
-                <i className="fas fa-money-bill-wave text-2xl mr-2 text-white"></i>
-                <h1 className="text-xl font-semibold text-white">
+              <div className="flex items-center mb-6 pb-4 border-b border-gray-200"> {/* Added border */}
+                <i className="fas fa-money-bill-wave text-2xl mr-2 text-gray-800"></i> {/* Changed color */}
+                <h1 className="text-xl font-semibold text-gray-800"> {/* Changed color */}
                   Payment Tracker
                 </h1>
               </div>
-              <ul className="space-y-2">
+              <ul className="space-y-1"> {/* Reduced space */}
                 <li>
                   <button
                     onClick={() => {
                       setPage("home");
                       setIsSidebarOpen(false);
                     }}
-                    className="w-full text-left p-2 hover:bg-blue-800 rounded-lg flex items-center text-white"
+                    className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
+                      page === "home" 
+                        ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700" 
+                        : "text-gray-700 hover:bg-gray-50"
+                    }`} // Updated styling with active state
                   >
-                    <i className="fas fa-tachometer-alt mr-2"></i> Dashboard
+                    <i className="fas fa-tachometer-alt mr-3 w-4"></i> Dashboard
                   </button>
                 </li>
                 <li>
@@ -867,9 +871,13 @@ const App = () => {
                       setPage("clients");
                       setIsSidebarOpen(false);
                     }}
-                    className="w-full text-left p-2 hover:bg-blue-800 rounded-lg flex items-center text-white"
+                    className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
+                      page === "clients" 
+                        ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700" 
+                        : "text-gray-700 hover:bg-gray-50"
+                    }`}
                   >
-                    <i className="fas fa-users mr-2"></i> Clients
+                    <i className="fas fa-users mr-3 w-4"></i> Clients
                   </button>
                 </li>
                 <li>
@@ -878,9 +886,13 @@ const App = () => {
                       setPage("payments");
                       setIsSidebarOpen(false);
                     }}
-                    className="w-full text-left p-2 hover:bg-blue-800 rounded-lg flex items-center text-white"
+                    className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
+                      page === "payments" 
+                        ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700" 
+                        : "text-gray-700 hover:bg-gray-50"
+                    }`}
                   >
-                    <i className="fas fa-money-bill-wave mr-2"></i> Payments
+                    <i className="fas fa-money-bill-wave mr-3 w-4"></i> Payments
                   </button>
                 </li>
                 <li>
@@ -889,48 +901,60 @@ const App = () => {
                       setPage("reports");
                       setIsSidebarOpen(false);
                     }}
-                    className="w-full text-left p-2 hover:bg-blue-800 rounded-lg flex items-center text-white"
+                    className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
+                      page === "reports" 
+                        ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700" 
+                        : "text-gray-700 hover:bg-gray-50"
+                    }`}
                   >
-                    <i className="fas fa-chart-line mr-2"></i> Reports
+                    <i className="fas fa-chart-line mr-3 w-4"></i> Reports
                   </button>
                 </li>
-                <li>
+                <li className="pt-4 mt-4 border-t border-gray-200"> {/* Added separator */}
                   <button
                     onClick={logout}
-                    className="w-full text-left p-2 hover:bg-blue-800 rounded-lg text-red-500 flex items-center"
+                    className="w-full text-left p-3 hover:bg-red-50 rounded-lg text-red-600 flex items-center transition-colors" // Updated styling
                   >
-                    <i className="fas fa-sign-out-alt mr-2"></i> Logout
+                    <i className="fas fa-sign-out-alt mr-3 w-4"></i> Logout
                   </button>
                 </li>
               </ul>
             </nav>
 
             {/* Main Content */}
-            <main className="flex-1 p-6 overflow-y-auto sm:ml-64 mt-16 sm:mt-0">
-              <header className="flex items-center justify-between mb-6">
-                <h1 className="text-xl font-semibold text-gray-900">
-                  {page === "home"
-                    ? "Dashboard"
-                    : page.charAt(0).toUpperCase() + page.slice(1)}
-                </h1>
+            <main className="flex-1 p-6 overflow-y-auto sm:ml-64 mt-16 sm:mt-0 bg-gray-50"> {/* Added background */}
+              <header className="flex items-center justify-between mb-8 bg-white p-4 rounded-lg shadow-sm"> {/* Updated header styling */}
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900 mb-1"> {/* Updated typography */}
+                    {page === "home"
+                      ? "Dashboard"
+                      : page.charAt(0).toUpperCase() + page.slice(1)}
+                  </h1>
+                  <p className="text-gray-600 text-sm">
+                    {page === "home" && "Welcome to your payment tracking dashboard"}
+                    {page === "clients" && "Manage your clients and their information"}
+                    {page === "payments" && "Track and manage payment records"}
+                    {page === "reports" && "View detailed reports and analytics"}
+                  </p>
+                </div>
                 <div className="relative" ref={profileMenuRef}>
                   <button
                     onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-                    className="focus:outline-none"
+                    className="focus:outline-none p-2 rounded-full hover:bg-gray-100 transition-colors" // Added hover effect
                   >
-                    <i className="fas fa-user-circle text-3xl text-gray-900"></i>
+                    <i className="fas fa-user-circle text-3xl text-gray-700"></i> {/* Updated color */}
                   </button>
                   {isProfileMenuOpen && (
                     <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
-                      <div className="p-4">
+                      <div className="p-4 border-b border-gray-100"> {/* Added border */}
                         <p className="font-semibold text-gray-900">
                           {currentUser}
                         </p>
+                        <p className="text-sm text-gray-500">Administrator</p> {/* Added role */}
                       </div>
-                      <hr className="border-gray-200" />
                       <button
                         onClick={logout}
-                        className="w-full text-left p-4 text-red-500 hover:bg-gray-50 flex items-center"
+                        className="w-full text-left p-4 text-red-600 hover:bg-red-50 flex items-center transition-colors" // Updated styling
                       >
                         <i className="fas fa-sign-out-alt mr-2"></i> Logout
                       </button>
@@ -939,7 +963,8 @@ const App = () => {
                 </div>
               </header>
               {isImporting && (
-                <div className="mb-4 p-3 bg-yellow-100 text-yellow-700 rounded-lg text-center">
+                <div className="mb-4 p-4 bg-yellow-50 text-yellow-800 rounded-lg text-center border border-yellow-200"> {/* Updated styling */}
+                  <i className="fas fa-spinner fa-spin mr-2"></i>
                   Importing, please wait... Do not refresh the page.
                 </div>
               )}
