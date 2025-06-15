@@ -138,58 +138,38 @@ const ClientsPage = ({
   }
 
   return (
-    <div className="p-0">
+    <div className="p-6 bg-gray-50 min-h-screen">
       {/* Header Section */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 bg-white p-6 rounded-lg shadow-sm">
-        <div className="mb-4 sm:mb-0">
-          <h2 className="text-2xl font-bold text-gray-900 mb-1">Client Payment Tracker</h2>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+        <div className="flex gap-3 mb-4 sm:mb-0">
+          <button
+            onClick={() => setPage("addClient")}
+            className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition duration-200 flex items-center"
+            disabled={isLoading || deleteInProgress}
+          >
+            <i className="fas fa-plus mr-2"></i> Add Client
+          </button>
+          <button
+            className="bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition duration-200 flex items-center"
+            disabled={isLoading || deleteInProgress}
+          >
+            <i className="fas fa-upload mr-2"></i> Bulk Import
+          </button>
         </div>
-        <button
-          onClick={() => setPage("addClient")}
-          className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition duration-200 flex items-center"
-          disabled={isLoading || deleteInProgress}
-        >
-          <i className="fas fa-plus mr-2"></i> Add Client
-        </button>
-      </div>
-
-      {/* Search and Filter Section */}
-      <div className="mb-6 bg-white p-6 rounded-lg shadow-sm">
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1">
-            <input
-              type="text"
-              placeholder="Search clients..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
-              disabled={isLoading || deleteInProgress}
-            />
-          </div>
-          <div className="sm:w-48">
-            <select className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500">
-              <option>All Months</option>
-              <option>January</option>
-              <option>February</option>
-              <option>March</option>
-              <option>April</option>
-              <option>May</option>
-              <option>June</option>
-              <option>July</option>
-              <option>August</option>
-              <option>September</option>
-              <option>October</option>
-              <option>November</option>
-              <option>December</option>
-            </select>
-          </div>
-          <div className="sm:w-48">
-            <select className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500">
-              <option>Payment Status</option>
-              <option>Paid</option>
-              <option>Pending</option>
-              <option>Overdue</option>
-            </select>
+        
+        <div className="flex gap-3 w-full sm:w-auto">
+          <div className="flex-1 sm:w-64">
+            <div className="relative">
+              <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+              <input
+                type="text"
+                placeholder="Search clients..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
+                disabled={isLoading || deleteInProgress}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -208,36 +188,30 @@ const ClientsPage = ({
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-100 border-b border-gray-200">
+            <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Client
                 </th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">
-                  Fixed Amount
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Email
                 </th>
-                <th className="px-6 py-4 text-center text-sm font-semibold text-gray-700">
-                  Jan 2025
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Monthly Amount
                 </th>
-                <th className="px-6 py-4 text-center text-sm font-semibold text-gray-700">
-                  Feb 2025
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
                 </th>
-                <th className="px-6 py-4 text-center text-sm font-semibold text-gray-700">
-                  Mar 2025
-                </th>
-                <th className="px-6 py-4 text-right text-sm font-semibold text-gray-700">
-                  Total Due
-                </th>
-                <th className="px-6 py-4 text-center text-sm font-semibold text-gray-700">
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="bg-white divide-y divide-gray-200">
               {filteredClients.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={5}
                     className="px-6 py-12 text-center text-gray-500"
                   >
                     <div className="flex flex-col items-center">
@@ -253,46 +227,41 @@ const ClientsPage = ({
                 </tr>
               ) : (
                 filteredClients.map((client, index) => (
-                  <tr key={`${client.Client_Name}-${client.Type}-${index}`} className="hover:bg-gray-50 border-b border-gray-100">
-                    <td className="px-6 py-4">
+                  <tr key={`${client.Client_Name}-${client.Type}-${index}`} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
-                        <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center mr-3">
-                          <i className="fas fa-user text-gray-600 text-sm"></i>
+                        <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center mr-3">
+                          <i className="fas fa-user text-gray-600"></i>
                         </div>
-                        <span className="font-medium text-gray-900">{client.Client_Name}</span>
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">{client.Client_Name}</div>
+                          <div className="text-sm text-gray-500">Client ID: #{index + 1234}</div>
+                        </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <span className="font-medium text-gray-900">
-                        ₹{(client.Amount_To_Be_Paid || 0).toLocaleString()}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        {client.email || `${client.Client_Name.toLowerCase().replace(' ', '')}@example.com`}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">
+                        ₹{(client.Amount_To_Be_Paid || 0).toLocaleString()}.00
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
+                        Active
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className="inline-flex px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800">
-                        Paid
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className="inline-flex px-2 py-1 rounded text-xs font-medium bg-orange-100 text-orange-800">
-                        Pending
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className="text-gray-400">-</span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <span className="font-semibold text-gray-900">
-                        ₹{(client.Amount_To_Be_Paid || 0).toLocaleString()}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <div className="flex items-center justify-center space-x-2">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <div className="flex items-center space-x-3">
                         <button
                           onClick={() => {
                             setEditClient(client);
                             setPage("addClient");
                           }}
-                          className="text-gray-600 hover:text-gray-800 p-1"
+                          className="text-gray-600 hover:text-gray-900"
                           disabled={isLoading || deleteInProgress}
                           title="Edit Client"
                         >
@@ -300,7 +269,7 @@ const ClientsPage = ({
                         </button>
                         <button
                           onClick={() => handleDelete(client)}
-                          className="text-gray-600 hover:text-gray-800 p-1"
+                          className="text-gray-600 hover:text-gray-900"
                           disabled={isLoading || deleteInProgress}
                           title="Delete Client"
                         >
@@ -317,22 +286,26 @@ const ClientsPage = ({
         
         {/* Table Footer with Pagination */}
         {filteredClients.length > 0 && (
-          <div className="bg-white px-6 py-3 border-t border-gray-200">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-gray-700">
-                Showing 1-10 of {filteredClients.length} entries
-              </p>
-              <div className="flex items-center space-x-1">
-                <button className="px-3 py-1 text-sm text-gray-500 hover:text-gray-700 disabled:text-gray-300" disabled>
-                  Previous
-                </button>
-                <button className="px-3 py-1 text-sm bg-gray-800 text-white rounded">1</button>
-                <button className="px-3 py-1 text-sm text-gray-700 hover:bg-gray-100 rounded">2</button>
-                <button className="px-3 py-1 text-sm text-gray-700 hover:bg-gray-100 rounded">3</button>
-                <button className="px-3 py-1 text-sm text-gray-500 hover:text-gray-700">
-                  Next
-                </button>
-              </div>
+          <div className="bg-white px-6 py-3 border-t border-gray-200 flex items-center justify-between">
+            <div className="text-sm text-gray-700">
+              Showing 1 to 10 of {filteredClients.length} entries
+            </div>
+            <div className="flex items-center space-x-2">
+              <button className="px-3 py-1 text-sm border border-gray-300 rounded text-gray-500 bg-white hover:bg-gray-50 disabled:opacity-50" disabled>
+                Previous
+              </button>
+              <button className="px-3 py-1 text-sm bg-gray-800 text-white rounded">
+                1
+              </button>
+              <button className="px-3 py-1 text-sm border border-gray-300 rounded text-gray-700 bg-white hover:bg-gray-50">
+                2
+              </button>
+              <button className="px-3 py-1 text-sm border border-gray-300 rounded text-gray-700 bg-white hover:bg-gray-50">
+                3
+              </button>
+              <button className="px-3 py-1 text-sm border border-gray-300 rounded text-gray-700 bg-white hover:bg-gray-50">
+                Next
+              </button>
             </div>
           </div>
         )}
