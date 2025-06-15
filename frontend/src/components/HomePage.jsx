@@ -331,26 +331,31 @@ const HomePage = ({
       className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition duration-200 flex items-center"
       disabled={isLoadingYears}
     >
-      <i className="fas fa-calendar-plus mr-2"></i> 
-      {isLoadingYears ? "Loading..." : "Add New Year"}
+      <i className="fas fa-calendar-plus mr-2"></i> Add New Year
     </button>
   </div>
-  <select
-    value={currentYear}
-    onChange={(e) => {
-      const year = e.target.value;
-      console.log("HomePage.jsx: Dashboard dropdown year changed to:", year);
-      handleYearChangeDebounced(year);
-    }}
-    className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
-    disabled={isLoadingYears}
-  >
-    {availableYears.map((year) => (
-      <option key={year} value={year}>
-        {year}
-      </option>
-    ))}
-  </select>
+  <div className="relative w-full sm:w-32">
+    <select
+      value={currentYear}
+      onChange={(e) => {
+        const year = e.target.value;
+        console.log("HomePage.jsx: Dashboard dropdown year changed to:", year);
+        setCurrentYear(year);
+        localStorage.setItem("currentYear", year);
+        if (typeof handleYearChange === "function") {
+          handleYearChange(year);
+        }
+      }}
+      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base"
+      disabled={isLoadingYears}
+    >
+      {availableYears.map((year) => (
+        <option key={year} value={year}>
+          {year}
+        </option>
+      ))}
+    </select>
+  </div>
 </div>
 
 <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 mb-6">
@@ -451,7 +456,7 @@ const HomePage = ({
                         currentYear
                       )
                     }
-                    className={`w-20 p-1 border border-gray-300 rounded text-right focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base bg-white`}
+                    className="w-20 p-1 border border-gray-300 rounded text-right focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base bg-white"
                     placeholder="0.00"
                   />
                 </td>
