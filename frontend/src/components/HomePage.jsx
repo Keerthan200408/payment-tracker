@@ -331,31 +331,26 @@ const HomePage = ({
       className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition duration-200 flex items-center"
       disabled={isLoadingYears}
     >
-      <i className="fas fa-calendar-plus mr-2"></i> Add New Year
+      <i className="fas fa-calendar-plus mr-2"></i>
+      {isLoadingYears ? "Loading..." : "Add New Year"}
     </button>
   </div>
-  <div className="relative w-full sm:w-32">
-    <select
-      value={currentYear}
-      onChange={(e) => {
-        const year = e.target.value;
-        console.log("HomePage.jsx: Dashboard dropdown year changed to:", year);
-        setCurrentYear(year);
-        localStorage.setItem("currentYear", year);
-        if (typeof handleYearChange === "function") {
-          handleYearChange(year);
-        }
-      }}
-      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base"
-      disabled={isLoadingYears}
-    >
-      {availableYears.map((year) => (
-        <option key={year} value={year}>
-          {year}
-        </option>
-      ))}
-    </select>
-  </div>
+  <select
+    value={currentYear}
+    onChange={(e) => {
+      const year = e.target.value;
+      console.log("HomePage.jsx: Dashboard dropdown year changed to:", year);
+      handleYearChangeDebounced(year);
+    }}
+    className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+    disabled={isLoadingYears}
+  >
+    {availableYears.map((year) => (
+      <option key={year} value={year}>
+        {year}
+      </option>
+    ))}
+  </select>
 </div>
 
 <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 mb-6">
@@ -490,93 +485,93 @@ const HomePage = ({
 
   const renderReports = () => {
     const monthStatus = useMemo(() => {
-      return paymentsData.reduce((acc, row) => {
-        if (!acc[row.Client_Name]) {
-          acc[row.Client_Name] = {};
-        }
-        months.forEach((month) => {
-          acc[row.Client_Name][month] = getMonthlyStatus(row, month);
-        });
-        return acc;
-      }, {});
-    }, [paymentsData, months, getMonthlyStatus]);
+  return paymentsData.reduce((acc, row) => {
+    if (!acc[row.Client_Name]) {
+      acc[row.Client_Name] = {};
+    }
+    months.forEach((month) => {
+      acc[row.Client_Name][month] = getMonthlyStatus(row, month);
+    });
+    return acc;
+  }, {});
+}, [paymentsData, months, getMonthlyStatus]);
 
-    return (
-      <>
-        <h2 className="text-xl font-medium text-gray-900 mb-4">
-  Monthly Client Status Report ({selectedYear})
-</h2>
-<div className="flex mb-6">
-  <select
-    value={selectedYear}
-    onChange={(e) => {
-      const year = e.target.value;
-      console.log("HomePage.jsx: Reports dropdown year changed to:", year);
-      setSelectedYear(year);
-      if (typeof handleYearChange === "function") {
-        handleYearChange(year);
-      }
-    }}
-    className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
-    disabled={isLoadingYears}
-  >
-    {availableYears.map((year) => (
-      <option key={year} value={year}>
-        {year}
-      </option>
-    ))}
-  </select>
-</div>
-<div className="bg-white rounded-lg shadow-sm overflow-hidden">
-  <div className="overflow-x-auto">
-    <table className="w-full">
-      <thead className="bg-gray-50 border-b border-gray-200">
-        <tr>
-          <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-            Client Name
-          </th>
-          {months.map((month, index) => (
-            <th
-              key={index}
-              className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
-            >
-              {month.charAt(0).toUpperCase() + month.slice(1)}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody className="bg-white divide-y divide-gray-200">
-        {Object.keys(monthStatus).length === 0 ? (
-          <tr>
-            <td
-              colSpan={13}
-              className="px-6 py-12 text-center text-gray-500"
-            >
-              No data available.
-            </td>
-          </tr>
-        ) : (
-          Object.keys(monthStatus).map((client, idx) => (
-            <tr key={idx} className="hover:bg-gray-50">
-              <td className="px-6 py-4 whitespace-nowrap">{client}</td>
-              {months.map((month, mIdx) => (
-                <td key={mIdx} className="px-6 py-4 whitespace-nowrap text-center">
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800`}
-                  >
-                    {monthStatus[client][month] || "Unpaid"}
-                  </span>
-                </td>
+return (
+  <>
+    <h2 className="text-xl font-medium text-gray-900 mb-4">
+      Monthly Client Status Report ({selectedYear})
+    </h2>
+    <div className="flex mb-6">
+      <select
+        value={selectedYear}
+        onChange={(e) => {
+          const year = e.target.value;
+          console.log("HomePage.jsx: Reports dropdown year changed to:", year);
+          setSelectedYear(year);
+          if (typeof handleYearChange === "function") {
+            handleYearChange(year);
+          }
+        }}
+        className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+        disabled={isLoadingYears}
+      >
+        {availableYears.map((year) => (
+          <option key={year} value={year}>
+            {year}
+          </option>
+        ))}
+      </select>
+    </div>
+    <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead className="bg-gray-50 border-b border-gray-200">
+            <tr>
+              <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Client Name
+              </th>
+              {months.map((month, index) => (
+                <th
+                  key={index}
+                  className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider"
+                >
+                  {month.charAt(0).toUpperCase() + month.slice(1)}
+                </th>
               ))}
             </tr>
-          ))
-        )}
-      </tbody>
-    </table>
-  </div>
-</div>
-      </>
-    );
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {Object.keys(monthStatus).length === 0 ? (
+              <tr>
+                <td
+                  colSpan={13}
+                  className="px-6 py-12 text-center text-gray-500"
+                >
+                  No data available.
+                </td>
+              </tr>
+            ) : (
+              Object.keys(monthStatus).map((client, idx) => (
+                <tr key={idx} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap">{client}</td>
+                  {months.map((month, mIdx) => (
+                    <td key={mIdx} className="px-6 py-4 whitespace-nowrap text-center">
+                      <span
+                        className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800"
+                      >
+                        {monthStatus[client][month] || "Unpaid"}
+                      </span>
+                    </td>
+                  ))}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </>
+);
   };
 
   return (
