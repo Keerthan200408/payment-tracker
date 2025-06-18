@@ -59,6 +59,12 @@ const HomePage = ({
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [isLoadingYears, setIsLoadingYears] = useState(false);
 
+  const [localInputValues, setLocalInputValues] = useState({});
+const [pendingUpdates, setPendingUpdates] = useState({});
+const debounceTimersRef = useRef({});
+const isUpdatingRef = useRef(false);
+  
+
   // Sync selectedYear with currentYear for Reports view
   useEffect(() => {
     if (isReportsPage && currentYear !== selectedYear) {
@@ -93,6 +99,17 @@ useEffect(() => {
   };
 }, []);
 
+useEffect(() => {
+  const initialValues = {};
+  paymentsData.forEach((row, rowIndex) => {
+    months.forEach(month => {
+      const key = `${rowIndex}-${month}`;
+      initialValues[key] = row[month] || "";
+    });
+  });
+  setLocalInputValues(initialValues);
+}, [paymentsData, months]);
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const retryWithBackoff = async (fn, retries = 3, delay = 1000) => {
@@ -110,6 +127,14 @@ const retryWithBackoff = async (fn, retries = 3, delay = 1000) => {
     }
   }
 };
+
+useEffect(() => {
+  return () => {
+    Object.values(debounceTimersRef.current).forEach(timer => {
+      if (timer) clearTimeout(timer);
+    });
+  };
+}, []);
 
 const searchUserYears = useCallback(async (cancelToken) => {
   if (!sessionToken) {
@@ -293,13 +318,24 @@ const handleAddNewYear = useCallback(async () => {
     return "PartiallyPaid";
   }, []);
 
- const getInputBackgroundColor = useCallback((row, month) => {
-  const status = getPaymentStatusForMonth(row, month);
-  if (status === "Unpaid") return "bg-red-200/50";
-  if (status === "PartiallyPaid") return "bg-yellow-200/50";
-  if (status === "Paid") return "bg-green-200/50";
-  return "bg-white";
-}, [getPaymentStatusForMonth]);
+const getInputBackgroundColor = useCallback((row, month, rowIndex) => {
+  const key = `${rowIndex}-${month}`;
+  const currentValue = localInputValues[key] !== undefined ? localInputValues[key] : (row[month] || "");
+  const amountToBePaid = parseFloat(row.Amount_To_Be_Paid) || 0;
+  const paidInMonth = parseFloat(currentValue) || 0;
+  
+  let status;
+  if (paidInMonth === 0) status = "Unpaid";
+  else if (paidInMonth >= amountToBePaid) status = "Paid";
+  else status = "PartiallyPaid";
+  
+  // Add visual indicator for pending updates
+  const isPending = pendingUpdates[key];
+  const baseColor = status === "Unpaid" ? "bg-red-200/50" : 
+                   status === "PartiallyPaid" ? "bg-yellow-200/50" : "bg-green-200/50";
+  
+  return isPending ? `${baseColor} ring-2 ring-blue-300` : baseColor;
+}, [localInputValues, pendingUpdates]);
 
   // Memoized filtered data to prevent unnecessary re-calculations
   const filteredData = useMemo(() => {
@@ -341,6 +377,66 @@ const handleAddNewYear = useCallback(async () => {
     console.warn("HomePage.jsx: handleYearChange is not a function");
   }
 }, [handleYearChange, setCurrentYear]);
+
+// Debounced update function
+const debouncedUpdate = useCallback((rowIndex, month, value, year) => {
+  const key = `${rowIndex}-${month}`;
+  
+  // Clear existing timer for this input
+  if (debounceTimersRef.current[key]) {
+    clearTimeout(debounceTimersRef.current[key]);
+  }
+
+  // Set new timer
+  debounceTimersRef.current[key] = setTimeout(async () => {
+    if (isUpdatingRef.current) return;
+    
+    isUpdatingRef.current = true;
+    try {
+      console.log(`Updating payment: Row ${rowIndex}, Month ${month}, Value ${value}`);
+      await updatePayment(rowIndex, month, value, year);
+      
+      // Remove from pending updates
+      setPendingUpdates(prev => {
+        const updated = { ...prev };
+        delete updated[key];
+        return updated;
+      });
+    } catch (error) {
+      console.error("Error updating payment:", error);
+      // Optionally revert the local value on error
+      setLocalInputValues(prev => ({
+        ...prev,
+        [key]: paymentsData[rowIndex]?.[month] || ""
+      }));
+    } finally {
+      isUpdatingRef.current = false;
+    }
+    
+    delete debounceTimersRef.current[key];
+  }, 1000); // 1 second debounce delay
+
+  // Mark as pending update
+  setPendingUpdates(prev => ({
+    ...prev,
+    [key]: true
+  }));
+}, [updatePayment, paymentsData]);
+
+// Handle input changes
+const handleInputChange = useCallback((rowIndex, month, value) => {
+  const key = `${rowIndex}-${month}`;
+  
+  // Update local state immediately for responsive UI
+  setLocalInputValues(prev => ({
+    ...prev,
+    [key]: value
+  }));
+
+  // Trigger debounced API update
+  debouncedUpdate(rowIndex, month, value, currentYear);
+}, [debouncedUpdate, currentYear]);
+
 
   const renderDashboard = () => (
     <>
@@ -438,33 +534,33 @@ const handleAddNewYear = useCallback(async () => {
         </select>
       </div>
 
-     <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-  <div className="overflow-x-auto max-h-96 overflow-y-auto">
-    <table className="w-full" ref={tableRef}>
-      <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
-        <tr>
-          <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-            Client Name
-          </th>
-          <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-            Type
-          </th>
-          <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-            Amount To Be Paid
-          </th>
-          {months.map((month, index) => (
-            <th
-              key={index}
-              className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50"
-            >
-              {month.charAt(0).toUpperCase() + month.slice(1)}
-            </th>
-          ))}
-          <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-            Due Payment
-          </th>
-        </tr>
-      </thead>
+      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+        <div className="overflow-x-auto max-h-96 overflow-y-auto">
+          <table className="w-full" ref={tableRef}>
+            <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
+              <tr>
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                  Client Name
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                  Type
+                </th>
+                <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                  Amount To Be Paid
+                </th>
+                {months.map((month, index) => (
+                  <th
+                    key={index}
+                    className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50"
+                  >
+                    {month.charAt(0).toUpperCase() + month.slice(1)}
+                  </th>
+                ))}
+                <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                  Due Payment
+                </th>
+              </tr>
+            </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredData.length === 0 ? (
                 <tr>
@@ -496,20 +592,26 @@ const handleAddNewYear = useCallback(async () => {
                       >
                         <input
                           type="text"
-                          value={row[month] || ""}
+                          value={
+                            localInputValues[`${rowIndex}-${month}`] !==
+                            undefined
+                              ? localInputValues[`${rowIndex}-${month}`]
+                              : row[month] || ""
+                          }
                           onChange={(e) =>
-                            updatePayment(
-                              rowIndex,
-                              month,
-                              e.target.value,
-                              currentYear
-                            )
+                            handleInputChange(rowIndex, month, e.target.value)
                           }
                           className={`w-20 p-1 border border-gray-300 rounded text-right focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base ${getInputBackgroundColor(
                             row,
-                            month
+                            month,
+                            rowIndex
                           )}`}
                           placeholder="0.00"
+                          title={
+                            pendingUpdates[`${rowIndex}-${month}`]
+                              ? "Saving..."
+                              : ""
+                          }
                         />
                       </td>
                     ))}

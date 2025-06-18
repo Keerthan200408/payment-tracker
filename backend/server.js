@@ -120,21 +120,26 @@ async function ensureSheet(sheetName, headers, year = null) {
 }
 
 // Helper: Read data from sheet
-async function readSheet(sheetName, range) {
+async function readSheet(sheetNames, range) {
   const sheets = google.sheets({ version: "v4", auth });
   try {
-    const response = await sheets.spreadsheets.values.get({
+    const ranges = Array.isArray(sheetNames)
+      ? sheetNames.map((sheet) => `${sheet}!${range}`)
+      : [`${sheetNames}!${range}`];
+    const response = await sheets.spreadsheets.values.batchGet({
       spreadsheetId,
-      range: `${sheetName}!${range}`,
+      ranges,
     });
-    return response.data.values || [];
+    return Array.isArray(sheetNames)
+      ? response.data.valueRanges.map((vr) => vr.values || [])
+      : response.data.valueRanges[0].values || [];
   } catch (error) {
-    console.error(`Error reading sheet ${sheetName} range ${range}:`, {
+    console.error(`Error reading sheet(s) ${sheetNames} range ${range}:`, {
       message: error.message,
       code: error.code,
       details: error.errors,
     });
-    throw new Error(`Failed to read sheet ${sheetName}`);
+    throw new Error(`Failed to read sheet(s) ${sheetNames}`);
   }
 }
 
