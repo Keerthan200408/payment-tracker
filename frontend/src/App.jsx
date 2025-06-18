@@ -607,7 +607,7 @@ const App = () => {
       rowData[m] = value || "";
     });
   } else if (month && monthUpdates !== null) {
-    // Single-month update (fallback)
+    // Single-month update
     if (isNaN(parseFloat(monthUpdates)) && monthUpdates !== "") {
       alert("Please enter a valid number");
       return;
@@ -662,7 +662,7 @@ const App = () => {
   updatedPayments[rowIndex] = rowData;
   setPaymentsData(updatedPayments);
 
-  const timeoutKey = `${rowIndex}-${month || "batch"}-${Date.now()}`;
+  const timeoutKey = `${rowIndex}-${month || Object.keys(monthUpdates || {}).join("-")}-${Date.now()}`;
   if (saveTimeouts.current[timeoutKey]) {
     clearTimeout(saveTimeouts.current[timeoutKey]);
   }
@@ -670,7 +670,7 @@ const App = () => {
   const savePaymentWithRetry = async (payload, retries = 3, delayMs = 2000) => {
     for (let i = 0; i < retries; i++) {
       try {
-        console.log("App.jsx: Saving payment for:", rowData.Client_Name, month || "batch", monthUpdates || month, year);
+        console.log("App.jsx: Saving payment for:", rowData.Client_Name, monthUpdates ? "batch" : month, monthUpdates || monthUpdates, year);
         const response = await axios.post(`${BASE_URL}/save-payment`, payload, {
           headers: { Authorization: `Bearer ${sessionToken}` },
           params: { year },
@@ -685,8 +685,8 @@ const App = () => {
           status: error.response?.status,
           data: error.response?.data,
           rowIndex,
-          month: month || "batch",
-          monthUpdates: monthUpdates || month,
+          month: monthUpdates ? "batch" : month,
+          monthUpdates: monthUpdates || monthUpdates,
           year,
           attempt: i + 1,
         });
@@ -706,11 +706,23 @@ const App = () => {
     const payloadData = {
       rowIndex,
       updatedRow: {
-        ...rowData,
+        Client_Name: rowData.Client_Name,
+        Type: rowData.Type,
+        Amount_To_Be_Paid: rowData.Amount_To_Be_Paid,
+        january: rowData.january || "",
+        february: rowData.february || "",
+        march: rowData.march || "",
+        april: rowData.april || "",
+        may: rowData.may || "",
+        june: rowData.june || "",
+        july: rowData.july || "",
+        august: rowData.august || "",
+        september: rowData.september || "",
+        october: rowData.october || "",
+        november: rowData.november || "",
+        december: rowData.december || "",
         Due_Payment: rowData.Due_Payment,
       },
-      month: month || null,
-      value: monthUpdates || null,
     };
 
     try {
