@@ -399,6 +399,23 @@ const getInputBackgroundColor = useCallback((row, month, rowIndex) => {
 }, [handleYearChange, setCurrentYear]);
 
 
+const updateMultiplePayments = useCallback(async (updates) => {
+  try {
+    const response = await axios.post(
+      `${BASE_URL}/update-multiple-payments`,
+      { updates },
+      {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+        timeout: 15000,
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Batch update failed:', error);
+    throw error;
+  }
+}, [sessionToken]);
+
 
 const cancelTokensRef = useRef({});
 
@@ -553,22 +570,7 @@ const cachedApiCall = useCallback(async (key, apiFunction) => {
   return result;
 }, []);
 
-const updateMultiplePayments = useCallback(async (updates) => {
-  try {
-    const response = await axios.post(
-      `${BASE_URL}/update-multiple-payments`,
-      { updates },
-      {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-        timeout: 15000,
-      }
-    );
-    return response.data;
-  } catch (error) {
-    console.error('Batch update failed:', error);
-    throw error;
-  }
-}, [sessionToken]);
+
 
 
   const renderDashboard = () => (
