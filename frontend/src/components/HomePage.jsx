@@ -325,66 +325,21 @@ const HomePage = ({
     }
   }, [currentYear, sessionToken, handleYearChange, searchUserYears]);
 
-  const processBatchUpdates = useCallback(
-  async (retries = 3) => {
-    if (updateQueueRef.current.length === 0 || !isOnline) {
-      setIsUpdating(false);
-      return;
-    }
-
-    setIsUpdating(true);
-    const updates = updateQueueRef.current.splice(0, BATCH_SIZE);
-    console.log(`HomePage.jsx: Processing batch of ${updates.length} updates`, updates);
-
-    const groupedUpdates = updates.reduce((acc, update) => {
-      if (!acc[update.rowIndex]) acc[update.rowIndex] = {};
-      acc[update.rowIndex][update.month] = update.value;
-      return acc;
-    }, {});
-
-    for (const [rowIndex, monthUpdates] of Object.entries(groupedUpdates)) {
-      try {
-        await retryWithBackoff(async () => {
-          await updatePayment(parseInt(rowIndex), null, monthUpdates, currentYear);
-        }, retries);
-
-        Object.keys(monthUpdates).forEach((month) => {
-          const key = `${rowIndex}-${month}`;
-          setPendingUpdates((prev) => {
-            const updated = { ...prev };
-            delete updated[key];
-            return updated;
-          });
-        });
-      } catch (error) {
-        console.error("HomePage.jsx: Batch update failed for row", rowIndex, {
-          error: error.message,
-          status: error.response?.status,
-          data: error.response?.data,
-          monthUpdates,
-        });
-        if (error.response?.status === 429 && retries > 0) {
-          console.log(`HomePage.jsx: Rate limit hit, retrying batch after ${2000 * (4 - retries)}ms...`);
-          updateQueueRef.current.unshift(...updates); // Re-queue failed updates
-          setTimeout(() => processBatchUpdates(retries - 1), 2000 * (4 - retries));
-          return;
-        }
-        alert(`Failed to save updates for row ${rowIndex}: ${error.message}`);
-      }
-    }
-
-    if (updateQueueRef.current.length > 0) {
-      batchTimerRef.current = setTimeout(() => processBatchUpdates(retries), BATCH_DELAY);
-    } else {
-      setIsUpdating(false);
-    }
-  },
-  [updatePayment, currentYear, isOnline]
-);
+  
 
 const debouncedUpdate = useCallback(
   (rowIndex, month, value, year) => {
-    const key = `${rowIndex}-${month}-${Date.now()}`; // Unique key to prevent overwrites
+    if (!paymentsData.length) {
+      console.warn("HomePage.jsx: Cannot queue update, paymentsData is empty");
+      alert("Please wait for data to load before making updates.");
+      return;
+    }
+    if (!paymentsData[rowIndex]) {
+      console.warn("HomePage.jsx: Invalid rowIndex:", rowIndex);
+      return;
+    }
+
+    const key = `${rowIndex}-${month}`; // Single key per rowIndex-month
 
     if (debounceTimersRef.current[key]) {
       clearTimeout(debounceTimersRef.current[key]);
@@ -392,10 +347,13 @@ const debouncedUpdate = useCallback(
 
     setLocalInputValues((prev) => ({
       ...prev,
-      [`${rowIndex}-${month}`]: value,
+      [key]: value,
     }));
 
     debounceTimersRef.current[key] = setTimeout(() => {
+      updateQueueRef.current = updateQueueRef.current.filter(
+        (update) => !(update.rowIndex === rowIndex && update.month === month)
+      ); // Remove older updates for the same rowIndex-month
       updateQueueRef.current.push({
         rowIndex,
         month,
@@ -410,14 +368,14 @@ const debouncedUpdate = useCallback(
       }
 
       delete debounceTimersRef.current[key];
-    }, 1500); // Increased to 1500ms to reduce overwrites
+    }, 2000); // Increased to 2000ms to capture full input
 
     setPendingUpdates((prev) => ({
       ...prev,
-      [`${rowIndex}-${month}`]: true,
+      [key]: true,
     }));
   },
-  [processBatchUpdates]
+  [processBatchUpdates, paymentsData]
 );
 
   const handleYearChangeDebounced = useCallback(
