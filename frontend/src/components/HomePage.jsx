@@ -60,9 +60,19 @@ const HomePage = ({
   const [isLoadingYears, setIsLoadingYears] = useState(false);
 
   const [localInputValues, setLocalInputValues] = useState({});
-const [pendingUpdates, setPendingUpdates] = useState({});
-const debounceTimersRef = useRef({});
-const isUpdatingRef = useRef(false);
+  const [pendingUpdates, setPendingUpdates] = useState({});
+  const debounceTimersRef = useRef({});
+  const isUpdatingRef = useRef(false);
+
+  const updateQueueRef = useRef([]);
+  const batchTimerRef = useRef(null);
+  const apiCacheRef = useRef({});
+  const activeRequestsRef = useRef(new Set());
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  const BATCH_DELAY = 2000; // 2 seconds
+  const BATCH_SIZE = 5; // 5 updates per batch
+  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
   
 
   // Sync selectedYear with currentYear for Reports view
@@ -128,95 +138,113 @@ const retryWithBackoff = async (fn, retries = 3, delay = 1000) => {
   }
 };
 
+// 2. ADD OFFLINE DETECTION (new useEffect)
 useEffect(() => {
+  const handleOnline = () => setIsOnline(true);
+  const handleOffline = () => setIsOnline(false);
+  
+  window.addEventListener('online', handleOnline);
+  window.addEventListener('offline', handleOffline);
+  
   return () => {
-    Object.values(debounceTimersRef.current).forEach(timer => {
-      if (timer) clearTimeout(timer);
-    });
+    window.removeEventListener('online', handleOnline);
+    window.removeEventListener('offline', handleOffline);
   };
 }, []);
 
+// 8. ADD CLEANUP FOR NEW TIMERS (modify existing cleanup useEffect)
+useEffect(() => {
+  return () => {
+    // Existing cleanup
+    Object.values(debounceTimersRef.current).forEach(timer => {
+      if (timer) clearTimeout(timer);
+    });
+    
+    // New cleanup
+    if (batchTimerRef.current) {
+      clearTimeout(batchTimerRef.current);
+    }
+    
+    // Process remaining updates on unmount
+    if (updateQueueRef.current.length > 0) {
+      processBatchUpdates();
+    }
+  };
+}, [processBatchUpdates]);
+
+// 7. MODIFY YOUR EXISTING searchUserYears FUNCTION (add caching)
 const searchUserYears = useCallback(async (cancelToken) => {
   if (!sessionToken) {
-    console.log("HomePage.jsx: No sessionToken or already loading years");
+    console.log("HomePage.jsx: No sessionToken");
     return;
   }
 
-  setIsLoadingYears(true);
-  console.log("HomePage.jsx: Fetching user-specific years from API");
-
-  try {
-    const response = await axios.get(`${BASE_URL}/get-user-years`, {
-      headers: { Authorization: `Bearer ${sessionToken}` },
-      timeout: 10000,
-      cancelToken,
-    });
-
-    console.log("HomePage.jsx: API response for user years:", response.data);
-
-    const fetchedYears = (response.data || [])
-      .filter((year) => parseInt(year) >= 2025)
-      .sort((a, b) => parseInt(a) - parseInt(b));
-
-    const yearsToSet = fetchedYears.length > 0 ? fetchedYears : ["2025"];
-    console.log("HomePage.jsx: Setting availableYears to:", yearsToSet);
-
-    if (mountedRef.current) {
-      setAvailableYears(yearsToSet);
-      localStorage.setItem("availableYears", JSON.stringify(yearsToSet));
-
-      const storedYear = localStorage.getItem("currentYear");
-      let yearToSet;
-
-      if (storedYear && yearsToSet.includes(storedYear)) {
-        yearToSet = storedYear;
-      } else {
-        yearToSet = yearsToSet[yearsToSet.length - 1] || "2025";
-      }
-
-      if (yearToSet !== currentYear) {
-        console.log("HomePage.jsx: Setting currentYear to:", yearToSet);
-        setCurrentYear(yearToSet);
-        localStorage.setItem("currentYear", yearToSet);
-
-        if (typeof handleYearChange === "function") {
-          console.log("HomePage.jsx: Calling handleYearChange with:", yearToSet);
-          await handleYearChange(yearToSet);
-        }
-      }
-    }
-  } catch (error) {
-    if (axios.isCancel(error)) {
-      console.log("HomePage.jsx: Fetch years request cancelled");
-      return;
-    }
-    console.error("HomePage.jsx: Error fetching user years:", error);
-
-    const cachedYears = localStorage.getItem("availableYears");
-    const fallbackYears = cachedYears ? JSON.parse(cachedYears) : ["2025"];
-    console.log("HomePage.jsx: Using fallback years:", fallbackYears);
-
-    if (mountedRef.current) {
-      setAvailableYears(fallbackYears);
-
-      const storedYear = localStorage.getItem("currentYear");
-      const yearToSet = storedYear && fallbackYears.includes(storedYear) ? storedYear : "2025";
-
-      if (yearToSet !== currentYear) {
-        setCurrentYear(yearToSet);
-        localStorage.setItem("currentYear", yearToSet);
-
-        if (typeof handleYearChange === "function") {
-          await handleYearChange(yearToSet);
-        }
-      }
-    }
-  } finally {
-    if (mountedRef.current) {
-      setIsLoadingYears(false);
-    }
+  // Check cache first
+  const cacheKey = getCacheKey('/get-user-years', { sessionToken });
+  const cachedYears = getCachedData(cacheKey);
+  if (cachedYears) {
+    console.log("HomePage.jsx: Using cached years data");
+    setAvailableYears(cachedYears);
+    return;
   }
-}, [sessionToken, currentYear, handleYearChange, setCurrentYear]);
+
+  const requestKey = `years_${sessionToken}`;
+  return createDedupedRequest(requestKey, async () => {
+    setIsLoadingYears(true);
+    console.log("HomePage.jsx: Fetching user-specific years from API");
+
+    try {
+      const response = await axios.get(`${BASE_URL}/get-user-years`, {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+        timeout: 10000,
+        cancelToken,
+      });
+
+      const fetchedYears = (response.data || [])
+        .filter((year) => parseInt(year) >= 2025)
+        .sort((a, b) => parseInt(a) - parseInt(b));
+
+      const yearsToSet = fetchedYears.length > 0 ? fetchedYears : ["2025"];
+      
+      // Cache the result
+      setCachedData(cacheKey, yearsToSet);
+      
+      if (mountedRef.current) {
+        setAvailableYears(yearsToSet);
+        localStorage.setItem("availableYears", JSON.stringify(yearsToSet));
+
+        const storedYear = localStorage.getItem("currentYear");
+        let yearToSet = storedYear && yearsToSet.includes(storedYear) 
+          ? storedYear 
+          : yearsToSet[yearsToSet.length - 1] || "2025";
+
+        if (yearToSet !== currentYear) {
+          setCurrentYear(yearToSet);
+          localStorage.setItem("currentYear", yearToSet);
+          if (typeof handleYearChange === "function") {
+            await handleYearChange(yearToSet);
+          }
+        }
+      }
+      
+      return yearsToSet;
+    } catch (error) {
+      if (axios.isCancel(error)) return;
+      console.error("HomePage.jsx: Error fetching user years:", error);
+      
+      const fallbackYears = ["2025"];
+      if (mountedRef.current) {
+        setAvailableYears(fallbackYears);
+      }
+      return fallbackYears;
+    } finally {
+      if (mountedRef.current) {
+        setIsLoadingYears(false);
+      }
+    }
+  });
+}, [sessionToken, currentYear, handleYearChange, setCurrentYear, getCacheKey, getCachedData, setCachedData, createDedupedRequest]);
+
 
 useEffect(() => {
   const controller = axios.CancelToken.source();
@@ -378,50 +406,121 @@ const getInputBackgroundColor = useCallback((row, month, rowIndex) => {
   }
 }, [handleYearChange, setCurrentYear]);
 
-// Debounced update function
+
+// 3. ADD CACHE UTILITY FUNCTIONS (new functions)
+const getCacheKey = useCallback((url, params = {}) => {
+  return `${url}_${JSON.stringify(params)}`;
+}, []);
+
+const getCachedData = useCallback((key) => {
+  const cached = apiCacheRef.current[key];
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    return cached.data;
+  }
+  return null;
+}, []);
+
+const setCachedData = useCallback((key, data) => {
+  apiCacheRef.current[key] = {
+    data,
+    timestamp: Date.now()
+  };
+}, []);
+
+// 4. ADD REQUEST DEDUPLICATION (new function)
+const createDedupedRequest = useCallback(async (requestKey, requestFn) => {
+  if (activeRequestsRef.current.has(requestKey)) {
+    // Wait for existing request
+    while (activeRequestsRef.current.has(requestKey)) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    return getCachedData(requestKey);
+  }
+
+  activeRequestsRef.current.add(requestKey);
+  try {
+    const result = await requestFn();
+    setCachedData(requestKey, result);
+    return result;
+  } finally {
+    activeRequestsRef.current.delete(requestKey);
+  }
+}, [getCachedData, setCachedData]);
+
+// 5. ADD BATCH UPDATE PROCESSING (new function)
+const processBatchUpdates = useCallback(async () => {
+  if (updateQueueRef.current.length === 0 || !isOnline) return;
+
+  const updates = updateQueueRef.current.splice(0, BATCH_SIZE);
+  console.log(`Processing batch of ${updates.length} updates`);
+
+  // Group updates by row to send fewer requests
+  const groupedUpdates = updates.reduce((acc, update) => {
+    if (!acc[update.rowIndex]) acc[update.rowIndex] = {};
+    acc[update.rowIndex][update.month] = update.value;
+    return acc;
+  }, {});
+
+  // Send grouped updates
+  for (const [rowIndex, monthUpdates] of Object.entries(groupedUpdates)) {
+    try {
+      await updatePayment(parseInt(rowIndex), null, monthUpdates, currentYear);
+      
+      // Clear pending status for successful updates
+      Object.keys(monthUpdates).forEach(month => {
+        const key = `${rowIndex}-${month}`;
+        setPendingUpdates(prev => {
+          const updated = { ...prev };
+          delete updated[key];
+          return updated;
+        });
+      });
+    } catch (error) {
+      console.error('Batch update failed for row', rowIndex, error);
+    }
+  }
+
+  // Schedule next batch if queue has more items
+  if (updateQueueRef.current.length > 0) {
+    batchTimerRef.current = setTimeout(processBatchUpdates, BATCH_DELAY);
+  }
+}, [updatePayment, currentYear, isOnline]);
+
+
+
+// 6. REPLACE YOUR EXISTING debouncedUpdate FUNCTION
 const debouncedUpdate = useCallback((rowIndex, month, value, year) => {
   const key = `${rowIndex}-${month}`;
   
-  // Clear existing timer for this input
+  // Clear existing timer
   if (debounceTimersRef.current[key]) {
     clearTimeout(debounceTimersRef.current[key]);
   }
 
-  // Set new timer
-  debounceTimersRef.current[key] = setTimeout(async () => {
-    if (isUpdatingRef.current) return;
-    
-    isUpdatingRef.current = true;
-    try {
-      console.log(`Updating payment: Row ${rowIndex}, Month ${month}, Value ${value}`);
-      await updatePayment(rowIndex, month, value, year);
-      
-      // Remove from pending updates
-      setPendingUpdates(prev => {
-        const updated = { ...prev };
-        delete updated[key];
-        return updated;
-      });
-    } catch (error) {
-      console.error("Error updating payment:", error);
-      // Optionally revert the local value on error
-      setLocalInputValues(prev => ({
-        ...prev,
-        [key]: paymentsData[rowIndex]?.[month] || ""
-      }));
-    } finally {
-      isUpdatingRef.current = false;
+  // Add to batch queue instead of immediate update
+  debounceTimersRef.current[key] = setTimeout(() => {
+    updateQueueRef.current.push({
+      rowIndex,
+      month,
+      value,
+      year,
+      timestamp: Date.now()
+    });
+
+    // Start batch processing if not already running
+    if (!batchTimerRef.current) {
+      batchTimerRef.current = setTimeout(processBatchUpdates, BATCH_DELAY);
     }
     
     delete debounceTimersRef.current[key];
-  }, 1000); // 1 second debounce delay
+  }, 1000);
 
-  // Mark as pending update
+  // Mark as pending
   setPendingUpdates(prev => ({
     ...prev,
     [key]: true
   }));
-}, [updatePayment, paymentsData]);
+}, [processBatchUpdates]);
 
 // Handle input changes
 const handleInputChange = useCallback((rowIndex, month, value) => {
@@ -436,6 +535,7 @@ const handleInputChange = useCallback((rowIndex, month, value) => {
   // Trigger debounced API update
   debouncedUpdate(rowIndex, month, value, currentYear);
 }, [debouncedUpdate, currentYear]);
+
 
 
   const renderDashboard = () => (
@@ -845,6 +945,22 @@ const handleInputChange = useCallback((rowIndex, month, value) => {
 };
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
+      {/* ADD THE OFFLINE INDICATOR HERE - RIGHT AFTER THE OPENING DIV */}
+    {!isOnline && (
+      <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4">
+        <div className="flex">
+          <div className="flex-shrink-0">
+            <i className="fas fa-exclamation-triangle"></i>
+          </div>
+          <div className="ml-3">
+            <p className="text-sm">
+              You're currently offline. Changes will be saved when connection is restored.
+            </p>
+          </div>
+        </div>
+      </div>
+    )}
+    {/* YOUR EXISTING CONTENT CONTINUES BELOW */}
       {isReportsPage ? renderReports() : renderDashboard()}
     </div>
   );
