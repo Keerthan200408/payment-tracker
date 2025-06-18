@@ -63,6 +63,7 @@ const HomePage = ({
 const [pendingUpdates, setPendingUpdates] = useState({});
 const debounceTimersRef = useRef({});
 const isUpdatingRef = useRef(false);
+const [currentPage, setCurrentPage] = useState(1);
   
 
   // Sync selectedYear with currentYear for Reports view
@@ -130,18 +131,32 @@ const retryWithBackoff = async (fn, retries = 3, delay = 1000) => {
 
 useEffect(() => {
   return () => {
+    // Clear debounce timers
     Object.values(debounceTimersRef.current).forEach(timer => {
       if (timer) clearTimeout(timer);
+    });
+    
+    // Clear batch timer
+    if (batchTimerRef.current) {
+      clearTimeout(batchTimerRef.current);
+    }
+    
+    // Cancel pending requests
+    Object.values(cancelTokensRef.current).forEach(cancelToken => {
+      if (cancelToken) cancelToken.cancel('Component unmounting');
     });
   };
 }, []);
 
+const yearsFetchedRef = useRef(false);
+
 const searchUserYears = useCallback(async (cancelToken) => {
-  if (!sessionToken) {
+  if (!sessionToken || yearsFetchedRef.current) {
     console.log("HomePage.jsx: No sessionToken or already loading years");
     return;
   }
 
+  yearsFetchedRef.current = true;
   setIsLoadingYears(true);
   console.log("HomePage.jsx: Fetching user-specific years from API");
 
@@ -290,16 +305,19 @@ const handleAddNewYear = useCallback(async () => {
 
   const tableRef = useRef(null);
 
-  // Handle clicks outside table for context menu
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (tableRef.current && !tableRef.current.contains(e.target)) {
-        hideContextMenu();
-      }
-    };
+  // Move this outside the component or memoize it
+const handleClickOutside = useCallback((e) => {
+  if (tableRef.current && !tableRef.current.contains(e.target)) {
+    hideContextMenu();
+  }
+}, [hideContextMenu]);
+
+useEffect(() => {
+  if (contextMenu) {
     document.addEventListener("click", handleClickOutside);
     return () => document.removeEventListener("click", handleClickOutside);
-  }, [hideContextMenu]);
+  }
+}, [contextMenu, handleClickOutside]); // Only add/remove when contextMenu changes
 
   // Memoized helper functions
   const getPaymentStatusForMonth = useCallback((row, month) => {
@@ -339,6 +357,8 @@ const getInputBackgroundColor = useCallback((row, month, rowIndex) => {
 
   // Memoized filtered data to prevent unnecessary re-calculations
   const filteredData = useMemo(() => {
+
+    if (!paymentsData?.length) return [];
     return paymentsData.filter((row) => {
       const matchesSearch =
         !searchQuery ||
@@ -362,7 +382,7 @@ const getInputBackgroundColor = useCallback((row, month, rowIndex) => {
 
       return matchesSearch && matchesMonth && matchesStatus;
     });
-  }, [paymentsData, searchQuery, monthFilter, statusFilter, getPaymentStatusForMonth]);
+  }, [paymentsData, searchQuery, monthFilter, statusFilter]);
 
   // Memoized year change handler
   const handleYearChangeDebounced = useCallback((year) => {
@@ -378,51 +398,129 @@ const getInputBackgroundColor = useCallback((row, month, rowIndex) => {
   }
 }, [handleYearChange, setCurrentYear]);
 
-// Debounced update function
+
+
+const cancelTokensRef = useRef({});
+
+
 const debouncedUpdate = useCallback((rowIndex, month, value, year) => {
   const key = `${rowIndex}-${month}`;
   
-  // Clear existing timer for this input
-  if (debounceTimersRef.current[key]) {
-    clearTimeout(debounceTimersRef.current[key]);
-  }
-
-  // Set new timer
-  debounceTimersRef.current[key] = setTimeout(async () => {
-    if (isUpdatingRef.current) return;
-    
-    isUpdatingRef.current = true;
-    try {
-      console.log(`Updating payment: Row ${rowIndex}, Month ${month}, Value ${value}`);
-      await updatePayment(rowIndex, month, value, year);
-      
-      // Remove from pending updates
-      setPendingUpdates(prev => {
-        const updated = { ...prev };
-        delete updated[key];
-        return updated;
-      });
-    } catch (error) {
-      console.error("Error updating payment:", error);
-      // Optionally revert the local value on error
-      setLocalInputValues(prev => ({
-        ...prev,
-        [key]: paymentsData[rowIndex]?.[month] || ""
-      }));
-    } finally {
-      isUpdatingRef.current = false;
-    }
-    
-    delete debounceTimersRef.current[key];
-  }, 1000); // 1 second debounce delay
-
-  // Mark as pending update
+  // Set pending state immediately
   setPendingUpdates(prev => ({
     ...prev,
     [key]: true
   }));
-}, [updatePayment, paymentsData]);
+  
+  // Add to batch queue
+  setBatchUpdateQueue(prev => ({
+    ...prev,
+    [key]: {
+      rowIndex,
+      month,
+      newValue: value,
+      year,
+      timestamp: Date.now()
+    }
+  }));
+  
+  // Clear existing batch timer
+  if (batchTimerRef.current) {
+    clearTimeout(batchTimerRef.current);
+  }
+  
+  // Set new batch timer
+  batchTimerRef.current = setTimeout(async () => {
+    const currentQueue = { ...batchUpdateQueue };
+    const queueWithCurrent = {
+      ...currentQueue,
+      [key]: {
+        rowIndex,
+        month,
+        newValue: value,
+        year,
+        timestamp: Date.now()
+      }
+    };
+    
+    if (Object.keys(queueWithCurrent).length > 0) {
+      try {
+        if (Object.keys(queueWithCurrent).length > 1) {
+          // Batch update for multiple changes
+          await updateMultiplePayments(queueWithCurrent);
+        } else {
+          // Single update
+          const [updateKey, updateValue] = Object.entries(queueWithCurrent)[0];
+          await updatePayment(
+            updateValue.rowIndex,
+            updateValue.month,
+            updateValue.newValue,
+            updateValue.year
+          );
+        }
+        
+        // Clear successful updates from pending state
+        setPendingUpdates(prev => {
+          const newState = { ...prev };
+          Object.keys(queueWithCurrent).forEach(k => {
+            delete newState[k];
+          });
+          return newState;
+        });
+        
+      } catch (error) {
+        console.error('Update failed:', error);
+        
+        // Revert failed updates in local state
+        setLocalInputValues(prev => {
+          const reverted = { ...prev };
+          Object.entries(queueWithCurrent).forEach(([k, update]) => {
+            const originalValue = paymentsData[update.rowIndex]?.[update.month] || "";
+            reverted[k] = originalValue;
+          });
+          return reverted;
+        });
+        
+        // Clear pending states
+        setPendingUpdates(prev => {
+          const newState = { ...prev };
+          Object.keys(queueWithCurrent).forEach(k => {
+            delete newState[k];
+          });
+          return newState;
+        });
+      }
+      
+      // Clear the batch queue
+      setBatchUpdateQueue({});
+    }
+  }, 1000); // 1 second batch window
+  
+}, [updatePayment, updateMultiplePayments, paymentsData, batchUpdateQueue]);
 
+// Add this state for batching
+const [batchUpdateQueue, setBatchUpdateQueue] = useState({});
+const batchTimerRef = useRef(null);
+
+// Modify your debouncedUpdate to use batching
+const batchedUpdate = useCallback((updates) => {
+  // Clear existing batch timer
+  if (batchTimerRef.current) {
+    clearTimeout(batchTimerRef.current);
+  }
+
+  batchTimerRef.current = setTimeout(async () => {
+    if (Object.keys(updates).length > 1) {
+      // Send all updates in a single API call
+      await updateMultiplePayments(updates); // You'd need to create this API endpoint
+    } else {
+      // Single update as before
+      const [key, value] = Object.entries(updates)[0];
+      const [rowIndex, month] = key.split('-');
+      await updatePayment(parseInt(rowIndex), month, value.newValue, value.year);
+    }
+  }, 1000);
+}, [updatePayment]);
 // Handle input changes
 const handleInputChange = useCallback((rowIndex, month, value) => {
   const key = `${rowIndex}-${month}`;
@@ -436,6 +534,41 @@ const handleInputChange = useCallback((rowIndex, month, value) => {
   // Trigger debounced API update
   debouncedUpdate(rowIndex, month, value, currentYear);
 }, [debouncedUpdate, currentYear]);
+
+const apiCacheRef = useRef({});
+
+const cachedApiCall = useCallback(async (key, apiFunction) => {
+  if (apiCacheRef.current[key]) {
+    return apiCacheRef.current[key];
+  }
+  
+  const result = await apiFunction();
+  apiCacheRef.current[key] = result;
+  
+  // Clear cache after 5 minutes
+  setTimeout(() => {
+    delete apiCacheRef.current[key];
+  }, 5 * 60 * 1000);
+  
+  return result;
+}, []);
+
+const updateMultiplePayments = useCallback(async (updates) => {
+  try {
+    const response = await axios.post(
+      `${BASE_URL}/update-multiple-payments`,
+      { updates },
+      {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+        timeout: 15000,
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Batch update failed:', error);
+    throw error;
+  }
+}, [sessionToken]);
 
 
   const renderDashboard = () => (
@@ -665,7 +798,7 @@ const handleInputChange = useCallback((rowIndex, month, value) => {
   const entriesPerPage = 10;
   const totalEntries = Object.keys(monthStatus).length;
   const totalPages = Math.ceil(totalEntries / entriesPerPage);
-  const [currentPage, setCurrentPage] = useState(1);
+  
 
   const paginatedClients = Object.keys(monthStatus).slice(
     (currentPage - 1) * entriesPerPage,
