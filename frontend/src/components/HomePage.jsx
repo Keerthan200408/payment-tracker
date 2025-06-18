@@ -38,6 +38,7 @@ const HomePage = ({
   const [localInputValues, setLocalInputValues] = useState({});
   const [pendingUpdates, setPendingUpdates] = useState({});
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isUpdating, setIsUpdating] = useState(false);
   const debounceTimersRef = useRef({});
   const updateQueueRef = useRef([]);
   const batchTimerRef = useRef(null);
@@ -324,11 +325,16 @@ const HomePage = ({
     }
   }, [currentYear, sessionToken, handleYearChange, searchUserYears]);
 
-  const processBatchUpdates = useCallback(async () => {
-    if (updateQueueRef.current.length === 0 || !isOnline) return;
+  const processBatchUpdates = useCallback(
+  async (retries = 3) => {
+    if (updateQueueRef.current.length === 0 || !isOnline) {
+      setIsUpdating(false);
+      return;
+    }
 
+    setIsUpdating(true);
     const updates = updateQueueRef.current.splice(0, BATCH_SIZE);
-    console.log(`Processing batch of ${updates.length} updates`);
+    console.log(`HomePage.jsx: Processing batch of ${updates.length} updates`, updates);
 
     const groupedUpdates = updates.reduce((acc, update) => {
       if (!acc[update.rowIndex]) acc[update.rowIndex] = {};
@@ -338,7 +344,9 @@ const HomePage = ({
 
     for (const [rowIndex, monthUpdates] of Object.entries(groupedUpdates)) {
       try {
-        await updatePayment(parseInt(rowIndex), null, monthUpdates, currentYear);
+        await retryWithBackoff(async () => {
+          await updatePayment(parseInt(rowIndex), null, monthUpdates, currentYear);
+        }, retries);
 
         Object.keys(monthUpdates).forEach((month) => {
           const key = `${rowIndex}-${month}`;
@@ -349,46 +357,68 @@ const HomePage = ({
           });
         });
       } catch (error) {
-        console.error("Batch update failed for row", rowIndex, error);
+        console.error("HomePage.jsx: Batch update failed for row", rowIndex, {
+          error: error.message,
+          status: error.response?.status,
+          data: error.response?.data,
+          monthUpdates,
+        });
+        if (error.response?.status === 429 && retries > 0) {
+          console.log(`HomePage.jsx: Rate limit hit, retrying batch after ${2000 * (4 - retries)}ms...`);
+          updateQueueRef.current.unshift(...updates); // Re-queue failed updates
+          setTimeout(() => processBatchUpdates(retries - 1), 2000 * (4 - retries));
+          return;
+        }
+        alert(`Failed to save updates for row ${rowIndex}: ${error.message}`);
       }
     }
 
     if (updateQueueRef.current.length > 0) {
-      batchTimerRef.current = setTimeout(processBatchUpdates, BATCH_DELAY);
+      batchTimerRef.current = setTimeout(() => processBatchUpdates(retries), BATCH_DELAY);
+    } else {
+      setIsUpdating(false);
     }
-  }, [updatePayment, currentYear, isOnline]);
+  },
+  [updatePayment, currentYear, isOnline]
+);
 
-  const debouncedUpdate = useCallback(
-    (rowIndex, month, value, year) => {
-      const key = `${rowIndex}-${month}`;
+const debouncedUpdate = useCallback(
+  (rowIndex, month, value, year) => {
+    const key = `${rowIndex}-${month}-${Date.now()}`; // Unique key to prevent overwrites
 
-      if (debounceTimersRef.current[key]) {
-        clearTimeout(debounceTimersRef.current[key]);
+    if (debounceTimersRef.current[key]) {
+      clearTimeout(debounceTimersRef.current[key]);
+    }
+
+    setLocalInputValues((prev) => ({
+      ...prev,
+      [`${rowIndex}-${month}`]: value,
+    }));
+
+    debounceTimersRef.current[key] = setTimeout(() => {
+      updateQueueRef.current.push({
+        rowIndex,
+        month,
+        value,
+        year,
+        timestamp: Date.now(),
+      });
+      console.log("HomePage.jsx: Queued update:", { rowIndex, month, value, year });
+
+      if (!batchTimerRef.current) {
+        batchTimerRef.current = setTimeout(processBatchUpdates, BATCH_DELAY);
       }
 
-      debounceTimersRef.current[key] = setTimeout(() => {
-        updateQueueRef.current.push({
-          rowIndex,
-          month,
-          value,
-          year,
-          timestamp: Date.now(),
-        });
+      delete debounceTimersRef.current[key];
+    }, 1500); // Increased to 1500ms to reduce overwrites
 
-        if (!batchTimerRef.current) {
-          batchTimerRef.current = setTimeout(processBatchUpdates, BATCH_DELAY);
-        }
-
-        delete debounceTimersRef.current[key];
-      }, 1000);
-
-      setPendingUpdates((prev) => ({
-        ...prev,
-        [key]: true,
-      }));
-    },
-    [processBatchUpdates]
-  );
+    setPendingUpdates((prev) => ({
+      ...prev,
+      [`${rowIndex}-${month}`]: true,
+    }));
+  },
+  [processBatchUpdates]
+);
 
   const handleYearChangeDebounced = useCallback(
     (year) => {
@@ -937,6 +967,12 @@ const HomePage = ({
           </div>
         </div>
       )}
+      {isUpdating && (
+  <div className="mb-4 p-4 bg-yellow-50 text-yellow-800 rounded-lg text-center border border-yellow-200">
+    <i className="fas fa-spinner fa-spin mr-2"></i>
+    Saving updates, please wait...
+  </div>
+)}
       {isReportsPage ? renderReports() : renderDashboard()}
     </div>
   );
