@@ -59,10 +59,10 @@ const HomePage = ({
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [isLoadingYears, setIsLoadingYears] = useState(false);
 
-  const [localInputValues, setLocalInputValues] = useState({});
+const [localInputValues, setLocalInputValues] = useState({});
 const [pendingUpdates, setPendingUpdates] = useState({});
-const debounceTimersRef = useRef({});
-const isUpdatingRef = useRef(false);
+const [batchQueue, setBatchQueue] = useState({});
+const batchTimerRef = useRef(null);
 const [currentPage, setCurrentPage] = useState(1);
   
 
@@ -111,6 +111,7 @@ useEffect(() => {
   setLocalInputValues(initialValues);
 }, [paymentsData, months]);
 
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const retryWithBackoff = async (fn, retries = 3, delay = 1000) => {
@@ -129,22 +130,14 @@ const retryWithBackoff = async (fn, retries = 3, delay = 1000) => {
   }
 };
 
+// REPLACE the existing useEffect cleanup with:
 useEffect(() => {
+  mountedRef.current = true;
   return () => {
-    // Clear debounce timers
-    Object.values(debounceTimersRef.current).forEach(timer => {
-      if (timer) clearTimeout(timer);
-    });
-    
-    // Clear batch timer
+    mountedRef.current = false;
     if (batchTimerRef.current) {
       clearTimeout(batchTimerRef.current);
     }
-    
-    // Cancel pending requests
-    Object.values(cancelTokensRef.current).forEach(cancelToken => {
-      if (cancelToken) cancelToken.cancel('Component unmounting');
-    });
   };
 }, []);
 
@@ -398,7 +391,57 @@ const getInputBackgroundColor = useCallback((row, month, rowIndex) => {
   }
 }, [handleYearChange, setCurrentYear]);
 
+const updateMultiplePayments = useCallback(async (updates) => {
+  try {
+    const response = await axios.post(
+      `${BASE_URL}/update-multiple-payments`,
+      { updates },
+      {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+        timeout: 15000,
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Batch update failed:', error);
+    throw error;
+  }
+}, [sessionToken]);
 
+// ADD this new function:
+const processBatchUpdates = useCallback(async (queueToProcess) => {
+  try {
+    if (Object.keys(queueToProcess).length === 1) {
+      const [key, update] = Object.entries(queueToProcess)[0];
+      await updatePayment(update.rowIndex, update.month, update.newValue, update.year);
+    } else {
+      await updateMultiplePayments(queueToProcess);
+    }
+
+    setPendingUpdates(prev => {
+      const newState = { ...prev };
+      Object.keys(queueToProcess).forEach(k => delete newState[k]);
+      return newState;
+    });
+  } catch (error) {
+    console.error('Batch update failed:', error);
+    
+    setLocalInputValues(prev => {
+      const reverted = { ...prev };
+      Object.entries(queueToProcess).forEach(([k, update]) => {
+        const originalValue = paymentsData[update.rowIndex]?.[update.month] || "";
+        reverted[k] = originalValue;
+      });
+      return reverted;
+    });
+    
+    setPendingUpdates(prev => {
+      const newState = { ...prev };
+      Object.keys(queueToProcess).forEach(k => delete newState[k]);
+      return newState;
+    });
+  }
+}, [updatePayment, updateMultiplePayments, paymentsData]);
 
 const cancelTokensRef = useRef({});
 
@@ -521,19 +564,35 @@ const batchedUpdate = useCallback((updates) => {
     }
   }, 1000);
 }, [updatePayment]);
-// Handle input changes
+
+// REPLACE the existing handleInputChange function with:
 const handleInputChange = useCallback((rowIndex, month, value) => {
   const key = `${rowIndex}-${month}`;
   
-  // Update local state immediately for responsive UI
-  setLocalInputValues(prev => ({
+  // Update local state immediately
+  setLocalInputValues(prev => ({ ...prev, [key]: value }));
+  
+  // Mark as pending
+  setPendingUpdates(prev => ({ ...prev, [key]: true }));
+  
+  // Add to batch queue
+  setBatchQueue(prev => ({
     ...prev,
-    [key]: value
+    [key]: { rowIndex, month, newValue: value, year: currentYear }
   }));
-
-  // Trigger debounced API update
-  debouncedUpdate(rowIndex, month, value, currentYear);
-}, [debouncedUpdate, currentYear]);
+  
+  // Clear existing timer
+  if (batchTimerRef.current) {
+    clearTimeout(batchTimerRef.current);
+  }
+  
+  // Set new timer
+  batchTimerRef.current = setTimeout(async () => {
+    const currentQueue = { ...batchQueue, [key]: { rowIndex, month, newValue: value, year: currentYear } };
+    await processBatchUpdates(currentQueue);
+    setBatchQueue({});
+  }, 1000);
+}, [currentYear, processBatchUpdates, batchQueue]);
 
 const apiCacheRef = useRef({});
 
@@ -553,22 +612,7 @@ const cachedApiCall = useCallback(async (key, apiFunction) => {
   return result;
 }, []);
 
-const updateMultiplePayments = useCallback(async (updates) => {
-  try {
-    const response = await axios.post(
-      `${BASE_URL}/update-multiple-payments`,
-      { updates },
-      {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-        timeout: 15000,
-      }
-    );
-    return response.data;
-  } catch (error) {
-    console.error('Batch update failed:', error);
-    throw error;
-  }
-}, [sessionToken]);
+
 
 
   const renderDashboard = () => (
