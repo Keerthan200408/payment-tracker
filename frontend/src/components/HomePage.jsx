@@ -378,103 +378,40 @@ const debouncedUpdate = useCallback(
   [paymentsData]
 );
 
+// HomePage.jsx: processBatchUpdates
 const processBatchUpdates = useCallback(async () => {
   if (!updateQueueRef.current.length) {
     console.log("HomePage.jsx: No updates to process");
     batchTimerRef.current = null;
     return;
   }
-
   const updates = [...updateQueueRef.current];
   updateQueueRef.current = [];
   batchTimerRef.current = null;
-
   console.log(`HomePage.jsx: Processing batch of ${updates.length} updates`, updates);
-
   setIsUpdating(true);
 
-  // Group updates by rowIndex
-  const groupedUpdates = updates.reduce((acc, update) => {
-    const { rowIndex, month, value, year } = update;
-    if (!acc[rowIndex]) {
-      acc[rowIndex] = { year, monthUpdates: {} };
-    }
-    acc[rowIndex].monthUpdates[month] = value;
-    return acc;
-  }, {});
-
   try {
-    await Promise.all(
-      Object.entries(groupedUpdates).map(async ([rowIndex, { year, monthUpdates }]) => {
-        const rowData = paymentsData[rowIndex];
-        if (!rowData) {
-          console.warn(`HomePage.jsx: Invalid rowIndex ${rowIndex} in batch update`);
-          return;
-        }
-
-        const updatedRow = { ...rowData };
-        Object.entries(monthUpdates).forEach(([month, value]) => {
-          updatedRow[month] = value;
+    for (const update of updates) {
+      const { rowIndex, month, value, year } = update;
+      const rowData = paymentsData[rowIndex];
+      if (!rowData) {
+        console.warn(`HomePage.jsx: Invalid rowIndex ${rowIndex}`);
+        continue;
+      }
+      try {
+        await updatePayment(rowIndex, month, value, year);
+        setPendingUpdates((prev) => {
+          const key = `${rowIndex}-${month}`;
+          const newPending = { ...prev };
+          delete newPending[key];
+          return newPending;
         });
-
-        // Calculate Due_Payment
-        const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
-        const activeMonths = months.filter(
-          (m) => updatedRow[m] && parseFloat(updatedRow[m]) >= 0
-        ).length;
-        const expectedPayment = amountToBePaid * activeMonths;
-        const totalPayments = months.reduce(
-          (sum, m) => sum + (parseFloat(updatedRow[m]) || 0),
-          0
-        );
-        const currentYearDuePayment = Math.max(expectedPayment - totalPayments, 0);
-
-        let prevYearCumulativeDue = 0;
-        if (parseInt(year) > 2025) {
-          const originalDuePayment = parseFloat(paymentsData[rowIndex]?.Due_Payment) || 0;
-          const originalAmountToBePaid = parseFloat(paymentsData[rowIndex]?.Amount_To_Be_Paid) || 0;
-          const originalActiveMonths = months.filter(
-            (m) => paymentsData[rowIndex]?.[m] && parseFloat(paymentsData[rowIndex][m]) >= 0
-          ).length;
-          const originalExpectedPayment = originalAmountToBePaid * originalActiveMonths;
-          const originalTotalPayments = months.reduce(
-            (sum, m) => sum + (parseFloat(paymentsData[rowIndex]?.[m]) || 0),
-            0
-          );
-          const originalCurrentYearDue = Math.max(originalExpectedPayment - originalTotalPayments, 0);
-          prevYearCumulativeDue = Math.max(originalDuePayment - originalCurrentYearDue, 0);
-        }
-
-        updatedRow.Due_Payment = (currentYearDuePayment + prevYearCumulativeDue).toFixed(2);
-
-        try {
-          await updatePayment(rowIndex, null, monthUpdates, year);
-          setPendingUpdates((prev) =>
-            Object.keys(monthUpdates).reduce(
-              (acc, month) => {
-                const key = `${rowIndex}-${month}`;
-                delete acc[key];
-                return acc;
-              },
-              { ...prev }
-            )
-          );
-        } catch (error) {
-          console.error(`HomePage.jsx: Failed to update row ${rowIndex}:`, error);
-          // Restore updates to queue for retry
-          Object.entries(monthUpdates).forEach(([month, value]) => {
-            updateQueueRef.current.push({
-              rowIndex: parseInt(rowIndex),
-              month,
-              value,
-              year,
-              timestamp: Date.now(),
-            });
-          });
-        }
-      })
-    );
-
+      } catch (error) {
+        console.error(`HomePage.jsx: Failed to update ${month} for row ${rowIndex}:`, error);
+        updateQueueRef.current.push(update);
+      }
+    }
     if (updateQueueRef.current.length > 0) {
       console.log("HomePage.jsx: Retrying failed updates");
       batchTimerRef.current = setTimeout(processBatchUpdates, BATCH_DELAY);
@@ -587,16 +524,19 @@ const processBatchUpdates = useCallback(async () => {
     };
   }, [processBatchUpdates]);
 
-  useEffect(() => {
-    const controller = axios.CancelToken.source();
-    if (sessionToken) {
-      console.log("HomePage.jsx: SessionToken available, fetching years");
-      searchUserYears(controller.token);
-    }
-    return () => {
-      controller.cancel("Component unmounted or sessionToken changed");
-    };
-  }, [sessionToken, searchUserYears]);
+  // HomePage.jsx: searchUserYears useEffect
+useEffect(() => {
+  const controller = axios.CancelToken.source();
+  if (sessionToken) {
+    console.log("HomePage.jsx: SessionToken available, fetching years");
+    searchUserYears(controller.token);
+  }
+  return () => {
+    controller.cancel("Component unmounted or sessionToken changed");
+    Object.values(debounceTimersRef.current).forEach(clearTimeout);
+    if (batchTimerRef.current) clearTimeout(batchTimerRef.current);
+  };
+}, [sessionToken, searchUserYears]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {

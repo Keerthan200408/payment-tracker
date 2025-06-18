@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://payment-tracker-aswa.onrender.com';
@@ -12,21 +12,23 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
   const [showUsernameModal, setShowUsernameModal] = useState(false);
   const [googleEmail, setGoogleEmail] = useState('');
   const [chosenUsername, setChosenUsername] = useState('');
+  const buttonRef = useRef(null);
 
   // Initialize Google Sign-In
   useEffect(() => {
     const initializeGoogleSignIn = () => {
-      if (window.google) {
+      if (window.google && buttonRef.current) {
         window.google.accounts.id.initialize({
           client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
           callback: handleGoogleSignIn,
           auto_select: false,
           cancel_on_tap_outside: true,
         });
-        window.google.accounts.id.renderButton(
-          document.getElementById('google-signin-button'),
-          { theme: 'outline', size: 'large', width: 300 }
-        );
+        window.google.accounts.id.renderButton(buttonRef.current, {
+          theme: 'outline',
+          size: 'large',
+          width: 300,
+        });
       }
     };
 
@@ -41,6 +43,12 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
     } else {
       initializeGoogleSignIn();
     }
+
+    return () => {
+      if (window.google) {
+        window.google.accounts.id.cancel();
+      }
+    };
   }, []);
 
   const handleLogin = async (loginUsername, loginPassword) => {
@@ -211,7 +219,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
 
         {/* Google Sign-In Button */}
         <div className="mb-6 flex justify-center">
-          <div id="google-signin-button" className="w-full max-w-[300px]"></div>
+          <div ref={buttonRef} className="w-full max-w-[300px]"></div>
         </div>
 
         {/* Divider */}

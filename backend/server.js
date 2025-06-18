@@ -229,7 +229,7 @@ async function updateSheet(range, values) {
       return;
     } catch (error) {
       if (error.status === 429 && retryCount < maxRetries) {
-        const delayMs = Math.pow(2, retryCount) * 2000; // Increased base delay to 2000ms
+        const delayMs = Math.pow(2, retryCount) * 2000 + Math.random() * 100; // Increased base delay to 2000ms
         console.log(`Rate limit exceeded for ${range}, retrying after ${delayMs}ms...`);
         await delay(delayMs);
         retryCount++;
@@ -355,6 +355,33 @@ app.post("/api/google-signup", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+// Batch writes for multiple updates
+async function batchUpdateSheet(sheetName, updates) {
+  const sheets = google.sheets({ version: "v4", auth });
+  const batchSize = 50;
+  for (let i = 0; i < updates.length; i += batchSize) {
+    const batch = updates.slice(i, i + batchSize);
+    const requests = batch.map(({ range, values }) => ({
+      updateCells: {
+        range,
+        values,
+        fields: "*",
+      },
+    }));
+    try {
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: { requests },
+      });
+      console.log(`Batch updated ${batch.length} rows in ${sheetName}`);
+    } catch (error) {
+      console.error(`Batch update error in ${sheetName}:`, error.message);
+      throw error;
+    }
+    await delay(100); // Prevent rate limiting
+  }
+}
 
 // Helper: Calculate total due payment across years
 async function calculateTotalDuePayment(username, clientName, type) {

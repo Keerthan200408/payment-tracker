@@ -595,10 +595,24 @@ const App = () => {
   }
 
   const updatedPayments = [...paymentsData];
-  const rowData = { ...updatedPayments[rowIndex] };
+  const rowData = { ...paymentsData[rowIndex] };
+  let payloadData;
 
-  if (monthUpdates) {
-    // Batch update for multiple months
+  if (month && monthUpdates !== null && !monthUpdates?.constructor === Object) {
+    // Single-month update
+    if (isNaN(parseFloat(monthUpdates)) && monthUpdates !== "") {
+      alert("Please enter a valid number");
+      return;
+    }
+    rowData[month] = monthUpdates || "";
+    payloadData = {
+      clientName: rowData.Client_Name,
+      type: rowData.Type,
+      month,
+      value: monthUpdates || "",
+    };
+  } else if (monthUpdates) {
+    // Batch update
     Object.entries(monthUpdates).forEach(([m, value]) => {
       if (isNaN(parseFloat(value)) && value !== "") {
         console.warn(`App.jsx: Invalid value for ${m}:`, value);
@@ -606,15 +620,11 @@ const App = () => {
       }
       rowData[m] = value || "";
     });
-  } else if (month && monthUpdates !== null) {
-    // Single-month update
-    if (isNaN(parseFloat(monthUpdates)) && monthUpdates !== "") {
-      alert("Please enter a valid number");
-      return;
-    }
-    rowData[month] = monthUpdates || "";
+    payloadData = { rowIndex, updatedRow: rowData };
+  } else {
+    console.error("App.jsx: Invalid update parameters");
+    return;
   }
-
   const months = [
     "january",
     "february",
@@ -662,15 +672,10 @@ const App = () => {
   updatedPayments[rowIndex] = rowData;
   setPaymentsData(updatedPayments);
 
-  const timeoutKey = `${rowIndex}-${month || Object.keys(monthUpdates || {}).join("-")}-${Date.now()}`;
-  if (saveTimeouts.current[timeoutKey]) {
-    clearTimeout(saveTimeouts.current[timeoutKey]);
-  }
-
   const savePaymentWithRetry = async (payload, retries = 3, delayMs = 2000) => {
     for (let i = 0; i < retries; i++) {
       try {
-        console.log("App.jsx: Saving payment for:", rowData.Client_Name, monthUpdates ? "batch" : month, monthUpdates || monthUpdates, year);
+        console.log("App.jsx: Saving payment for:", rowData.Client_Name, month || "batch", monthUpdates || monthUpdates, year);
         const response = await axios.post(`${BASE_URL}/save-payment`, payload, {
           headers: { Authorization: `Bearer ${sessionToken}` },
           params: { year },
@@ -685,13 +690,11 @@ const App = () => {
           status: error.response?.status,
           data: error.response?.data,
           rowIndex,
-          month: monthUpdates ? "batch" : month,
-          monthUpdates: monthUpdates || monthUpdates,
+          month: month || "batch",
           year,
           attempt: i + 1,
         });
         if ((error.response?.status === 429 || error.code === 'ECONNABORTED') && i < retries - 1) {
-          console.log(`App.jsx: Retrying save in ${delayMs}ms... (${retries - i - 1} retries left)`);
           await new Promise((resolve) => setTimeout(resolve, delayMs));
           delayMs *= 2;
         } else {
@@ -702,33 +705,15 @@ const App = () => {
     throw new Error("Max retries reached for save payment");
   };
 
-  saveTimeouts.current[timeoutKey] = setTimeout(async () => {
-    const payloadData = {
-      rowIndex,
-      updatedRow: {
-        Client_Name: rowData.Client_Name,
-        Type: rowData.Type,
-        Amount_To_Be_Paid: rowData.Amount_To_Be_Paid,
-        january: rowData.january || "",
-        february: rowData.february || "",
-        march: rowData.march || "",
-        april: rowData.april || "",
-        may: rowData.may || "",
-        june: rowData.june || "",
-        july: rowData.july || "",
-        august: rowData.august || "",
-        september: rowData.september || "",
-        october: rowData.october || "",
-        november: rowData.november || "",
-        december: rowData.december || "",
-        Due_Payment: rowData.Due_Payment,
-      },
-    };
+  const timeoutKey = `${rowIndex}-${month || Object.keys(monthUpdates || {}).join("-")}-${Date.now()}`;
+  if (saveTimeouts.current[timeoutKey]) {
+    clearTimeout(saveTimeouts.current[timeoutKey]);
+  }
 
+  saveTimeouts.current[timeoutKey] = setTimeout(async () => {
     try {
       await savePaymentWithRetry(payloadData);
     } catch (error) {
-      console.error("App.jsx: Failed to save payment after retries:", error.message);
       setErrorMessage(`Failed to save payment for ${rowData.Client_Name}: ${error.response?.data?.error || error.message}`);
     } finally {
       delete saveTimeouts.current[timeoutKey];
