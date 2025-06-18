@@ -402,14 +402,15 @@ const HomePage = ({
   );
 
   const handleYearChangeDebounced = useCallback(
-    (year) => {
-      console.log("HomePage.jsx: Year change requested to:", year);
-      setCurrentYear(year);
-      localStorage.setItem("currentYear", year);
-      handleYearChange(year);
-    },
-    [handleYearChange, setCurrentYear]
-  );
+  (year) => {
+    console.log("HomePage.jsx: Year change requested to:", year);
+    localStorage.setItem("currentYear", year);
+    setCurrentYear(year);
+    window.location.reload(); // <-- force page reload after setting year
+  },
+  [setCurrentYear]
+);
+
 
   const handleInputChange = useCallback(
     (rowIndex, month, value) => {
