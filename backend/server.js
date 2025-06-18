@@ -499,24 +499,37 @@ app.post("/api/refresh-token", async (req, res) => {
 // Get Clients
 app.get("/api/get-clients", authenticateToken, async (req, res) => {
   try {
-    await ensureSheet("Clients", ["User", "Client_Name", "Email", "Type", "Monthly_Payment"]);
+    const headers = ["User", "Client_Name", "Email", "Type", "Monthly_Payment"];
+    await ensureSheet("Clients", headers);
     const clients = await readSheet("Clients", "A2:E");
     const userClients = clients.filter((client) => client[0] === req.user.username);
-    res.json(
-      userClients.map((client) => ({
-        User: client[0],
-        Client_Name: client[1],
+
+    const processedClients = userClients.map((client) => {
+      if (!client || client.length < headers.length) {
+        console.warn(`Invalid client row for user ${req.user.username}:`, client);
+        return null;
+      }
+      return {
+        User: client[0] || "",
+        Client_Name: client[1] || "",
         Email: client[2] || "",
-        Type: client[3],
+        Type: client[3] || "",
         Amount_To_Be_Paid: parseFloat(client[4]) || 0,
-      }))
-    );
+      };
+    }).filter((c) => c !== null);
+
+    console.log(`Fetched ${processedClients.length} clients for user ${req.user.username}`);
+    res.json(processedClients);
   } catch (error) {
-    console.error("Get clients error:", error.message);
-    res.status(500).json({ error: "Failed to fetch clients" });
+    console.error(`Get clients error:`, {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      response: error.response?.data,
+    });
+    res.status(500).json({ error: `Failed to fetch clients: ${error.message}` });
   }
 });
-
 // Add Client
 app.post("/api/add-client", authenticateToken, async (req, res) => {
   let { clientName, email, type, monthlyPayment } = req.body;
@@ -664,6 +677,7 @@ app.get("/api/get-payments-by-year", authenticateToken, async (req, res) => {
   if (!year || isNaN(year)) {
     return res.status(400).json({ error: "Valid year is required" });
   }
+
   try {
     const headers = [
       "User",
@@ -688,50 +702,69 @@ app.get("/api/get-payments-by-year", authenticateToken, async (req, res) => {
     const payments = await readSheet(getPaymentSheetName(year), "A2:R");
     const userPayments = payments.filter((payment) => payment[0] === req.user.username);
 
-    let processedPayments = userPayments.map((payment) => ({
-      User: payment[0],
-      Client_Name: payment[1],
-      Type: payment[2],
-      Amount_To_Be_Paid: parseFloat(payment[3]) || 0,
-      january: payment[4] || "",
-      february: payment[5] || "",
-      march: payment[6] || "",
-      april: payment[7] || "",
-      may: payment[8] || "",
-      june: payment[9] || "",
-      july: payment[10] || "",
-      august: payment[11] || "",
-      september: payment[12] || "",
-      october: payment[13] || "",
-      november: payment[14] || "",
-      december: payment[15] || "",
-      Due_Payment: parseFloat(payment[16]) || 0,
-    }));
+    let processedPayments = userPayments.map((payment) => {
+      // Validate array length to prevent index errors
+      if (!payment || payment.length < headers.length) {
+        console.warn(`Invalid payment row for user ${req.user.username} in year ${year}:`, payment);
+        return null;
+      }
+      return {
+        User: payment[0] || "",
+        Client_Name: payment[1] || "",
+        Type: payment[2] || "",
+        Amount_To_Be_Paid: parseFloat(payment[3]) || 0,
+        january: payment[4] || "",
+        february: payment[5] || "",
+        march: payment[6] || "",
+        april: payment[7] || "",
+        may: payment[8] || "",
+        june: payment[9] || "",
+        july: payment[10] || "",
+        august: payment[11] || "",
+        september: payment[12] || "",
+        october: payment[13] || "",
+        november: payment[14] || "",
+        december: payment[15] || "",
+        Due_Payment: parseFloat(payment[16]) || 0,
+      };
+    }).filter((p) => p !== null); // Remove invalid rows
 
     if (parseInt(year) > 2025) {
       const calculateCumulativeDue = async (targetYear) => {
         if (parseInt(targetYear) <= 2025) {
-          const payments = await readSheet(getPaymentSheetName(targetYear), "A2:R");
-          const userPayments = payments.filter((p) => p[0] === req.user.username);
-          const dueMap = new Map();
-          userPayments.forEach((payment) => {
-            const key = `${payment[1]}_${payment[2]}`;
-            dueMap.set(key, parseFloat(payment[16]) || 0);
-          });
-          return dueMap;
+          try {
+            const payments = await readSheet(getPaymentSheetName(targetYear), "A2:R");
+            const userPayments = payments.filter((p) => p[0] === req.user.username);
+            const dueMap = new Map();
+            userPayments.forEach((payment) => {
+              if (payment.length < headers.length) return;
+              const key = `${payment[1]}_${payment[2]}`;
+              dueMap.set(key, parseFloat(payment[16]) || 0);
+            });
+            return dueMap;
+          } catch (error) {
+            console.warn(`Failed to fetch payments for ${targetYear}:`, error.message);
+            return new Map();
+          }
         }
         const prevYear = (parseInt(targetYear) - 1).toString();
         const prevCumulativeDue = await calculateCumulativeDue(prevYear);
-        const payments = await readSheet(getPaymentSheetName(targetYear), "A2:R");
-        const userPayments = payments.filter((p) => p[0] === req.user.username);
-        const cumulativeMap = new Map();
-        userPayments.forEach((payment) => {
-          const key = `${payment[1]}_${payment[2]}`;
-          const currentDue = parseFloat(payment[16]) || 0;
-          const prevCumulative = prevCumulativeDue.get(key) || 0;
-          cumulativeMap.set(key, currentDue + prevCumulative);
-        });
-        return cumulativeMap;
+        try {
+          const payments = await readSheet(getPaymentSheetName(targetYear), "A2:R");
+          const userPayments = payments.filter((p) => p[0] === req.user.username);
+          const cumulativeMap = new Map();
+          userPayments.forEach((payment) => {
+            if (payment.length < headers.length) return;
+            const key = `${payment[1]}_${payment[2]}`;
+            const currentDue = parseFloat(payment[16]) || 0;
+            const prevCumulative = prevCumulativeDue.get(key) || 0;
+            cumulativeMap.set(key, currentDue + prevCumulative);
+          });
+          return cumulativeMap;
+        } catch (error) {
+          console.warn(`Failed to fetch payments for ${targetYear}:`, error.message);
+          return prevCumulativeDue;
+        }
       };
 
       try {
@@ -743,15 +776,21 @@ app.get("/api/get-payments-by-year", authenticateToken, async (req, res) => {
           return { ...payment, Due_Payment: payment.Due_Payment + prevCumulativeDue };
         });
       } catch (error) {
-        console.warn(`Could not calculate cumulative due for previous years:`, error.message);
+        console.error(`Error calculating cumulative due for ${year}:`, error.message);
+        // Continue with current year's data instead of failing
       }
     }
 
     console.log(`Fetched ${processedPayments.length} payments for ${year} for user ${req.user.username}`);
     res.json(processedPayments);
   } catch (error) {
-    console.error(`Get payments for year ${year} error:`, error.message);
-    res.status(500).json({ error: `Failed to fetch payments for year ${year}` });
+    console.error(`Get payments for year ${year} error:`, {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      response: error.response?.data,
+    });
+    res.status(500).json({ error: `Failed to fetch payments for year ${year}: ${error.message}` });
   }
 });
 
