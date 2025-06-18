@@ -12,8 +12,6 @@ require("dotenv").config();
 const app = express();
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-// Trust Render's proxy
-app.set("trust proxy", 1);
 
 // CORS configuration
 app.use(
