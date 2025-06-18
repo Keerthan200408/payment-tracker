@@ -404,7 +404,26 @@ const getInputBackgroundColor = useCallback((row, month, rowIndex) => {
   }
 }, [handleYearChange, setCurrentYear]);
 
+const updateMultiplePayments = useCallback(async (updates) => {
+  if (!sessionToken) {
+    throw new Error('No session token available');
+  }
 
+  try {
+    const response = await axios.post(
+      `${BASE_URL}/update-multiple-payments`,
+      { updates },
+      {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+        timeout: 15000,
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error('Batch update failed:', error);
+    throw error;
+  }
+}, [sessionToken]);
 
 const cancelTokensRef = useRef({});
 // Remove the current debouncedUpdate, processBatch, and batchUpdateQueue state
@@ -421,13 +440,12 @@ const debouncedUpdate = useCallback((rowIndex, month, value, year) => {
     [key]: true
   }));
   
-  // Add to pending batch (using ref to avoid state dependency issues)
+  // Add to pending batch
   pendingBatchRef.current[key] = {
     rowIndex,
     month,
     newValue: value,
-    year,
-    timestamp: Date.now()
+    year
   };
   
   // Clear existing timer
@@ -446,12 +464,7 @@ const debouncedUpdate = useCallback((rowIndex, month, value, year) => {
     try {
       if (updates.length > 1) {
         console.log(`Processing batch of ${updates.length} updates`);
-        // Convert to format your API expects
-        const apiUpdates = {};
-        updates.forEach(([key, data]) => {
-          apiUpdates[key] = data;
-        });
-        await updateMultiplePayments(apiUpdates);
+        await updateMultiplePayments(batchToProcess);
       } else {
         // Single update
         const [, data] = updates[0];
@@ -491,7 +504,7 @@ const debouncedUpdate = useCallback((rowIndex, month, value, year) => {
     }
   }, 1000);
   
-}, [updatePayment, updateMultiplePayments, paymentsData]);
+}, [updatePayment, paymentsData]); // Removed updateMultiplePayments from dependencies
 
 // Handle input changes
 const handleInputChange = useCallback((rowIndex, month, value) => {
@@ -507,40 +520,25 @@ const handleInputChange = useCallback((rowIndex, month, value) => {
   debouncedUpdate(rowIndex, month, value, currentYear);
 }, [debouncedUpdate, currentYear]);
 
-const apiCacheRef = useRef({});
+// const apiCacheRef = useRef({});
 
-const cachedApiCall = useCallback(async (key, apiFunction) => {
-  if (apiCacheRef.current[key]) {
-    return apiCacheRef.current[key];
-  }
+// const cachedApiCall = useCallback(async (key, apiFunction) => {
+//   if (apiCacheRef.current[key]) {
+//     return apiCacheRef.current[key];
+//   }
   
-  const result = await apiFunction();
-  apiCacheRef.current[key] = result;
+//   const result = await apiFunction();
+//   apiCacheRef.current[key] = result;
   
-  // Clear cache after 5 minutes
-  setTimeout(() => {
-    delete apiCacheRef.current[key];
-  }, 5 * 60 * 1000);
+//   // Clear cache after 5 minutes
+//   setTimeout(() => {
+//     delete apiCacheRef.current[key];
+//   }, 5 * 60 * 1000);
   
-  return result;
-}, []);
+//   return result;
+// }, []);
 
-const updateMultiplePayments = useCallback(async (updates) => {
-  try {
-    const response = await axios.post(
-      `${BASE_URL}/update-multiple-payments`,
-      { updates },
-      {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-        timeout: 15000,
-      }
-    );
-    return response.data;
-  } catch (error) {
-    console.error('Batch update failed:', error);
-    throw error;
-  }
-}, [sessionToken]);
+
 
 
   const renderDashboard = () => (
