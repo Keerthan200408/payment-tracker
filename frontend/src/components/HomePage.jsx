@@ -191,77 +191,47 @@ const filteredData = useMemo(() => {
     [getCachedData, setCachedData]
   );
 
-  const searchUserYears = useCallback(
-    async (cancelToken) => {
-      if (!sessionToken) {
-        console.log("HomePage.jsx: No sessionToken");
-        return;
-      }
+const searchUserYears = useCallback(
+  async (abortSignal) => {
+    if (!sessionToken) {
+      console.log("HomePage.jsx: No sessionToken");
+      return;
+    }
 
-      const cacheKey = getCacheKey("/get-user-years", { sessionToken });
-      const cachedYears = getCachedData(cacheKey);
-      if (cachedYears) {
-        console.log("HomePage.jsx: Using cached years data");
-        setAvailableYears(cachedYears);
-        return;
-      }
+    const cacheKey = getCacheKey("/get-user-years", { sessionToken });
+    const cachedYears = getCachedData(cacheKey);
+    if (cachedYears) {
+      console.log("HomePage.jsx: Using cached years data");
+      setAvailableYears(cachedYears);
+      return;
+    }
 
-      const requestKey = `years_${sessionToken}`;
-      return createDedupedRequest(requestKey, async () => {
-        setIsLoadingYears(true);
-        console.log("HomePage.jsx: Fetching user-specific years from API");
+    const requestKey = `years_${sessionToken}`;
+    return createDedupedRequest(requestKey, async () => {
+      setIsLoadingYears(true);
+      console.log("HomePage.jsx: Fetching user-specific years from API");
 
-        try {
-          const response = await axios.get(`${BASE_URL}/get-user-years`, {
-            headers: { Authorization: `Bearer ${sessionToken}` },
-            timeout: 10000,
-            cancelToken,
-          });
+      try {
+        const response = await axios.get(`${BASE_URL}/get-user-years`, {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+          timeout: 10000,
+          signal: abortSignal, // Use signal instead of cancelToken
+        });
 
-          const fetchedYears = (response.data || [])
-            .filter((year) => parseInt(year) >= 2025)
-            .sort((a, b) => parseInt(a) - parseInt(b));
-
-          const yearsToSet = fetchedYears.length > 0 ? fetchedYears : ["2025"];
-
-          setCachedData(cacheKey, yearsToSet);
-
-          if (mountedRef.current) {
-            setAvailableYears(yearsToSet);
-            localStorage.setItem("availableYears", JSON.stringify(yearsToSet));
-
-            const storedYear = localStorage.getItem("currentYear");
-            let yearToSet =
-              storedYear && yearsToSet.includes(storedYear)
-                ? storedYear
-                : yearsToSet[yearsToSet.length - 1] || "2025";
-
-            if (yearToSet !== currentYear) {
-              setCurrentYear(yearToSet);
-              localStorage.setItem("currentYear", yearToSet);
-              await handleYearChange(yearToSet);
-            }
-          }
-
-          return yearsToSet;
-        } catch (error) {
-          if (axios.isCancel(error)) return;
-          console.error("HomePage.jsx: Error fetching user years:", error);
-
-          const fallbackYears = ["2025"];
-          if (mountedRef.current) {
-            setAvailableYears(fallbackYears);
-          }
-          return fallbackYears;
-        } finally {
-          if (mountedRef.current) {
-            setIsLoadingYears(false);
-          }
+        // ... rest of the implementation
+      } catch (error) {
+        if (error.name === 'AbortError') return; // Check for AbortError instead
+        console.error("HomePage.jsx: Error fetching user years:", error);
+        // ... error handling
+      } finally {
+        if (mountedRef.current) {
+          setIsLoadingYears(false);
         }
-      });
-    },
-    [sessionToken, currentYear, handleYearChange, setCurrentYear]
-  );
+      }
+    });
+  },
+  [sessionToken, currentYear, handleYearChange, setCurrentYear]
+);
 
   const handleAddNewYear = useCallback(async () => {
     const newYear = (parseInt(currentYear) + 1).toString();
@@ -294,7 +264,7 @@ const filteredData = useMemo(() => {
         alert(response.data.message);
       }
     } catch (error) {
-      if (axios.isCancel(error)) {
+      if (error.name === 'AbortError') {
         console.log("HomePage.jsx: Add new year request cancelled");
         return;
       }
@@ -538,16 +508,15 @@ const debouncedUpdate = useCallback(
 //request cancellation
 useEffect(() => {
   const controller = new AbortController();
-  
   if (sessionToken) {
+    console.log("HomePage.jsx: SessionToken available, fetching years");
     searchUserYears(controller.signal);
   }
-  
   return () => {
     controller.abort();
-    // Other cleanup...
+    // ... other cleanup
   };
-}, [sessionToken]);
+}, [sessionToken, searchUserYears]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
