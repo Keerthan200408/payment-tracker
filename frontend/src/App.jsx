@@ -28,6 +28,7 @@ const App = () => {
   const csvFileInputRef = useRef(null);
   const profileMenuRef = useRef(null);
   const saveTimeouts = useRef({});
+  const apiCacheRef = useRef({});
 
   // Set axios defaults
   useEffect(() => {
@@ -132,6 +133,13 @@ const App = () => {
     return () => document.removeEventListener("click", handleClickOutside);
   }, []);
 
+  useEffect(() => {
+  return () => {
+    Object.values(saveTimeouts.current).forEach(clearTimeout);
+    saveTimeouts.current = {};
+  };
+}, []);
+
   const fetchClients = async (token) => {
     try {
       console.log("Fetching clients with token:", token?.substring(0, 10) + "...");
@@ -147,9 +155,10 @@ const App = () => {
     }
   };
 
+  const CACHE_DURATION = 5 * 60 * 1000; // Add this constant
   const fetchPayments = async (token, year) => {
   const cacheKey = `payments_${year}_${token}`;
-  if (apiCacheRef.current[cacheKey]) {
+  if (apiCacheRef.current[cacheKey] && Date.now() - apiCacheRef.current[cacheKey].timestamp < CACHE_DURATION) {
     console.log(`App.jsx: Using cached payments for ${year}`);
     setPaymentsData(apiCacheRef.current[cacheKey].data);
     return;
@@ -218,33 +227,36 @@ const App = () => {
   };
 
   const deleteRow = async () => {
-    if (!contextMenu) return;
-    const rowData = paymentsData[contextMenu.rowIndex];
-    if (!rowData) return;
-
-    try {
-      console.log("Deleting row:", rowData.Client_Name, rowData.Type);
-      await axios.delete(`${BASE_URL}/delete-client`, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-        data: { Client_Name: rowData.Client_Name, Type: rowData.Type },
-      });
-      setPaymentsData(paymentsData.filter((_, i) => i !== contextMenu.rowIndex));
-      setClientsData(
-        clientsData.filter(
-          (client) =>
-            client.Client_Name !== rowData.Client_Name ||
-            client.Type !== rowData.Type
-        )
-      );
-      hideContextMenu();
-      alert("Row deleted successfully.");
-      await fetchPayments(sessionToken, currentYear);
-    } catch (error) {
-      console.error("Delete row error:", error.response?.data?.error || error.message);
-      handleSessionError(error);
-      alert(`Failed to delete row: ${error.response?.data?.error || error.message}`);
-    }
-  };
+  if (!contextMenu) return;
+  const rowData = paymentsData[contextMenu.rowIndex];
+  if (!rowData) return;
+  try {
+    console.log("Deleting row:", rowData.Client_Name, rowData.Type);
+    await axios.delete(`${BASE_URL}/delete-client`, {
+      headers: { Authorization: `Bearer ${sessionToken}` },
+      data: { Client_Name: rowData.Client_Name, Type: rowData.Type },
+    });
+    // Optimistic updates after successful deletion
+    setPaymentsData(paymentsData.filter((_, i) => i !== contextMenu.rowIndex));
+    setClientsData(
+      clientsData.filter(
+        (client) =>
+          client.Client_Name !== rowData.Client_Name ||
+          client.Type !== rowData.Type
+      )
+    );
+    // Clear cache for current year
+    const cacheKey = `payments_${currentYear}_${sessionToken}`;
+    delete apiCacheRef.current[cacheKey];
+    hideContextMenu();
+    alert("Row deleted successfully.");
+    await fetchPayments(sessionToken, currentYear);
+  } catch (error) {
+    console.error("Delete row error:", error.response?.data?.error || error.message);
+    handleSessionError(error);
+    alert(`Failed to delete row: ${error.response?.data?.error || error.message}`);
+  }
+};
 
   const importCsv = async (e) => {
     const file = e.target.files[0];
@@ -598,45 +610,16 @@ const App = () => {
     reader.readAsText(file);
   };
 
-  const updatePayment = async (rowIndex, month, monthUpdates, year = currentYear) => {
-  console.log("updatePayment called:", { rowIndex, month, monthUpdates, year });
+const updatePayment = async (rowIndex, month, value, year = currentYear) => {
+  console.log("updatePayment called:", { rowIndex, month, value, year });
   if (!paymentsData[rowIndex]) {
     console.error("App.jsx: Invalid rowIndex:", rowIndex);
     return;
   }
-
-  const updatedPayments = [...paymentsData];
-  const rowData = { ...paymentsData[rowIndex] };
-  let payloadData;
-
-  if (month && monthUpdates !== null && typeof monthUpdates !== "object") {
-    // Single-month update
-    if (isNaN(parseFloat(monthUpdates)) && monthUpdates !== "") {
-      alert("Please enter a valid number");
-      return;
-    }
-    rowData[month] = monthUpdates || "";
-    payloadData = {
-      clientName: rowData.Client_Name,
-      type: rowData.Type,
-      month,
-      value: monthUpdates || "",
-    };
-  } else if (monthUpdates && typeof monthUpdates === "object") {
-    // Batch update
-    Object.entries(monthUpdates).forEach(([m, value]) => {
-      if (isNaN(parseFloat(value)) && value !== "") {
-        console.warn(`App.jsx: Invalid value for ${m}:`, value);
-        return;
-      }
-      rowData[m] = value || "";
-    });
-    payloadData = { rowIndex, updatedRow: rowData };
-  } else {
-    console.error("App.jsx: Invalid update parameters");
+  if (value && isNaN(parseFloat(value)) && value !== "") {
+    alert("Please enter a valid number");
     return;
   }
-
   const months = [
     "january",
     "february",
@@ -651,45 +634,10 @@ const App = () => {
     "november",
     "december",
   ];
-
-  // Calculate Due_Payment
-  const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
-  const activeMonths = months.filter(
-    (m) => rowData[m] && parseFloat(rowData[m]) >= 0
-  ).length;
-  const expectedPayment = amountToBePaid * activeMonths;
-  const totalPayments = months.reduce(
-    (sum, m) => sum + (parseFloat(rowData[m]) || 0),
-    0
-  );
-  const currentYearDuePayment = Math.max(expectedPayment - totalPayments, 0);
-
-  let prevYearCumulativeDue = 0;
-  if (parseInt(year) > 2025) {
-    const originalDuePayment = parseFloat(paymentsData[rowIndex]?.Due_Payment) || 0;
-    const originalAmountToBePaid = parseFloat(paymentsData[rowIndex]?.Amount_To_Be_Paid) || 0;
-    const originalActiveMonths = months.filter(
-      (m) => paymentsData[rowIndex]?.[m] && parseFloat(paymentsData[rowIndex][m]) >= 0
-    ).length;
-    const originalExpectedPayment = originalAmountToBePaid * originalActiveMonths;
-    const originalTotalPayments = months.reduce(
-      (sum, m) => sum + (parseFloat(paymentsData[rowIndex]?.[m]) || 0),
-      0
-    );
-    const originalCurrentYearDue = Math.max(originalExpectedPayment - originalTotalPayments, 0);
-    prevYearCumulativeDue = Math.max(originalDuePayment - originalCurrentYearDue, 0);
-  }
-
-  rowData.Due_Payment = (currentYearDuePayment + prevYearCumulativeDue).toFixed(2);
-  updatedPayments[rowIndex] = rowData;
-
-  // Update paymentsData optimistically
-  setPaymentsData(updatedPayments);
-
   const savePaymentWithRetry = async (payload, retries = 3, delayMs = 2000) => {
     for (let i = 0; i < retries; i++) {
       try {
-        console.log("App.jsx: Saving payment for:", rowData.Client_Name, month || "batch", monthUpdates, year);
+        console.log("App.jsx: Saving payment for:", payload.clientName, month, value, year);
         const response = await axios.post(`${BASE_URL}/save-payment`, payload, {
           headers: { Authorization: `Bearer ${sessionToken}` },
           params: { year },
@@ -703,7 +651,7 @@ const App = () => {
           status: error.response?.status,
           data: error.response?.data,
           rowIndex,
-          month: month || "batch",
+          month,
           year,
           attempt: i + 1,
         });
@@ -717,16 +665,55 @@ const App = () => {
     }
     throw new Error("Max retries reached for save payment");
   };
-
-  const timeoutKey = `${rowIndex}-${month || Object.keys(monthUpdates || {}).join("-")}-${Date.now()}`;
+  const timeoutKey = `${rowIndex}-${month}-${Date.now()}`;
   if (saveTimeouts.current[timeoutKey]) {
     clearTimeout(saveTimeouts.current[timeoutKey]);
   }
-
   saveTimeouts.current[timeoutKey] = setTimeout(async () => {
+    let updatedRowData; // Store rowData for payload
     try {
+      // Optimistic update
+      setPaymentsData((prev) => {
+        const updatedPayments = [...prev];
+        const rowData = { ...updatedPayments[rowIndex] };
+        rowData[month] = value || "";
+        const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
+        const activeMonths = months.filter(
+          (m) => rowData[m] && parseFloat(rowData[m]) >= 0
+        ).length;
+        const expectedPayment = amountToBePaid * activeMonths;
+        const totalPayments = months.reduce(
+          (sum, m) => sum + (parseFloat(rowData[m]) || 0),
+          0
+        );
+        const currentYearDuePayment = Math.max(expectedPayment - totalPayments, 0);
+        let prevYearCumulativeDue = 0;
+        if (parseInt(year) > 2025) {
+          const originalDuePayment = parseFloat(prev[rowIndex]?.Due_Payment) || 0;
+          const originalAmountToBePaid = parseFloat(prev[rowIndex]?.Amount_To_Be_Paid) || 0;
+          const originalActiveMonths = months.filter(
+            (m) => prev[rowIndex]?.[m] && parseFloat(prev[rowIndex][m]) >= 0
+          ).length;
+          const originalExpectedPayment = originalAmountToBePaid * originalActiveMonths;
+          const originalTotalPayments = months.reduce(
+            (sum, m) => sum + (parseFloat(prev[rowIndex]?.[m]) || 0),
+            0
+          );
+          const originalCurrentYearDue = Math.max(originalExpectedPayment - originalTotalPayments, 0);
+          prevYearCumulativeDue = Math.max(originalDuePayment - originalCurrentYearDue, 0);
+        }
+        rowData.Due_Payment = (currentYearDuePayment + prevYearCumulativeDue).toFixed(2);
+        updatedPayments[rowIndex] = rowData;
+        updatedRowData = rowData; // Store for payload
+        return updatedPayments;
+      });
+      const payloadData = {
+        clientName: updatedRowData.Client_Name,
+        type: updatedRowData.Type,
+        month,
+        value: value || "",
+      };
       const response = await savePaymentWithRetry(payloadData);
-      // Update paymentsData only if the server response differs
       if (response.updatedRow) {
         setPaymentsData((prev) =>
           prev.map((row, idx) =>
@@ -736,10 +723,9 @@ const App = () => {
       }
     } catch (error) {
       setErrorMessage(
-        `Failed to save payment for ${rowData.Client_Name}: ${error.response?.data?.error || error.message}`
+        `Failed to save payment for ${updatedRowData?.Client_Name || "unknown"}: ${error.response?.data?.error || error.message}`
       );
-      // Revert optimistic update on failure
-      setPaymentsData(paymentsData);
+      setPaymentsData((prev) => prev); // No-op, but keeps state consistent
     } finally {
       delete saveTimeouts.current[timeoutKey];
     }
@@ -914,6 +900,8 @@ const App = () => {
                   currentYear={currentYear}
                   setCurrentYear={setCurrentYear}
                   handleYearChange={handleYearChange}
+                  setErrorMessage={setErrorMessage}
+                  apiCacheRef={apiCacheRef}
                   onMount={() =>
                     console.log("App.jsx: HomePage mounted with sessionToken:", sessionToken?.substring(0, 10) + "...")
                   }
@@ -978,6 +966,8 @@ const App = () => {
                   currentYear={currentYear}
                   setCurrentYear={setCurrentYear}
                   handleYearChange={handleYearChange}
+                  setErrorMessage={setErrorMessage}
+                  apiCacheRef={apiCacheRef}
                 />
               )}
             </main>

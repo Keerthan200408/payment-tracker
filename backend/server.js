@@ -42,13 +42,20 @@ app.use((req, res, next) => {
 });
 
 // Rate limiting
-const limiter = rateLimit({
+const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,
+  max: 500, // Increased from 100 to 500
   standardHeaders: true,
   legacyHeaders: false,
 });
-app.use(limiter);
+const paymentLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 100, // Allow 100 requests per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use(globalLimiter);
+app.use("/api/save-payment", paymentLimiter);
 
 // Cookie parser
 app.use(cookieParser());
@@ -561,6 +568,12 @@ app.get("/api/get-clients", authenticateToken, async (req, res) => {
 app.post("/api/add-client", authenticateToken, async (req, res) => {
   let { clientName, email, type, monthlyPayment } = req.body;
   const year = new Date().getFullYear().toString();
+  if (clientName.length > 100 || type.length > 50) {
+  return res.status(400).json({ error: "Client name or type too long" });
+}
+if (paymentValue > 1e6) {
+  return res.status(400).json({ error: "Monthly payment exceeds maximum limit" });
+}
   if (!clientName || !type || !monthlyPayment) {
     return res.status(400).json({ error: "Client name, type, and monthly payment are required" });
   }
@@ -628,29 +641,32 @@ app.delete("/api/delete-client", authenticateToken, async (req, res) => {
     const paymentSheets = spreadsheet.data.sheets
       .filter((sheet) => sheet.properties.title.startsWith("Payments_"))
       .map((sheet) => sheet.properties.title);
-
     let clients = await readSheet("Clients", "A2:E");
-    const clientExists = clients.some(
+    const clientIndex = clients.findIndex(
       (client) => client[0] === req.user.username && client[1] === Client_Name && client[3] === Type
     );
-    if (!clientExists) {
+    if (clientIndex === -1) {
       return res.status(404).json({ error: "Client not found" });
     }
-
-    const filteredClients = clients.filter(
-      (client) => !(client[0] === req.user.username && client[1] === Client_Name && client[3] === Type)
-    );
-
-    await sheets.spreadsheets.values.clear({ spreadsheetId, range: "Clients!A2:E" });
-    if (filteredClients.length > 0) {
-      await sheets.spreadsheets.values.update({
-        spreadsheetId,
-        range: "Clients!A2",
-        valueInputOption: "RAW",
-        resource: { values: filteredClients },
-      });
-    }
-
+    const rowNumber = clientIndex + 2;
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        requests: [{
+          deleteDimension: {
+            range: {
+              sheetId: (await sheets.spreadsheets.get({
+                spreadsheetId,
+                ranges: ["Clients"],
+              })).data.sheets.find(s => s.properties.title === "Clients").properties.sheetId,
+              dimension: "ROWS",
+              startIndex: rowNumber - 1,
+              endIndex: rowNumber,
+            },
+          },
+        }],
+      },
+    });
     for (const sheetName of paymentSheets) {
       await ensureSheet(
         "Payments",
@@ -676,21 +692,31 @@ app.delete("/api/delete-client", authenticateToken, async (req, res) => {
         sheetName.split("_")[1]
       );
       let payments = await readSheet(sheetName, "A2:R");
-      const filteredPayments = payments.filter(
-        (payment) => !(payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type)
+      const paymentIndex = payments.findIndex(
+        (payment) => payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type
       );
-
-      await sheets.spreadsheets.values.clear({ spreadsheetId, range: `${sheetName}!A2:R` });
-      if (filteredPayments.length > 0) {
-        await sheets.spreadsheets.values.update({
+      if (paymentIndex !== -1) {
+        const paymentRowNumber = paymentIndex + 2;
+        await sheets.spreadsheets.batchUpdate({
           spreadsheetId,
-          range: `${sheetName}!A2`,
-          valueInputOption: "RAW",
-          resource: { values: filteredPayments },
+          requestBody: {
+            requests: [{
+              deleteDimension: {
+                range: {
+                  sheetId: (await sheets.spreadsheets.get({
+                    spreadsheetId,
+                    ranges: [sheetName],
+                  })).data.sheets.find(s => s.properties.title === sheetName).properties.sheetId,
+                  dimension: "ROWS",
+                  startIndex: paymentRowNumber - 1,
+                  endIndex: paymentRowNumber,
+                },
+              },
+            }],
+          },
         });
       }
     }
-
     res.json({ message: "Client deleted successfully" });
   } catch (error) {
     console.error("Delete client error:", error.message);
@@ -821,16 +847,16 @@ app.get("/api/get-payments-by-year", authenticateToken, async (req, res) => {
   }
 });
 
-// Save Payment (Merged Logic)
 // Save Payment
 app.post("/api/save-payment", authenticateToken, async (req, res) => {
-  const { rowIndex, updatedRow, month, value } = req.body;
+  const { clientName, type, month, value } = req.body;
   const year = req.query.year || new Date().getFullYear().toString();
-
-  if (!updatedRow || typeof rowIndex !== "number") {
-    return res.status(400).json({ error: "Invalid payment data" });
+  if (!clientName || !type || !month) {
+    return res.status(400).json({ error: "Client name, type, and month are required" });
   }
-
+  if (value && isNaN(parseFloat(value)) && value !== "") {
+    return res.status(400).json({ error: "Invalid payment value" });
+  }
   try {
     const headers = [
       "User",
@@ -851,44 +877,45 @@ app.post("/api/save-payment", authenticateToken, async (req, res) => {
       "December",
       "Due_Payment",
     ];
+    const monthMap = {
+      january: 4,
+      february: 5,
+      march: 6,
+      april: 7,
+      may: 8,
+      june: 9,
+      july: 10,
+      august: 11,
+      september: 12,
+      october: 13,
+      november: 14,
+      december: 15,
+    };
+    if (!monthMap[month.toLowerCase()]) {
+      return res.status(400).json({ error: "Invalid month" });
+    }
     await ensureSheet("Payments", headers, year);
     let payments = await readSheet(getPaymentSheetName(year), "A2:R");
-
-    let { Client_Name, Type, Amount_To_Be_Paid, january, february, march, april, may, june, july, august, september, october, november, december, Due_Payment } = updatedRow;
-
-    Client_Name = sanitizeInput(Client_Name);
-    Type = sanitizeInput(Type);
-    Amount_To_Be_Paid = parseFloat(Amount_To_Be_Paid);
-    Due_Payment = parseFloat(Due_Payment);
-
-    const months = [january, february, march, april, may, june, july, august, september, october, november, december];
-    const sanitizedMonths = months.map((month) => (month ? sanitizeInput(month.toString()) : ""));
-
-    if (isNaN(Amount_To_Be_Paid) || Amount_To_Be_Paid <= 0) {
-      return res.status(400).json({ error: `Invalid Amount_To_Be_Paid for ${Client_Name}` });
+    const paymentIndex = payments.findIndex(
+      (p) => p[0] === req.user.username && p[1] === clientName && p[2] === type
+    );
+    if (paymentIndex === -1) {
+      return res.status(404).json({ error: "Payment record not found" });
     }
-
-    // Validate monthly payments
-    sanitizedMonths.forEach((monthValue, index) => {
-      if (monthValue && isNaN(parseFloat(monthValue))) {
-        throw new Error(`Invalid payment value for ${headers[index + 4]}: ${monthValue}`);
-      }
-    });
-
-    const amountToBePaid = Amount_To_Be_Paid;
-    const activeMonths = sanitizedMonths.filter((m) => m && parseFloat(m) >= 0).length;
+    const paymentRow = [...payments[paymentIndex]];
+    paymentRow[monthMap[month.toLowerCase()]] = value || "";
+    const amountToBePaid = parseFloat(paymentRow[3]) || 0;
+    const activeMonths = paymentRow.slice(4, 16).filter((m) => m && parseFloat(m) >= 0).length;
     const expectedPayment = amountToBePaid * activeMonths;
-    const totalPayments = sanitizedMonths.reduce((sum, m) => sum + (parseFloat(m) || 0), 0);
-    const currentYearDuePayment = Math.max(expectedPayment - totalPayments, 0);
-
-    // Calculate cumulative due from previous years if year > 2025
+    const totalPayments = paymentRow.slice(4, 16).reduce((sum, m) => sum + (parseFloat(m) || 0), 0);
+    let currentYearDuePayment = Math.max(expectedPayment - totalPayments, 0);
     let prevYearCumulativeDue = 0;
     if (parseInt(year) > 2025) {
       const prevYear = (parseInt(year) - 1).toString();
       try {
         const prevPayments = await readSheet(getPaymentSheetName(prevYear), "A2:R");
         const prevPayment = prevPayments.find(
-          (p) => p[0] === req.user.username && p[1] === Client_Name && p[2] === Type
+          (p) => p[0] === req.user.username && p[1] === clientName && p[2] === type
         );
         if (prevPayment && prevPayment[16]) {
           prevYearCumulativeDue = parseFloat(prevPayment[16]) || 0;
@@ -897,38 +924,37 @@ app.post("/api/save-payment", authenticateToken, async (req, res) => {
         console.warn(`Failed to fetch previous year ${prevYear} for cumulative due:`, error.message);
       }
     }
-
-    const totalDuePayment = currentYearDuePayment + prevYearCumulativeDue;
-
-    const updatedRowData = [
-      req.user.username,
-      Client_Name,
-      Type,
-      amountToBePaid,
-      ...sanitizedMonths,
-      totalDuePayment.toFixed(2),
-    ];
-
-    const existingIndex = payments.findIndex(
-      (payment) => payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type
-    );
-
-    if (existingIndex !== -1) {
-      payments[existingIndex] = updatedRowData;
-      const range = `${getPaymentSheetName(year)}!A${existingIndex + 2}:R${existingIndex + 2}`;
-      await updateSheet(range, [updatedRowData]);
-    } else {
-      payments.push(updatedRowData);
-      await appendSheet(getPaymentSheetName(year), [updatedRowData]);
-    }
-
-    res.status(200).json({ message: "Payment updated successfully", updatedRow: updatedRowData });
+    paymentRow[16] = (currentYearDuePayment + prevYearCumulativeDue).toFixed(2);
+    payments[paymentIndex] = paymentRow;
+    const range = `${getPaymentSheetName(year)}!A${paymentIndex + 2}:R${paymentIndex + 2}`;
+    await updateSheet(range, [paymentRow]);
+    const updatedRow = {
+      User: paymentRow[0],
+      Client_Name: paymentRow[1],
+      Type: paymentRow[2],
+      Amount_To_Be_Paid: parseFloat(paymentRow[3]) || 0,
+      january: paymentRow[4] || "",
+      february: paymentRow[5] || "",
+      march: paymentRow[6] || "",
+      april: paymentRow[7] || "",
+      may: paymentRow[8] || "",
+      june: paymentRow[9] || "",
+      july: paymentRow[10] || "",
+      august: paymentRow[11] || "",
+      september: paymentRow[12] || "",
+      october: paymentRow[13] || "",
+      november: paymentRow[14] || "",
+      december: paymentRow[15] || "",
+      Due_Payment: parseFloat(paymentRow[16]) || 0,
+    };
+    res.json({ message: "Payment updated successfully", updatedRow });
   } catch (error) {
     console.error("Save payment error:", {
       message: error.message,
       stack: error.stack,
-      rowIndex,
-      clientName: updatedRow.Client_Name,
+      clientName,
+      type,
+      month,
       year,
     });
     res.status(500).json({ error: `Failed to save payment: ${error.message}` });
@@ -1085,9 +1111,16 @@ app.post("/api/add-new-year", authenticateToken, async (req, res) => {
 app.post("/api/import-csv", authenticateToken, async (req, res) => {
   const csvData = req.body;
   const year = req.query.year || new Date().getFullYear().toString();
+  if (clientName.length > 100 || type.length > 50) {
+  return res.status(400).json({ error: "Client name or type too long" });
+}
+if (paymentValue > 1e6) {
+  return res.status(400).json({ error: "Payment value too large" });
+}
   if (!Array.isArray(csvData)) {
-    return res.status(400).json({ error: "CSV data must be an array" });
+    return res.status(400).json({ error: "Amount to be paid too large" });
   }
+  
   try {
     await ensureSheet("Clients", ["User", "Client_Name", "Email", "Type", "Monthly_Payment"]);
     await ensureSheet(
