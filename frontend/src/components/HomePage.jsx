@@ -341,13 +341,19 @@ const debouncedUpdate = useCallback(
 
     const key = `${rowIndex}-${month}`;
 
+    // Update local input value immediately
+    setLocalInputValues((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+
     if (debounceTimersRef.current[key]) {
       clearTimeout(debounceTimersRef.current[key]);
     }
 
-    setLocalInputValues((prev) => ({
+    setPendingUpdates((prev) => ({
       ...prev,
-      [key]: value,
+      [key]: true,
     }));
 
     debounceTimersRef.current[key] = setTimeout(() => {
@@ -369,27 +375,24 @@ const debouncedUpdate = useCallback(
 
       delete debounceTimersRef.current[key];
     }, 2000);
-
-    setPendingUpdates((prev) => ({
-      ...prev,
-      [key]: true,
-    }));
   },
-  [paymentsData]
+  [paymentsData, processBatchUpdates]
 );
 
-// HomePage.jsx: processBatchUpdates
 const processBatchUpdates = useCallback(async () => {
   if (!updateQueueRef.current.length) {
     console.log("HomePage.jsx: No updates to process");
     batchTimerRef.current = null;
     return;
   }
+
   const updates = [...updateQueueRef.current];
   updateQueueRef.current = [];
   batchTimerRef.current = null;
   console.log(`HomePage.jsx: Processing batch of ${updates.length} updates`, updates);
   setIsUpdating(true);
+
+  const updatedLocalValues = { ...localInputValues };
 
   try {
     for (const update of updates) {
@@ -401,17 +404,21 @@ const processBatchUpdates = useCallback(async () => {
       }
       try {
         await updatePayment(rowIndex, month, value, year);
+        const key = `${rowIndex}-${month}`;
+        updatedLocalValues[key] = value; // Update local value after successful save
         setPendingUpdates((prev) => {
-          const key = `${rowIndex}-${month}`;
           const newPending = { ...prev };
           delete newPending[key];
           return newPending;
         });
       } catch (error) {
         console.error(`HomePage.jsx: Failed to update ${month} for row ${rowIndex}:`, error);
-        updateQueueRef.current.push(update);
+        updateQueueRef.current.push(update); // Re-queue failed update
       }
     }
+    // Update localInputValues with confirmed values
+    setLocalInputValues(updatedLocalValues);
+
     if (updateQueueRef.current.length > 0) {
       console.log("HomePage.jsx: Retrying failed updates");
       batchTimerRef.current = setTimeout(processBatchUpdates, BATCH_DELAY);
@@ -423,7 +430,7 @@ const processBatchUpdates = useCallback(async () => {
   } finally {
     setIsUpdating(false);
   }
-}, [updatePayment, paymentsData, months]);
+}, [updatePayment, paymentsData, months, localInputValues]);
 
   const handleYearChangeDebounced = useCallback(
     (year) => {
@@ -460,15 +467,20 @@ const processBatchUpdates = useCallback(async () => {
   }, []);
 
   useEffect(() => {
-    const initialValues = {};
-    paymentsData.forEach((row, rowIndex) => {
-      months.forEach((month) => {
-        const key = `${rowIndex}-${month}`;
+  const initialValues = {};
+  paymentsData.forEach((row, rowIndex) => {
+    months.forEach((month) => {
+      const key = `${rowIndex}-${month}`;
+      // Only set the value if it hasn't been modified by the user
+      if (localInputValues[key] === undefined) {
         initialValues[key] = row?.[month] || "";
-      });
+      } else {
+        initialValues[key] = localInputValues[key];
+      }
     });
-    setLocalInputValues(initialValues);
-  }, [paymentsData, months]);
+  });
+  setLocalInputValues((prev) => ({ ...prev, ...initialValues }));
+}, [paymentsData, months, localInputValues]);
 
   useEffect(() => {
     if (isReportsPage && currentYear !== selectedYear) {

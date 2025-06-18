@@ -148,20 +148,30 @@ const App = () => {
   };
 
   const fetchPayments = async (token, year) => {
-    try {
-      console.log(`Fetching payments for ${year} with token:`, token?.substring(0, 10) + "...");
-      const response = await axios.get(`${BASE_URL}/get-payments-by-year`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params: { year },
-      });
-      console.log(`Fetched payments for ${year}:`, response.data);
-      setPaymentsData(Array.isArray(response.data) ? response.data : []);
-    } catch (error) {
-      console.error("Error fetching payments:", error);
-      setPaymentsData([]);
-      handleSessionError(error);
-    }
-  };
+  const cacheKey = `payments_${year}_${token}`;
+  if (apiCacheRef.current[cacheKey]) {
+    console.log(`App.jsx: Using cached payments for ${year}`);
+    setPaymentsData(apiCacheRef.current[cacheKey].data);
+    return;
+  }
+
+  try {
+    console.log(`Fetching payments for ${year} with token:`, token?.substring(0, 10) + "...");
+    const response = await axios.get(`${BASE_URL}/get-payments-by-year`, {
+      headers: { Authorization: `Bearer ${token}` },
+      params: { year },
+      timeout: 10000,
+    });
+    const data = Array.isArray(response.data) ? response.data : [];
+    console.log(`Fetched payments for ${year}:`, data);
+    setPaymentsData(data);
+    apiCacheRef.current[cacheKey] = { data, timestamp: Date.now() };
+  } catch (error) {
+    console.error("Error fetching payments:", error);
+    setPaymentsData([]);
+    handleSessionError(error);
+  }
+};
 
   const handleSessionError = (error) => {
     if (error.response && (error.response.status === 401 || error.response.status === 403)) {
@@ -590,7 +600,7 @@ const App = () => {
 
   const updatePayment = async (rowIndex, month, monthUpdates, year = currentYear) => {
   console.log("updatePayment called:", { rowIndex, month, monthUpdates, year });
-    if (!paymentsData[rowIndex]) {
+  if (!paymentsData[rowIndex]) {
     console.error("App.jsx: Invalid rowIndex:", rowIndex);
     return;
   }
@@ -599,7 +609,7 @@ const App = () => {
   const rowData = { ...paymentsData[rowIndex] };
   let payloadData;
 
-  if (month && monthUpdates !== null && !monthUpdates?.constructor === Object) {
+  if (month && monthUpdates !== null && typeof monthUpdates !== "object") {
     // Single-month update
     if (isNaN(parseFloat(monthUpdates)) && monthUpdates !== "") {
       alert("Please enter a valid number");
@@ -612,7 +622,7 @@ const App = () => {
       month,
       value: monthUpdates || "",
     };
-  } else if (monthUpdates) {
+  } else if (monthUpdates && typeof monthUpdates === "object") {
     // Batch update
     Object.entries(monthUpdates).forEach(([m, value]) => {
       if (isNaN(parseFloat(value)) && value !== "") {
@@ -626,6 +636,7 @@ const App = () => {
     console.error("App.jsx: Invalid update parameters");
     return;
   }
+
   const months = [
     "january",
     "february",
@@ -671,20 +682,21 @@ const App = () => {
 
   rowData.Due_Payment = (currentYearDuePayment + prevYearCumulativeDue).toFixed(2);
   updatedPayments[rowIndex] = rowData;
+
+  // Update paymentsData optimistically
   setPaymentsData(updatedPayments);
 
   const savePaymentWithRetry = async (payload, retries = 3, delayMs = 2000) => {
     for (let i = 0; i < retries; i++) {
       try {
-        console.log("App.jsx: Saving payment for:", rowData.Client_Name, month || "batch", monthUpdates || monthUpdates, year);
+        console.log("App.jsx: Saving payment for:", rowData.Client_Name, month || "batch", monthUpdates, year);
         const response = await axios.post(`${BASE_URL}/save-payment`, payload, {
           headers: { Authorization: `Bearer ${sessionToken}` },
           params: { year },
           timeout: 10000,
         });
         console.log("App.jsx: Payment saved successfully:", response.data);
-        await fetchPayments(sessionToken, year);
-        return;
+        return response.data;
       } catch (error) {
         console.error("App.jsx: Save payment error:", {
           message: error.message,
@@ -695,7 +707,7 @@ const App = () => {
           year,
           attempt: i + 1,
         });
-        if ((error.response?.status === 429 || error.code === 'ECONNABORTED') && i < retries - 1) {
+        if ((error.response?.status === 429 || error.code === "ECONNABORTED") && i < retries - 1) {
           await new Promise((resolve) => setTimeout(resolve, delayMs));
           delayMs *= 2;
         } else {
@@ -713,9 +725,21 @@ const App = () => {
 
   saveTimeouts.current[timeoutKey] = setTimeout(async () => {
     try {
-      await savePaymentWithRetry(payloadData);
+      const response = await savePaymentWithRetry(payloadData);
+      // Update paymentsData only if the server response differs
+      if (response.updatedRow) {
+        setPaymentsData((prev) =>
+          prev.map((row, idx) =>
+            idx === rowIndex ? { ...row, ...response.updatedRow } : row
+          )
+        );
+      }
     } catch (error) {
-      setErrorMessage(`Failed to save payment for ${rowData.Client_Name}: ${error.response?.data?.error || error.message}`);
+      setErrorMessage(
+        `Failed to save payment for ${rowData.Client_Name}: ${error.response?.data?.error || error.message}`
+      );
+      // Revert optimistic update on failure
+      setPaymentsData(paymentsData);
     } finally {
       delete saveTimeouts.current[timeoutKey];
     }
@@ -724,6 +748,12 @@ const App = () => {
 
   return (
     <ErrorBoundary>
+      {errorMessage && (
+  <div className="mb-4 p-4 bg-red-50 text-red-800 rounded-lg text-center border border-red-200">
+    <i className="fas fa-exclamation-circle mr-2"></i>
+    {errorMessage}
+  </div>
+)}
       <div className="min-h-screen bg-gray-50">
         {page === "signIn" && (
           <SignInPage
