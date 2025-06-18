@@ -219,11 +219,12 @@ async function writeSheet(sheetName, range, values) {
 // Helper: Update specific range in sheet
 async function updateSheet(range, values) {
   const sheets = google.sheets({ version: "v4", auth });
-  const maxRetries = 5; // Increased retries
+  const maxRetries = 5;
   let retryCount = 0;
 
   while (retryCount <= maxRetries) {
     try {
+      console.log(`Updating range ${range} with values:`, values);
       await sheets.spreadsheets.values.update({
         spreadsheetId,
         range,
@@ -234,7 +235,7 @@ async function updateSheet(range, values) {
       return;
     } catch (error) {
       if (error.status === 429 && retryCount < maxRetries) {
-        const delayMs = Math.pow(2, retryCount) * 2000 + Math.random() * 100; // Increased base delay to 2000ms
+        const delayMs = Math.pow(2, retryCount) * 2000 + Math.random() * 100;
         console.log(`Rate limit exceeded for ${range}, retrying after ${delayMs}ms...`);
         await delay(delayMs);
         retryCount++;
@@ -243,6 +244,7 @@ async function updateSheet(range, values) {
           message: error.message,
           code: error.code,
           details: error.errors,
+          values,
         });
         throw new Error(`Failed to update range ${range}: ${error.message}`);
       }
@@ -857,12 +859,31 @@ app.get("/api/get-payments-by-year", authenticateToken, async (req, res) => {
 app.post("/api/save-payment", authenticateToken, async (req, res) => {
   const { clientName, type, month, value } = req.body;
   const year = req.query.year || new Date().getFullYear().toString();
+  
+  // Enhanced logging for debugging
+  console.log("Save payment request:", {
+    clientName,
+    type,
+    month,
+    value,
+    year,
+    user: req.user?.username
+  });
+
+  // Improved validation
   if (!clientName || !type || !month) {
+    console.error("Missing required fields:", { clientName, type, month });
     return res.status(400).json({ error: "Client name, type, and month are required" });
   }
-  if (value && isNaN(parseFloat(value)) && value !== "") {
-    return res.status(400).json({ error: "Invalid payment value" });
+
+  if (value !== "" && value !== null && value !== undefined) {
+    const numericValue = parseFloat(value);
+    if (isNaN(numericValue) || numericValue < 0) {
+      console.error("Invalid payment value:", value);
+      return res.status(400).json({ error: "Invalid payment value" });
+    }
   }
+
   try {
     const headers = [
       "User",
@@ -883,6 +904,7 @@ app.post("/api/save-payment", authenticateToken, async (req, res) => {
       "December",
       "Due_Payment",
     ];
+
     const monthMap = {
       january: 4,
       february: 5,
@@ -897,43 +919,102 @@ app.post("/api/save-payment", authenticateToken, async (req, res) => {
       november: 14,
       december: 15,
     };
-    if (!monthMap[month.toLowerCase()]) {
+
+    const monthLower = month.toLowerCase();
+    if (!monthMap[monthLower]) {
+      console.error("Invalid month:", month);
       return res.status(400).json({ error: "Invalid month" });
     }
+
+    // Ensure sheet exists
     await ensureSheet("Payments", headers, year);
-    let payments = await readSheet(getPaymentSheetName(year), "A2:R");
+    console.log("Sheet ensured for year:", year);
+
+    // Read payments with error handling
+    let payments;
+    try {
+      payments = await readSheet(getPaymentSheetName(year), "A2:R");
+      console.log("Read payments, count:", payments?.length || 0);
+    } catch (sheetError) {
+      console.error("Error reading sheet:", sheetError.message);
+      return res.status(500).json({ error: "Failed to read payment data" });
+    }
+
+    // Find payment record
     const paymentIndex = payments.findIndex(
       (p) => p[0] === req.user.username && p[1] === clientName && p[2] === type
     );
+
     if (paymentIndex === -1) {
+      console.error("Payment record not found:", {
+        user: req.user.username,
+        clientName,
+        type
+      });
       return res.status(404).json({ error: "Payment record not found" });
     }
+
+    console.log("Found payment at index:", paymentIndex);
+
+    // Create a copy of the payment row
     const paymentRow = [...payments[paymentIndex]];
-    paymentRow[monthMap[month.toLowerCase()]] = value || "";
+    
+    // Ensure all array positions exist
+    while (paymentRow.length < 17) {
+      paymentRow.push("");
+    }
+
+    // Update the specific month value
+    paymentRow[monthMap[monthLower]] = value || "";
+    console.log("Updated row for month", month, "with value:", value);
+
+    // Calculate due payment
     const amountToBePaid = parseFloat(paymentRow[3]) || 0;
+if (isNaN(amountToBePaid)) {
+  console.error("Invalid Amount_To_Be_Paid:", paymentRow[3]);
+  return res.status(500).json({ error: "Invalid payment data in sheet" });
+}
+console.log("Payment row before update:", paymentRow);
     const activeMonths = paymentRow.slice(4, 16).filter((m) => m && parseFloat(m) >= 0).length;
     const expectedPayment = amountToBePaid * activeMonths;
     const totalPayments = paymentRow.slice(4, 16).reduce((sum, m) => sum + (parseFloat(m) || 0), 0);
     let currentYearDuePayment = Math.max(expectedPayment - totalPayments, 0);
+
+    // Handle previous year cumulative due
     let prevYearCumulativeDue = 0;
-    if (parseInt(year) > 2025) {
-      const prevYear = (parseInt(year) - 1).toString();
-      try {
-        const prevPayments = await readSheet(getPaymentSheetName(prevYear), "A2:R");
-        const prevPayment = prevPayments.find(
-          (p) => p[0] === req.user.username && p[1] === clientName && p[2] === type
-        );
-        if (prevPayment && prevPayment[16]) {
-          prevYearCumulativeDue = parseFloat(prevPayment[16]) || 0;
-        }
-      } catch (error) {
-        console.warn(`Failed to fetch previous year ${prevYear} for cumulative due:`, error.message);
-      }
-    }
+if (parseInt(year) > 2025) {
+  const prevYear = (parseInt(year) - 1).toString();
+  try {
+    console.log(`Fetching previous year data for ${prevYear}`);
+    const prevPayments = await readSheet(getPaymentSheetName(prevYear), "A2:R");
+    const prevPayment = prevPayments.find(
+      (p) => p[0] === req.user.username && p[1] === clientName && p[2] === type
+    );
+    prevYearCumulativeDue = prevPayment && prevPayment[16] ? parseFloat(prevPayment[16]) || 0 : 0;
+    console.log(`Previous year ${prevYear} cumulative due: ${prevYearCumulativeDue}`);
+  } catch (error) {
+    console.warn(`No data found for previous year ${prevYear}:`, error.message);
+    prevYearCumulativeDue = 0;
+  }
+}
+
     paymentRow[16] = (currentYearDuePayment + prevYearCumulativeDue).toFixed(2);
+
+    // Update the payments array
     payments[paymentIndex] = paymentRow;
+
+    // Update the sheet
     const range = `${getPaymentSheetName(year)}!A${paymentIndex + 2}:R${paymentIndex + 2}`;
-    await updateSheet(range, [paymentRow]);
+    
+    try {
+      await updateSheet(range, [paymentRow]);
+      console.log("Successfully updated sheet range:", range);
+    } catch (updateError) {
+      console.error("Error updating sheet:", updateError.message);
+      return res.status(500).json({ error: "Failed to update payment data" });
+    }
+
+    // Prepare response
     const updatedRow = {
       User: paymentRow[0],
       Client_Name: paymentRow[1],
@@ -953,7 +1034,10 @@ app.post("/api/save-payment", authenticateToken, async (req, res) => {
       december: paymentRow[15] || "",
       Due_Payment: parseFloat(paymentRow[16]) || 0,
     };
+
+    console.log("Payment updated successfully for:", clientName, month, value);
     res.json({ message: "Payment updated successfully", updatedRow });
+
   } catch (error) {
     console.error("Save payment error:", {
       message: error.message,
@@ -962,6 +1046,7 @@ app.post("/api/save-payment", authenticateToken, async (req, res) => {
       type,
       month,
       year,
+      user: req.user?.username
     });
     res.status(500).json({ error: `Failed to save payment: ${error.message}` });
   }

@@ -86,8 +86,7 @@ const App = () => {
       setSessionToken(storedToken);
       const validPages = ["home", "clients", "payments", "reports", "addClient"];
       setPage(validPages.includes(storedPage) ? storedPage : "home");
-      const yearToSet =
-        storedYear && parseInt(storedYear) >= 2025 ? storedYear : "2025";
+      const yearToSet = storedYear && parseInt(storedYear) >= 2025 ? storedYear : "2025";
       console.log("App.jsx: Setting sessionToken:", storedToken);
       console.log("App.jsx: Setting currentYear:", yearToSet);
       setCurrentYear(yearToSet);

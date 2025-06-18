@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import axios from "axios";
+import { debounce } from 'lodash';
 
 const BASE_URL = "https://payment-tracker-aswa.onrender.com/api";
 const BATCH_DELAY = 2000;
@@ -49,31 +50,31 @@ const HomePage = ({
   const mountedRef = useRef(true);
 
   const MONTHS = [
-  "january",
-  "february",
-  "march",
-  "april",
-  "may",
-  "june",
-  "july",
-  "august",
-  "september",
-  "october",
-  "november",
-  "december",
-];
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+  ];
 
-// Remove useMemo and use MONTHS directly
-const months = MONTHS;
+  // Remove useMemo and use MONTHS directly
+  const months = MONTHS;
 
   // Replace both functions with a single one
-const getPaymentStatus = useCallback((row, month) => {
-  const amountToBePaid = parseFloat(row?.Amount_To_Be_Paid || 0);
-  const paidInMonth = parseFloat(row?.[month] || 0);
-  if (paidInMonth === 0) return "Unpaid";
-  if (paidInMonth >= amountToBePaid) return "Paid";
-  return "PartiallyPaid";
-}, []);
+  const getPaymentStatus = useCallback((row, month) => {
+    const amountToBePaid = parseFloat(row?.Amount_To_Be_Paid || 0);
+    const paidInMonth = parseFloat(row?.[month] || 0);
+    if (paidInMonth === 0) return "Unpaid";
+    if (paidInMonth >= amountToBePaid) return "Paid";
+    return "PartiallyPaid";
+  }, []);
 
   const getInputBackgroundColor = useCallback(
     (row, month, rowIndex) => {
@@ -104,31 +105,31 @@ const getPaymentStatus = useCallback((row, month) => {
   );
 
   // Update filteredData to use getPaymentStatus
-const filteredData = useMemo(() => {
-  return (paymentsData || []).filter((row) => {
-    const matchesSearch =
-      !searchQuery ||
-      row?.Client_Name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      row?.Type?.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredData = useMemo(() => {
+    return (paymentsData || []).filter((row) => {
+      const matchesSearch =
+        !searchQuery ||
+        row?.Client_Name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        row?.Type?.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesMonth =
-      !monthFilter ||
-      (row?.[monthFilter.toLowerCase()] !== undefined &&
-        row?.[monthFilter.toLowerCase()] !== null);
+      const matchesMonth =
+        !monthFilter ||
+        (row?.[monthFilter.toLowerCase()] !== undefined &&
+          row?.[monthFilter.toLowerCase()] !== null);
 
-    const matchesStatus = !monthFilter
-      ? true
-      : !statusFilter ||
-        (statusFilter === "Paid" &&
-          getPaymentStatus(row, monthFilter.toLowerCase()) === "Paid") ||
-        (statusFilter === "PartiallyPaid" &&
-          getPaymentStatus(row, monthFilter.toLowerCase()) === "PartiallyPaid") ||
-        (statusFilter === "Unpaid" &&
-          getPaymentStatus(row, monthFilter.toLowerCase()) === "Unpaid");
+      const matchesStatus = !monthFilter
+        ? true
+        : !statusFilter ||
+          (statusFilter === "Paid" &&
+            getPaymentStatus(row, monthFilter.toLowerCase()) === "Paid") ||
+          (statusFilter === "PartiallyPaid" &&
+            getPaymentStatus(row, monthFilter.toLowerCase()) === "PartiallyPaid") ||
+          (statusFilter === "Unpaid" &&
+            getPaymentStatus(row, monthFilter.toLowerCase()) === "Unpaid");
 
-    return matchesSearch && matchesMonth && matchesStatus;
-  });
-}, [paymentsData, searchQuery, monthFilter, statusFilter, getPaymentStatus]); // Add getPaymentStatus to dependencies
+      return matchesSearch && matchesMonth && matchesStatus;
+    });
+  }, [paymentsData, searchQuery, monthFilter, statusFilter, getPaymentStatus]);
 
   // Utility functions
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -191,47 +192,60 @@ const filteredData = useMemo(() => {
     [getCachedData, setCachedData]
   );
 
-const searchUserYears = useCallback(
-  async (abortSignal) => {
-    if (!sessionToken) {
-      console.log("HomePage.jsx: No sessionToken");
-      return;
-    }
-
-    const cacheKey = getCacheKey("/get-user-years", { sessionToken });
-    const cachedYears = getCachedData(cacheKey);
-    if (cachedYears) {
-      console.log("HomePage.jsx: Using cached years data");
-      setAvailableYears(cachedYears);
-      return;
-    }
-
-    const requestKey = `years_${sessionToken}`;
-    return createDedupedRequest(requestKey, async () => {
-      setIsLoadingYears(true);
-      console.log("HomePage.jsx: Fetching user-specific years from API");
-
-      try {
-        const response = await axios.get(`${BASE_URL}/get-user-years`, {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-          timeout: 10000,
-          signal: abortSignal, // Use signal instead of cancelToken
-        });
-
-        // ... rest of the implementation
-      } catch (error) {
-        if (error.name === 'AbortError') return; // Check for AbortError instead
-        console.error("HomePage.jsx: Error fetching user years:", error);
-        // ... error handling
-      } finally {
-        if (mountedRef.current) {
-          setIsLoadingYears(false);
-        }
+  const searchUserYears = useCallback(
+    async (abortSignal) => {
+      if (!sessionToken) {
+        console.log("HomePage.jsx: No sessionToken");
+        return;
       }
-    });
-  },
-  [sessionToken, currentYear, handleYearChange, setCurrentYear]
-);
+
+      const cacheKey = getCacheKey("/get-user-years", { sessionToken });
+      const cachedYears = getCachedData(cacheKey);
+      if (cachedYears) {
+        console.log("HomePage.jsx: Using cached years data");
+        setAvailableYears(cachedYears);
+        return;
+      }
+
+      const requestKey = `years_${sessionToken}`;
+      return createDedupedRequest(requestKey, async () => {
+        setIsLoadingYears(true);
+        console.log("HomePage.jsx: Fetching user-specific years from API");
+
+        try {
+          const response = await axios.get(`${BASE_URL}/get-user-years`, {
+            headers: { Authorization: `Bearer ${sessionToken}` },
+            timeout: 10000,
+            signal: abortSignal,
+          });
+
+          const years = Array.isArray(response.data) ? response.data : ["2025"];
+          setAvailableYears(years);
+          setCachedData(cacheKey, years);
+          console.log("HomePage.jsx: Fetched years:", years);
+        } catch (error) {
+          if (error.name === 'AbortError') {
+            console.log("HomePage.jsx: Year fetch aborted");
+            return; // Ignore abort errors
+          }
+          console.error("HomePage.jsx: Error fetching user years:", error);
+          setLocalErrorMessage("Failed to fetch available years. Showing default year.");
+          setAvailableYears(["2025"]);
+        } finally {
+          if (mountedRef.current) {
+            setIsLoadingYears(false);
+          }
+        }
+      });
+    },
+    [sessionToken, getCacheKey, getCachedData, setCachedData, createDedupedRequest]
+  );
+
+  // Debounced version of searchUserYears
+  const debouncedSearchUserYears = useCallback(
+    debounce((signal) => searchUserYears(signal), 300),
+    [searchUserYears]
+  );
 
   const handleAddNewYear = useCallback(async () => {
     const newYear = (parseInt(currentYear) + 1).toString();
@@ -241,7 +255,7 @@ const searchUserYears = useCallback(
       setIsLoadingYears(true);
     }
 
-    const controller = axios.CancelToken.source();
+    const controller = new AbortController(); // Use AbortController instead of CancelToken
 
     try {
       const response = await axios.post(
@@ -250,12 +264,12 @@ const searchUserYears = useCallback(
         {
           headers: { Authorization: `Bearer ${sessionToken}` },
           timeout: 10000,
-          cancelToken: controller.token,
+          signal: controller.signal,
         }
       );
       console.log("HomePage.jsx: Add new year response:", response.data);
 
-      await searchUserYears(controller.token);
+      await searchUserYears(controller.signal);
 
       if (mountedRef.current) {
         setCurrentYear(newYear);
@@ -285,57 +299,57 @@ const searchUserYears = useCallback(
     }
   }, [currentYear, sessionToken, handleYearChange, searchUserYears]);
 
-const processBatchUpdates = useCallback(async () => {
-  if (!updateQueueRef.current.length) {
-    console.log("HomePage.jsx: No updates to process");
+  const processBatchUpdates = useCallback(async () => {
+    if (!updateQueueRef.current.length) {
+      console.log("HomePage.jsx: No updates to process");
+      batchTimerRef.current = null;
+      return;
+    }
+
+    const updates = [...updateQueueRef.current];
+    updateQueueRef.current = []; // Clear queue immediately
     batchTimerRef.current = null;
-    return;
-  }
+    console.log(`HomePage.jsx: Processing batch of ${updates.length} updates`, updates);
+    setIsUpdating(true);
 
-  const updates = [...updateQueueRef.current];
-  updateQueueRef.current = []; // Clear queue immediately
-  batchTimerRef.current = null;
-  console.log(`HomePage.jsx: Processing batch of ${updates.length} updates`, updates);
-  setIsUpdating(true);
+    const updatedLocalValues = { ...localInputValues };
 
-  const updatedLocalValues = { ...localInputValues };
-
-  try {
-    for (const update of updates) {
-      const { rowIndex, month, value, year } = update;
-      const rowData = paymentsData[rowIndex];
-      if (!rowData) {
-        console.warn(`HomePage.jsx: Invalid rowIndex ${rowIndex}`);
-        continue;
-      }
-      if (typeof updatePayment !== "function") {
+    try {
+      for (const update of updates) {
+        const { rowIndex, month, value, year } = update;
+        const rowData = paymentsData[rowIndex];
+        if (!rowData) {
+          console.warn(`HomePage.jsx: Invalid rowIndex ${rowIndex}`);
+          continue;
+        }
+        if (typeof updatePayment !== "function") {
           console.error("HomePage.jsx: updatePayment is not a function");
           setLocalErrorMessage("Update failed: Invalid update function");
           updateQueueRef.current.push(update);
           continue;
         }
-      try {
-        await updatePayment(rowIndex, month, value, year);
-        const key = `${rowIndex}-${month}`;
-        updatedLocalValues[key] = value;
-        setPendingUpdates((prev) => {
-          const newPending = { ...prev };
-          delete newPending[key];
-          return newPending;
-        });
-      } catch (error) {
-        console.error(`HomePage.jsx: Failed to update ${month} for row ${rowIndex}:`, error);
+        try {
+          await updatePayment(rowIndex, month, value, year);
+          const key = `${rowIndex}-${month}`;
+          updatedLocalValues[key] = value;
+          setPendingUpdates((prev) => {
+            const newPending = { ...prev };
+            delete newPending[key];
+            return newPending;
+          });
+        } catch (error) {
+          console.error(`HomePage.jsx: Failed to update ${month} for row ${rowIndex}:`, error);
           setLocalErrorMessage(`Failed to update ${month} for ${rowData.Client_Name}: ${error.message}`);
           setErrorMessage(`Failed to update ${month} for ${rowData.Client_Name}: ${error.message}`);
           updateQueueRef.current.push(update);
+        }
       }
-    }
-    setLocalInputValues(updatedLocalValues);
-    if (updateQueueRef.current.length > 0) {
-      console.log("HomePage.jsx: Scheduling retry for failed updates");
-      batchTimerRef.current = setTimeout(processBatchUpdates, BATCH_DELAY);
-    }
-  } catch (error) {
+      setLocalInputValues(updatedLocalValues);
+      if (updateQueueRef.current.length > 0) {
+        console.log("HomePage.jsx: Scheduling retry for failed updates");
+        batchTimerRef.current = setTimeout(processBatchUpdates, BATCH_DELAY);
+      }
+    } catch (error) {
       console.error("HomePage.jsx: Batch update error:", error);
       setLocalErrorMessage(`Batch update failed: ${error.message}`);
       setErrorMessage(`Batch update failed: ${error.message}`);
@@ -344,58 +358,56 @@ const processBatchUpdates = useCallback(async () => {
     } finally {
       setIsUpdating(false);
     }
-}, [updatePayment, paymentsData, localInputValues, setErrorMessage]);
+  }, [updatePayment, paymentsData, localInputValues, setErrorMessage]);
 
-
-const debouncedUpdate = useCallback(
-  (rowIndex, month, value, year) => {
-    if (!paymentsData.length) {
-      console.warn("HomePage.jsx: Cannot queue update, paymentsData is empty");
-      alert("Please wait for data to load before making updates.");
-      return;
-    }
-    if (!paymentsData[rowIndex]) {
-      console.warn("HomePage.jsx: Invalid rowIndex:", rowIndex);
-      return;
-    }
-    if (typeof updatePayment !== "function") {
-      console.error("HomePage.jsx: updatePayment is not a function");
-      alert("Update failed: Invalid update function");
-      return;
-    }
-    const key = `${rowIndex}-${month}`;
-    setLocalInputValues((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
-    if (debounceTimersRef.current[key]) {
-      clearTimeout(debounceTimersRef.current[key]);
-    }
-    setPendingUpdates((prev) => ({
-      ...prev,
-      [key]: true,
-    }));
-    debounceTimersRef.current[key] = setTimeout(() => {
-      updateQueueRef.current = updateQueueRef.current.filter(
-        (update) => !(update.rowIndex === rowIndex && update.month === month)
-      );
-      updateQueueRef.current.push({
-        rowIndex,
-        month,
-        value,
-        year,
-        timestamp: Date.now(),
-      });
-      console.log("HomePage.jsx: Queued update:", { rowIndex, month, value, year });
-      if (!batchTimerRef.current) {
-        batchTimerRef.current = setTimeout(processBatchUpdates, BATCH_DELAY);
+  const debouncedUpdate = useCallback(
+    (rowIndex, month, value, year) => {
+      if (!paymentsData.length) {
+        console.warn("HomePage.jsx: Cannot queue update, paymentsData is empty");
+        alert("Please wait for data to load before making updates.");
+        return;
       }
-      delete debounceTimersRef.current[key];
-    }, 2000);
-  },
-  [paymentsData, updatePayment] // Add updatePayment to dependencies
-);
-
+      if (!paymentsData[rowIndex]) {
+        console.warn("HomePage.jsx: Invalid rowIndex:", rowIndex);
+        return;
+      }
+      if (typeof updatePayment !== "function") {
+        console.error("HomePage.jsx: updatePayment is not a function");
+        alert("Update failed: Invalid update function");
+        return;
+      }
+      const key = `${rowIndex}-${month}`;
+      setLocalInputValues((prev) => ({
+        ...prev,
+        [key]: value,
+      }));
+      if (debounceTimersRef.current[key]) {
+        clearTimeout(debounceTimersRef.current[key]);
+      }
+      setPendingUpdates((prev) => ({
+        ...prev,
+        [key]: true,
+      }));
+      debounceTimersRef.current[key] = setTimeout(() => {
+        updateQueueRef.current = updateQueueRef.current.filter(
+          (update) => !(update.rowIndex === rowIndex && update.month === month)
+        );
+        updateQueueRef.current.push({
+          rowIndex,
+          month,
+          value,
+          year,
+          timestamp: Date.now(),
+        });
+        console.log("HomePage.jsx: Queued update:", { rowIndex, month, value, year });
+        if (!batchTimerRef.current) {
+          batchTimerRef.current = setTimeout(processBatchUpdates, BATCH_DELAY);
+        }
+        delete debounceTimersRef.current[key];
+      }, 2000);
+    },
+    [paymentsData, updatePayment]
+  );
 
   const handleYearChangeDebounced = useCallback(
     (year) => {
@@ -408,22 +420,22 @@ const debouncedUpdate = useCallback(
   );
 
   const handleInputChange = useCallback(
-  (rowIndex, month, value) => {
-    const parsedValue = value.trim() === "" ? "" : parseFloat(value);
-    if (value !== "" && (isNaN(parsedValue) || parsedValue < 0)) {
-      alert("Please enter a valid non-negative number.");
-      return;
-    }
+    (rowIndex, month, value) => {
+      const parsedValue = value.trim() === "" ? "" : parseFloat(value);
+      if (value !== "" && (isNaN(parsedValue) || parsedValue < 0)) {
+        alert("Please enter a valid non-negative number.");
+        return;
+      }
 
-    const key = `${rowIndex}-${month}`;
-    setLocalInputValues((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
-    debouncedUpdate(rowIndex, month, value, currentYear);
-  },
-  [debouncedUpdate, currentYear]
-);
+      const key = `${rowIndex}-${month}`;
+      setLocalInputValues((prev) => ({
+        ...prev,
+        [key]: value,
+      }));
+      debouncedUpdate(rowIndex, month, value, currentYear);
+    },
+    [debouncedUpdate, currentYear]
+  );
 
   // Initialize component
   useEffect(() => {
@@ -438,36 +450,36 @@ const debouncedUpdate = useCallback(
   }, []);
 
   useEffect(() => {
-  const initialValues = {};
-  paymentsData.forEach((row, rowIndex) => {
-    months.forEach((month) => {
-      const key = `${rowIndex}-${month}`;
-      // Only set the value if it hasn't been modified by the user
-      if (localInputValues[key] === undefined) {
-        initialValues[key] = row?.[month] || "";
-      } else {
-        initialValues[key] = localInputValues[key];
-      }
+    const initialValues = {};
+    paymentsData.forEach((row, rowIndex) => {
+      months.forEach((month) => {
+        const key = `${rowIndex}-${month}`;
+        // Only set the value if it hasn't been modified by the user
+        if (localInputValues[key] === undefined) {
+          initialValues[key] = row?.[month] || "";
+        } else {
+          initialValues[key] = localInputValues[key];
+        }
+      });
     });
-  });
-  setLocalInputValues((prev) => ({ ...prev, ...initialValues }));
-}, [paymentsData, months]);
+    setLocalInputValues((prev) => ({ ...prev, ...initialValues }));
+  }, [paymentsData, months]);
 
   useEffect(() => {
-  if (paymentsData?.length) {
-    const timeoutId = setTimeout(() => {
-      console.log(
-        "HomePage.jsx: Payments data updated:",
-        paymentsData.length,
-        "items for year",
-        currentYear,
-        "on",
-        isReportsPage ? "Reports" : "Dashboard"
-      );
-    }, 100);
-    return () => clearTimeout(timeoutId);
-  }
-}, [paymentsData?.length, currentYear, isReportsPage]);
+    if (paymentsData?.length) {
+      const timeoutId = setTimeout(() => {
+        console.log(
+          "HomePage.jsx: Payments data updated:",
+          paymentsData.length,
+          "items for year",
+          currentYear,
+          "on",
+          isReportsPage ? "Reports" : "Dashboard"
+        );
+      }, 100);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [paymentsData?.length, currentYear, isReportsPage]);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -483,40 +495,40 @@ const debouncedUpdate = useCallback(
   }, []);
 
   useEffect(() => {
-  return () => {
-    // Clear all timers
-    Object.values(debounceTimersRef.current).forEach((timer) => {
-      if (timer) clearTimeout(timer);
-    });
-    debounceTimersRef.current = {};
-    
-    if (batchTimerRef.current) {
-      clearTimeout(batchTimerRef.current);
-      batchTimerRef.current = null;
-    }
-    
-    // Process remaining updates only if component is still mounted
-    if (updateQueueRef.current.length > 0 && mountedRef.current) {
-      // Force immediate processing without setTimeout
-      const updates = [...updateQueueRef.current];
-      updateQueueRef.current = [];
-      // Process synchronously if possible
-    }
-  };
-}, []); // Empty dependency array for cleanup only
+    return () => {
+      // Clear all timers
+      Object.values(debounceTimersRef.current).forEach((timer) => {
+        if (timer) clearTimeout(timer);
+      });
+      debounceTimersRef.current = {};
+      
+      if (batchTimerRef.current) {
+        clearTimeout(batchTimerRef.current);
+        batchTimerRef.current = null;
+      }
+      
+      // Process remaining updates only if component is still mounted
+      if (updateQueueRef.current.length > 0 && mountedRef.current) {
+        // Force immediate processing without setTimeout
+        const updates = [...updateQueueRef.current];
+        updateQueueRef.current = [];
+        // Process synchronously if possible
+      }
+    };
+  }, []);
 
-//request cancellation
-useEffect(() => {
-  const controller = new AbortController();
-  if (sessionToken) {
-    console.log("HomePage.jsx: SessionToken available, fetching years");
-    searchUserYears(controller.signal);
-  }
-  return () => {
-    controller.abort();
-    // ... other cleanup
-  };
-}, [sessionToken, searchUserYears]);
+  // Updated useEffect for fetching years
+  useEffect(() => {
+    const controller = new AbortController();
+    if (sessionToken) {
+      console.log("HomePage.jsx: SessionToken available, fetching years");
+      debouncedSearchUserYears(controller.signal);
+    }
+    return () => {
+      controller.abort();
+      debouncedSearchUserYears.cancel(); // Cancel debounced calls on cleanup
+    };
+  }, [sessionToken, debouncedSearchUserYears]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -568,17 +580,17 @@ useEffect(() => {
           </button>
         </div>
         <select
-  value={currentYear}
-  onChange={(e) => handleYearChangeDebounced(e.target.value)}
-  className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
-  disabled={isLoadingYears}
->
-  {availableYears.map((year) => (
-    <option key={year} value={year}>
-      {year}
-    </option>
-  ))}
-</select>
+          value={currentYear}
+          onChange={(e) => handleYearChangeDebounced(e.target.value)}
+          className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+          disabled={isLoadingYears}
+        >
+          {availableYears.map((year) => (
+            <option key={year} value={year}>
+              {year}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 mb-6">
@@ -729,16 +741,16 @@ useEffect(() => {
 
   const renderReports = () => {
     const monthStatus = useMemo(() => {
-    return (paymentsData || []).reduce((acc, row) => {
-      if (!acc[row?.Client_Name]) {
-        acc[row?.Client_Name] = {};
-      }
-      months.forEach((month) => {
-        acc[row?.Client_Name][month] = getPaymentStatus(row, month); // Fix: Use getPaymentStatus
-      });
-      return acc;
-    }, {});
-  }, [paymentsData, months, getPaymentStatus]);
+      return (paymentsData || []).reduce((acc, row) => {
+        if (!acc[row?.Client_Name]) {
+          acc[row?.Client_Name] = {};
+        }
+        months.forEach((month) => {
+          acc[row?.Client_Name][month] = getPaymentStatus(row, month);
+        });
+        return acc;
+      }, {});
+    }, [paymentsData, months, getPaymentStatus]);
 
     const getStatusBackgroundColor = (status) => {
       if (status === "Unpaid") return "bg-red-200/50 text-red-800";
@@ -771,17 +783,17 @@ useEffect(() => {
             />
           </div>
           <select
-  value={currentYear}
-  onChange={(e) => handleYearChangeDebounced(e.target.value)}
-  className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
-  disabled={isLoadingYears}
->
-  {availableYears.map((year) => (
-    <option key={year} value={year}>
-      {year}
-    </option>
-  ))}
-</select>
+            value={currentYear}
+            onChange={(e) => handleYearChangeDebounced(e.target.value)}
+            className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+            disabled={isLoadingYears}
+          >
+            {availableYears.map((year) => (
+              <option key={year} value={year}>
+                {year}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
           <div className="max-h-96 overflow-y-auto">
@@ -963,11 +975,11 @@ useEffect(() => {
         </div>
       )}
       {isUpdating && (
-  <div className="mb-4 p-4 bg-yellow-50 text-yellow-800 rounded-lg text-center border border-yellow-200">
-    <i className="fas fa-spinner fa-spin mr-2"></i>
-    Saving updates, please wait...
-  </div>
-)}
+        <div className="mb-4 p-4 bg-yellow-50 text-yellow-800 rounded-lg text-center border border-yellow-200">
+          <i className="fas fa-spinner fa-spin mr-2"></i>
+          Saving updates, please wait...
+        </div>
+      )}
       {isReportsPage ? renderReports() : renderDashboard()}
     </div>
   );
