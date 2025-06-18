@@ -2,6 +2,9 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from "react"
 import axios from "axios";
 
 const BASE_URL = "https://payment-tracker-aswa.onrender.com/api";
+const BATCH_DELAY = 2000;
+const BATCH_SIZE = 5;
+const CACHE_DURATION = 5 * 60 * 1000;
 
 const HomePage = ({
   paymentsData,
@@ -28,17 +31,21 @@ const HomePage = ({
   handleYearChange,
   onMount,
 }) => {
-  // Prevent infinite re-renders by using useCallback for onMount
-  const stableOnMount = useCallback(() => {
-    if (onMount && typeof onMount === 'function') {
-      onMount();
-    }
-  }, [onMount]);
-
-  // Only call onMount once when component first mounts
-  useEffect(() => {
-    stableOnMount();
-  }, [stableOnMount]);
+  // State and Refs
+  const [availableYears, setAvailableYears] = useState(["2025"]);
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [isLoadingYears, setIsLoadingYears] = useState(false);
+  const [localInputValues, setLocalInputValues] = useState({});
+  const [pendingUpdates, setPendingUpdates] = useState({});
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const debounceTimersRef = useRef({});
+  const isUpdatingRef = useRef(false);
+  const updateQueueRef = useRef([]);
+  const batchTimerRef = useRef(null);
+  const apiCacheRef = useRef({});
+  const activeRequestsRef = useRef(new Set());
+  const tableRef = useRef(null);
+  const mountedRef = useRef(true);
 
   const months = useMemo(() => [
     "january",
@@ -55,74 +62,42 @@ const HomePage = ({
     "december",
   ], []);
 
-  const [availableYears, setAvailableYears] = useState(["2025"]);
-  const [selectedYear, setSelectedYear] = useState(currentYear);
-  const [isLoadingYears, setIsLoadingYears] = useState(false);
-
-  const [localInputValues, setLocalInputValues] = useState({});
-  const [pendingUpdates, setPendingUpdates] = useState({});
-  const debounceTimersRef = useRef({});
-  const isUpdatingRef = useRef(false);
-
-  const updateQueueRef = useRef([]);
-  const batchTimerRef = useRef(null);
-  const apiCacheRef = useRef({});
-  const activeRequestsRef = useRef(new Set());
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-
-  const BATCH_DELAY = 2000; // 2 seconds
-  const BATCH_SIZE = 5; // 5 updates per batch
-  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-  
-
-  // Sync selectedYear with currentYear for Reports view
-  useEffect(() => {
-    if (isReportsPage && currentYear !== selectedYear) {
-      console.log("HomePage.jsx: Syncing selectedYear to currentYear:", currentYear, "for Reports");
-      setSelectedYear(currentYear);
+  // Prevent infinite re-renders by using useCallback for onMount
+  const stableOnMount = useCallback(() => {
+    if (onMount && typeof onMount === 'function') {
+      onMount();
     }
-  }, [currentYear, isReportsPage, selectedYear]);
+  }, [onMount]);
 
-  // Log payments data updates (with debouncing to prevent spam)
-  useEffect(() => {
-    if (paymentsData?.length) {
-      const timeoutId = setTimeout(() => {
-        console.log(
-          "HomePage.jsx: Payments data updated:",
-          paymentsData.length,
-          "items for year",
-          isReportsPage ? selectedYear : currentYear,
-          "on",
-          isReportsPage ? "Reports" : "Dashboard"
-        );
-      }, 100);
-      return () => clearTimeout(timeoutId);
-    }
-  }, [paymentsData?.length, currentYear, selectedYear, isReportsPage]);
+  // Memoized filtered data to prevent unnecessary re-calculations
+  const filteredData = useMemo(() => {
+    return paymentsData.filter((row) => {
+      const matchesSearch =
+        !searchQuery ||
+        row.Client_Name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        row.Type?.toLowerCase().includes(searchQuery.toLowerCase());
 
-  const mountedRef = useRef(true);
+      const matchesMonth =
+        !monthFilter ||
+        (row[monthFilter.toLowerCase()] !== undefined &&
+          row[monthFilter.toLowerCase()] !== null);
 
-useEffect(() => {
-  mountedRef.current = true;
-  return () => {
-    mountedRef.current = false;
-  };
-}, []);
+      const matchesStatus = !monthFilter
+        ? true
+        : !statusFilter ||
+          (statusFilter === "Paid" &&
+            getPaymentStatusForMonth(row, monthFilter.toLowerCase()) === "Paid") ||
+          (statusFilter === "PartiallyPaid" &&
+            getPaymentStatusForMonth(row, monthFilter.toLowerCase()) === "PartiallyPaid") ||
+          (statusFilter === "Unpaid" &&
+            getPaymentStatusForMonth(row, monthFilter.toLowerCase()) === "Unpaid");
 
-useEffect(() => {
-  const initialValues = {};
-  paymentsData.forEach((row, rowIndex) => {
-    months.forEach(month => {
-      const key = `${rowIndex}-${month}`;
-      initialValues[key] = row[month] || "";
+      return matchesSearch && matchesMonth && matchesStatus;
     });
-  });
-  setLocalInputValues(initialValues);
-}, [paymentsData, months]);
+  }, [paymentsData, searchQuery, monthFilter, statusFilter, getPaymentStatusForMonth]);
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const retryWithBackoff = async (fn, retries = 3, delay = 1000) => {
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const retryWithBackoff = async (fn, retries = 3, delay = 1000) => {
   for (let i = 0; i < retries; i++) {
     try {
       return await fn();
@@ -138,39 +113,81 @@ const retryWithBackoff = async (fn, retries = 3, delay = 1000) => {
   }
 };
 
-// 2. ADD OFFLINE DETECTION (new useEffect)
-useEffect(() => {
-  const handleOnline = () => setIsOnline(true);
-  const handleOffline = () => setIsOnline(false);
-  
-  window.addEventListener('online', handleOnline);
-  window.addEventListener('offline', handleOffline);
-  
-  return () => {
-    window.removeEventListener('online', handleOnline);
-    window.removeEventListener('offline', handleOffline);
+// 3. ADD CACHE UTILITY FUNCTIONS (new functions)
+const getCacheKey = useCallback((url, params = {}) => {
+  return `${url}_${JSON.stringify(params)}`;
+}, []);
+
+const getCachedData = useCallback((key) => {
+  const cached = apiCacheRef.current[key];
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    return cached.data;
+  }
+  return null;
+}, []);
+
+const setCachedData = useCallback((key, data) => {
+  apiCacheRef.current[key] = {
+    data,
+    timestamp: Date.now()
   };
 }, []);
 
-// 8. ADD CLEANUP FOR NEW TIMERS (modify existing cleanup useEffect)
-useEffect(() => {
-  return () => {
-    // Existing cleanup
-    Object.values(debounceTimersRef.current).forEach(timer => {
-      if (timer) clearTimeout(timer);
-    });
-    
-    // New cleanup
-    if (batchTimerRef.current) {
-      clearTimeout(batchTimerRef.current);
+// 4. ADD REQUEST DEDUPLICATION (new function)
+const createDedupedRequest = useCallback(async (requestKey, requestFn) => {
+  if (activeRequestsRef.current.has(requestKey)) {
+    // Wait for existing request
+    while (activeRequestsRef.current.has(requestKey)) {
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
-    
-    // Process remaining updates on unmount
-    if (updateQueueRef.current.length > 0) {
-      processBatchUpdates();
-    }
-  };
-}, [processBatchUpdates]);
+    return getCachedData(requestKey);
+  }
+
+  activeRequestsRef.current.add(requestKey);
+  try {
+    const result = await requestFn();
+    setCachedData(requestKey, result);
+    return result;
+  } finally {
+    activeRequestsRef.current.delete(requestKey);
+  }
+}, [getCachedData, setCachedData]);
+
+// Memoized helper functions
+  const getPaymentStatusForMonth = useCallback((row, month) => {
+    const amountToBePaid = parseFloat(row.Amount_To_Be_Paid) || 0;
+    const paidInMonth = parseFloat(row[month]) || 0;
+    if (paidInMonth === 0) return "Unpaid";
+    if (paidInMonth >= amountToBePaid) return "Paid";
+    return "PartiallyPaid";
+  }, []);
+
+  const getMonthlyStatus = useCallback((row, month) => {
+    const amountToBePaid = parseFloat(row.Amount_To_Be_Paid) || 0;
+    const paidInMonth = parseFloat(row[month]) || 0;
+    if (paidInMonth === 0) return "Unpaid";
+    if (paidInMonth >= amountToBePaid) return "Paid";
+    return "PartiallyPaid";
+  }, []);
+
+const getInputBackgroundColor = useCallback((row, month, rowIndex) => {
+  const key = `${rowIndex}-${month}`;
+  const currentValue = localInputValues[key] !== undefined ? localInputValues[key] : (row[month] || "");
+  const amountToBePaid = parseFloat(row.Amount_To_Be_Paid) || 0;
+  const paidInMonth = parseFloat(currentValue) || 0;
+  
+  let status;
+  if (paidInMonth === 0) status = "Unpaid";
+  else if (paidInMonth >= amountToBePaid) status = "Paid";
+  else status = "PartiallyPaid";
+  
+  // Add visual indicator for pending updates
+  const isPending = pendingUpdates[key];
+  const baseColor = status === "Unpaid" ? "bg-red-200/50" : 
+                   status === "PartiallyPaid" ? "bg-yellow-200/50" : "bg-green-200/50";
+  
+  return isPending ? `${baseColor} ring-2 ring-blue-300` : baseColor;
+}, [localInputValues, pendingUpdates]);
 
 // 7. MODIFY YOUR EXISTING searchUserYears FUNCTION (add caching)
 const searchUserYears = useCallback(async (cancelToken) => {
@@ -245,20 +262,6 @@ const searchUserYears = useCallback(async (cancelToken) => {
   });
 }, [sessionToken, currentYear, handleYearChange, setCurrentYear, getCacheKey, getCachedData, setCachedData, createDedupedRequest]);
 
-
-useEffect(() => {
-  const controller = axios.CancelToken.source();
-
-  if (sessionToken) {
-    console.log("HomePage.jsx: SessionToken available, fetching years");
-    searchUserYears(controller.token);
-  }
-
-  return () => {
-    controller.cancel("Component unmounted or sessionToken changed");
-  };
-}, [sessionToken]);
-
   // Memoized function to handle adding new year
 const handleAddNewYear = useCallback(async () => {
   const newYear = (parseInt(currentYear) + 1).toString();
@@ -316,136 +319,25 @@ const handleAddNewYear = useCallback(async () => {
   }
 }, [currentYear, sessionToken, handleYearChange, searchUserYears]);
 
-  const tableRef = useRef(null);
-
-  // Handle clicks outside table for context menu
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (tableRef.current && !tableRef.current.contains(e.target)) {
-        hideContextMenu();
-      }
-    };
-    document.addEventListener("click", handleClickOutside);
-    return () => document.removeEventListener("click", handleClickOutside);
-  }, [hideContextMenu]);
-
-  // Memoized helper functions
-  const getPaymentStatusForMonth = useCallback((row, month) => {
-    const amountToBePaid = parseFloat(row.Amount_To_Be_Paid) || 0;
-    const paidInMonth = parseFloat(row[month]) || 0;
-    if (paidInMonth === 0) return "Unpaid";
-    if (paidInMonth >= amountToBePaid) return "Paid";
-    return "PartiallyPaid";
-  }, []);
-
-  const getMonthlyStatus = useCallback((row, month) => {
-    const amountToBePaid = parseFloat(row.Amount_To_Be_Paid) || 0;
-    const paidInMonth = parseFloat(row[month]) || 0;
-    if (paidInMonth === 0) return "Unpaid";
-    if (paidInMonth >= amountToBePaid) return "Paid";
-    return "PartiallyPaid";
-  }, []);
-
-const getInputBackgroundColor = useCallback((row, month, rowIndex) => {
-  const key = `${rowIndex}-${month}`;
-  const currentValue = localInputValues[key] !== undefined ? localInputValues[key] : (row[month] || "");
-  const amountToBePaid = parseFloat(row.Amount_To_Be_Paid) || 0;
-  const paidInMonth = parseFloat(currentValue) || 0;
-  
-  let status;
-  if (paidInMonth === 0) status = "Unpaid";
-  else if (paidInMonth >= amountToBePaid) status = "Paid";
-  else status = "PartiallyPaid";
-  
-  // Add visual indicator for pending updates
-  const isPending = pendingUpdates[key];
-  const baseColor = status === "Unpaid" ? "bg-red-200/50" : 
-                   status === "PartiallyPaid" ? "bg-yellow-200/50" : "bg-green-200/50";
-  
-  return isPending ? `${baseColor} ring-2 ring-blue-300` : baseColor;
-}, [localInputValues, pendingUpdates]);
-
-  // Memoized filtered data to prevent unnecessary re-calculations
-  const filteredData = useMemo(() => {
-    return paymentsData.filter((row) => {
-      const matchesSearch =
-        !searchQuery ||
-        row.Client_Name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        row.Type?.toLowerCase().includes(searchQuery.toLowerCase());
-
-      const matchesMonth =
-        !monthFilter ||
-        (row[monthFilter.toLowerCase()] !== undefined &&
-          row[monthFilter.toLowerCase()] !== null);
-
-      const matchesStatus = !monthFilter
-        ? true
-        : !statusFilter ||
-          (statusFilter === "Paid" &&
-            getPaymentStatusForMonth(row, monthFilter.toLowerCase()) === "Paid") ||
-          (statusFilter === "PartiallyPaid" &&
-            getPaymentStatusForMonth(row, monthFilter.toLowerCase()) === "PartiallyPaid") ||
-          (statusFilter === "Unpaid" &&
-            getPaymentStatusForMonth(row, monthFilter.toLowerCase()) === "Unpaid");
-
-      return matchesSearch && matchesMonth && matchesStatus;
+// 8. ADD CLEANUP FOR NEW TIMERS (modify existing cleanup useEffect)
+useEffect(() => {
+  return () => {
+    // Existing cleanup
+    Object.values(debounceTimersRef.current).forEach(timer => {
+      if (timer) clearTimeout(timer);
     });
-  }, [paymentsData, searchQuery, monthFilter, statusFilter, getPaymentStatusForMonth]);
-
-  // Memoized year change handler
-  const handleYearChangeDebounced = useCallback((year) => {
-  console.log("HomePage.jsx: Year change requested to:", year);
-  
-  setCurrentYear(year);
-  localStorage.setItem("currentYear", year);
-  
-  if (typeof handleYearChange === "function") {
-    handleYearChange(year);
-  } else {
-    console.warn("HomePage.jsx: handleYearChange is not a function");
-  }
-}, [handleYearChange, setCurrentYear]);
-
-
-// 3. ADD CACHE UTILITY FUNCTIONS (new functions)
-const getCacheKey = useCallback((url, params = {}) => {
-  return `${url}_${JSON.stringify(params)}`;
-}, []);
-
-const getCachedData = useCallback((key) => {
-  const cached = apiCacheRef.current[key];
-  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-    return cached.data;
-  }
-  return null;
-}, []);
-
-const setCachedData = useCallback((key, data) => {
-  apiCacheRef.current[key] = {
-    data,
-    timestamp: Date.now()
-  };
-}, []);
-
-// 4. ADD REQUEST DEDUPLICATION (new function)
-const createDedupedRequest = useCallback(async (requestKey, requestFn) => {
-  if (activeRequestsRef.current.has(requestKey)) {
-    // Wait for existing request
-    while (activeRequestsRef.current.has(requestKey)) {
-      await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // New cleanup
+    if (batchTimerRef.current) {
+      clearTimeout(batchTimerRef.current);
     }
-    return getCachedData(requestKey);
-  }
-
-  activeRequestsRef.current.add(requestKey);
-  try {
-    const result = await requestFn();
-    setCachedData(requestKey, result);
-    return result;
-  } finally {
-    activeRequestsRef.current.delete(requestKey);
-  }
-}, [getCachedData, setCachedData]);
+    
+    // Process remaining updates on unmount
+    if (updateQueueRef.current.length > 0) {
+      processBatchUpdates();
+    }
+  };
+}, [processBatchUpdates]);
 
 // 5. ADD BATCH UPDATE PROCESSING (new function)
 const processBatchUpdates = useCallback(async () => {
@@ -486,8 +378,6 @@ const processBatchUpdates = useCallback(async () => {
   }
 }, [updatePayment, currentYear, isOnline]);
 
-
-
 // 6. REPLACE YOUR EXISTING debouncedUpdate FUNCTION
 const debouncedUpdate = useCallback((rowIndex, month, value, year) => {
   const key = `${rowIndex}-${month}`;
@@ -522,6 +412,20 @@ const debouncedUpdate = useCallback((rowIndex, month, value, year) => {
   }));
 }, [processBatchUpdates]);
 
+// Memoized year change handler
+  const handleYearChangeDebounced = useCallback((year) => {
+  console.log("HomePage.jsx: Year change requested to:", year);
+  
+  setCurrentYear(year);
+  localStorage.setItem("currentYear", year);
+  
+  if (typeof handleYearChange === "function") {
+    handleYearChange(year);
+  } else {
+    console.warn("HomePage.jsx: handleYearChange is not a function");
+  }
+}, [handleYearChange, setCurrentYear]);
+
 // Handle input changes
 const handleInputChange = useCallback((rowIndex, month, value) => {
   const key = `${rowIndex}-${month}`;
@@ -536,7 +440,97 @@ const handleInputChange = useCallback((rowIndex, month, value) => {
   debouncedUpdate(rowIndex, month, value, currentYear);
 }, [debouncedUpdate, currentYear]);
 
+  // Only call onMount once when component first mounts
+  useEffect(() => {
+    stableOnMount();
+  }, [stableOnMount]);
+  
+  useEffect(() => {
+  mountedRef.current = true;
+  return () => {
+    mountedRef.current = false;
+  };
+}, []);
 
+useEffect(() => {
+  const initialValues = {};
+  paymentsData.forEach((row, rowIndex) => {
+    months.forEach(month => {
+      const key = `${rowIndex}-${month}`;
+      initialValues[key] = row[month] || "";
+    });
+  });
+  setLocalInputValues(initialValues);
+}, [paymentsData, months]);
+
+  // Sync selectedYear with currentYear for Reports view
+  useEffect(() => {
+    if (isReportsPage && currentYear !== selectedYear) {
+      console.log("HomePage.jsx: Syncing selectedYear to currentYear:", currentYear, "for Reports");
+      setSelectedYear(currentYear);
+    }
+  }, [currentYear, isReportsPage, selectedYear]);
+
+  // Log payments data updates (with debouncing to prevent spam)
+  useEffect(() => {
+    if (paymentsData?.length) {
+      const timeoutId = setTimeout(() => {
+        console.log(
+          "HomePage.jsx: Payments data updated:",
+          paymentsData.length,
+          "items for year",
+          isReportsPage ? selectedYear : currentYear,
+          "on",
+          isReportsPage ? "Reports" : "Dashboard"
+        );
+      }, 100);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [paymentsData?.length, currentYear, selectedYear, isReportsPage]);
+
+  // const mountedRef = useRef(true);
+// 2. ADD OFFLINE DETECTION (new useEffect)
+useEffect(() => {
+  const handleOnline = () => setIsOnline(true);
+  const handleOffline = () => setIsOnline(false);
+  
+  window.addEventListener('online', handleOnline);
+  window.addEventListener('offline', handleOffline);
+  
+  return () => {
+    window.removeEventListener('online', handleOnline);
+    window.removeEventListener('offline', handleOffline);
+  };
+}, []);
+
+
+
+useEffect(() => {
+  const controller = axios.CancelToken.source();
+
+  if (sessionToken) {
+    console.log("HomePage.jsx: SessionToken available, fetching years");
+    searchUserYears(controller.token);
+  }
+
+  return () => {
+    controller.cancel("Component unmounted or sessionToken changed");
+  };
+}, [sessionToken]);
+
+
+  // const tableRef = useRef(null);
+
+  // Handle clicks outside table for context menu
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (tableRef.current && !tableRef.current.contains(e.target)) {
+        hideContextMenu();
+      }
+    };
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, [hideContextMenu]);
 
   const renderDashboard = () => (
     <>
