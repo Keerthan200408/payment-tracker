@@ -319,25 +319,6 @@ const handleAddNewYear = useCallback(async () => {
   }
 }, [currentYear, sessionToken, handleYearChange, searchUserYears]);
 
-// 8. ADD CLEANUP FOR NEW TIMERS (modify existing cleanup useEffect)
-useEffect(() => {
-  return () => {
-    // Existing cleanup
-    Object.values(debounceTimersRef.current).forEach(timer => {
-      if (timer) clearTimeout(timer);
-    });
-    
-    // New cleanup
-    if (batchTimerRef.current) {
-      clearTimeout(batchTimerRef.current);
-    }
-    
-    // Process remaining updates on unmount
-    if (updateQueueRef.current.length > 0) {
-      processBatchUpdates();
-    }
-  };
-}, [processBatchUpdates]);
 
 // 5. ADD BATCH UPDATE PROCESSING (new function)
 const processBatchUpdates = useCallback(async () => {
@@ -503,7 +484,25 @@ useEffect(() => {
   };
 }, []);
 
-
+// 8. ADD CLEANUP FOR NEW TIMERS (modify existing cleanup useEffect)
+useEffect(() => {
+  return () => {
+    // Existing cleanup
+    Object.values(debounceTimersRef.current).forEach(timer => {
+      if (timer) clearTimeout(timer);
+    });
+    
+    // New cleanup
+    if (batchTimerRef.current) {
+      clearTimeout(batchTimerRef.current);
+    }
+    
+    // Process remaining updates on unmount
+    if (updateQueueRef.current.length > 0) {
+      processBatchUpdates();
+    }
+  };
+}, [processBatchUpdates]);
 
 useEffect(() => {
   const controller = axios.CancelToken.source();
