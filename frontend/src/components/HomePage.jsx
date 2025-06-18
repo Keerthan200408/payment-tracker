@@ -403,7 +403,58 @@ const getInputBackgroundColor = useCallback((row, month, rowIndex) => {
   }
 }, [handleYearChange, setCurrentYear]);
 
-
+//helper function
+const processBatch = useCallback(async (queueData) => {
+  const updates = Object.entries(queueData);
+  
+  try {
+    if (updates.length > 1) {
+      // Batch update for multiple changes
+      console.log(`Processing batch update for ${updates.length} items`);
+      await updateMultiplePayments(queueData);
+    } else {
+      // Single update
+      const [, updateValue] = updates[0];
+      await updatePayment(
+        updateValue.rowIndex,
+        updateValue.month,
+        updateValue.newValue,
+        updateValue.year
+      );
+    }
+    
+    // Clear successful updates from pending state
+    setPendingUpdates(prev => {
+      const newState = { ...prev };
+      Object.keys(queueData).forEach(k => {
+        delete newState[k];
+      });
+      return newState;
+    });
+    
+  } catch (error) {
+    console.error('Batch update failed:', error);
+    
+    // Revert failed updates in local state
+    setLocalInputValues(prev => {
+      const reverted = { ...prev };
+      Object.entries(queueData).forEach(([k, update]) => {
+        const originalValue = paymentsData[update.rowIndex]?.[update.month] || "";
+        reverted[k] = originalValue;
+      });
+      return reverted;
+    });
+    
+    // Clear pending states
+    setPendingUpdates(prev => {
+      const newState = { ...prev };
+      Object.keys(queueData).forEach(k => {
+        delete newState[k];
+      });
+      return newState;
+    });
+  }
+}, [updatePayment, updateMultiplePayments, paymentsData]);
 
 const cancelTokensRef = useRef({});
 
@@ -417,7 +468,7 @@ const debouncedUpdate = useCallback((rowIndex, month, value, year) => {
     [key]: true
   }));
   
-  // Add to batch queue
+  // Add to batch queue using functional update to avoid stale closure
   setBatchUpdateQueue(prev => ({
     ...prev,
     [key]: {
@@ -435,74 +486,22 @@ const debouncedUpdate = useCallback((rowIndex, month, value, year) => {
   }
   
   // Set new batch timer
-  batchTimerRef.current = setTimeout(async () => {
-    // const currentQueue = { ...batchUpdateQueue };
-    const queueWithCurrent = {
-      ...currentQueue,
-      [key]: {
-        rowIndex,
-        month,
-        newValue: value,
-        year,
-        timestamp: Date.now()
-      }
-    };
-    
-    if (Object.keys(queueWithCurrent).length > 0) {
-      try {
-        if (Object.keys(queueWithCurrent).length > 1) {
-          // Batch update for multiple changes
-          await updateMultiplePayments(queueWithCurrent);
-        } else {
-          // Single update
-          const [updateKey, updateValue] = Object.entries(queueWithCurrent)[0];
-          await updatePayment(
-            updateValue.rowIndex,
-            updateValue.month,
-            updateValue.newValue,
-            updateValue.year
-          );
-        }
-        
-        // Clear successful updates from pending state
-        setPendingUpdates(prev => {
-          const newState = { ...prev };
-          Object.keys(queueWithCurrent).forEach(k => {
-            delete newState[k];
-          });
-          return newState;
-        });
-        
-      } catch (error) {
-        console.error('Update failed:', error);
-        
-        // Revert failed updates in local state
-        setLocalInputValues(prev => {
-          const reverted = { ...prev };
-          Object.entries(queueWithCurrent).forEach(([k, update]) => {
-            const originalValue = paymentsData[update.rowIndex]?.[update.month] || "";
-            reverted[k] = originalValue;
-          });
-          return reverted;
-        });
-        
-        // Clear pending states
-        setPendingUpdates(prev => {
-          const newState = { ...prev };
-          Object.keys(queueWithCurrent).forEach(k => {
-            delete newState[k];
-          });
-          return newState;
-        });
-      }
+  batchTimerRef.current = setTimeout(() => {
+    // Use functional update to get current queue state
+    setBatchUpdateQueue(currentQueue => {
+      const queueEntries = Object.entries(currentQueue);
       
-      // Clear the batch queue
-      setBatchUpdateQueue({});
-    }
+      if (queueEntries.length === 0) return {};
+      
+      // Process the batch
+      processBatch(currentQueue);
+      
+      // Clear the queue
+      return {};
+    });
   }, 1000); // 1 second batch window
   
-}, [updatePayment, updateMultiplePayments, paymentsData, batchUpdateQueue]);
-
+}, [updatePayment]); // Remove batchUpdateQueue from dependencies
 
 
 // // Modify your debouncedUpdate to use batching
