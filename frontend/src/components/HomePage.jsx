@@ -404,57 +404,57 @@ const getInputBackgroundColor = useCallback((row, month, rowIndex) => {
 }, [handleYearChange, setCurrentYear]);
 
 //helper function
-const processBatch = useCallback(async (queueData) => {
-  const updates = Object.entries(queueData);
+// const processBatch = useCallback(async (queueData) => {
+//   const updates = Object.entries(queueData);
   
-  try {
-    if (updates.length > 1) {
-      // Batch update for multiple changes
-      console.log(`Processing batch update for ${updates.length} items`);
-      await updateMultiplePayments(queueData);
-    } else {
-      // Single update
-      const [, updateValue] = updates[0];
-      await updatePayment(
-        updateValue.rowIndex,
-        updateValue.month,
-        updateValue.newValue,
-        updateValue.year
-      );
-    }
+//   try {
+//     if (updates.length > 1) {
+//       // Batch update for multiple changes
+//       console.log(`Processing batch update for ${updates.length} items`);
+//       await updateMultiplePayments(queueData);
+//     } else {
+//       // Single update
+//       const [, updateValue] = updates[0];
+//       await updatePayment(
+//         updateValue.rowIndex,
+//         updateValue.month,
+//         updateValue.newValue,
+//         updateValue.year
+//       );
+//     }
     
-    // Clear successful updates from pending state
-    setPendingUpdates(prev => {
-      const newState = { ...prev };
-      Object.keys(queueData).forEach(k => {
-        delete newState[k];
-      });
-      return newState;
-    });
+//     // Clear successful updates from pending state
+//     setPendingUpdates(prev => {
+//       const newState = { ...prev };
+//       Object.keys(queueData).forEach(k => {
+//         delete newState[k];
+//       });
+//       return newState;
+//     });
     
-  } catch (error) {
-    console.error('Batch update failed:', error);
+//   } catch (error) {
+//     console.error('Batch update failed:', error);
     
-    // Revert failed updates in local state
-    setLocalInputValues(prev => {
-      const reverted = { ...prev };
-      Object.entries(queueData).forEach(([k, update]) => {
-        const originalValue = paymentsData[update.rowIndex]?.[update.month] || "";
-        reverted[k] = originalValue;
-      });
-      return reverted;
-    });
+//     // Revert failed updates in local state
+//     setLocalInputValues(prev => {
+//       const reverted = { ...prev };
+//       Object.entries(queueData).forEach(([k, update]) => {
+//         const originalValue = paymentsData[update.rowIndex]?.[update.month] || "";
+//         reverted[k] = originalValue;
+//       });
+//       return reverted;
+//     });
     
-    // Clear pending states
-    setPendingUpdates(prev => {
-      const newState = { ...prev };
-      Object.keys(queueData).forEach(k => {
-        delete newState[k];
-      });
-      return newState;
-    });
-  }
-}, [updatePayment, updateMultiplePayments, paymentsData]);
+//     // Clear pending states
+//     setPendingUpdates(prev => {
+//       const newState = { ...prev };
+//       Object.keys(queueData).forEach(k => {
+//         delete newState[k];
+//       });
+//       return newState;
+//     });
+//   }
+// }, [updatePayment, updateMultiplePayments, paymentsData]);
 
 const cancelTokensRef = useRef({});
 
@@ -468,7 +468,7 @@ const debouncedUpdate = useCallback((rowIndex, month, value, year) => {
     [key]: true
   }));
   
-  // Add to batch queue using functional update to avoid stale closure
+  // Add to batch queue
   setBatchUpdateQueue(prev => ({
     ...prev,
     [key]: {
@@ -485,24 +485,64 @@ const debouncedUpdate = useCallback((rowIndex, month, value, year) => {
     clearTimeout(batchTimerRef.current);
   }
   
-  // Set new batch timer
-  batchTimerRef.current = setTimeout(() => {
-    // Use functional update to get current queue state
-    setBatchUpdateQueue(currentQueue => {
-      const queueEntries = Object.entries(currentQueue);
-      
-      if (queueEntries.length === 0) return {};
-      
-      // Process the batch
-      processBatch(currentQueue);
-      
-      // Clear the queue
-      return {};
+  // Set new batch timer with inline processing
+  batchTimerRef.current = setTimeout(async () => {
+    // Get current queue state
+    let currentQueue = {};
+    setBatchUpdateQueue(prev => {
+      currentQueue = { ...prev };
+      return {}; // Clear queue
     });
-  }, 1000); // 1 second batch window
+    
+    const updates = Object.entries(currentQueue);
+    if (updates.length === 0) return;
+    
+    try {
+      if (updates.length > 1) {
+        console.log(`Processing batch update for ${updates.length} items`);
+        await updateMultiplePayments(currentQueue);
+      } else {
+        const [, updateValue] = updates[0];
+        await updatePayment(
+          updateValue.rowIndex,
+          updateValue.month,
+          updateValue.newValue,
+          updateValue.year
+        );
+      }
+      
+      // Clear pending states on success
+      setPendingUpdates(prev => {
+        const newState = { ...prev };
+        Object.keys(currentQueue).forEach(k => {
+          delete newState[k];
+        });
+        return newState;
+      });
+    } catch (error) {
+      console.error('Update failed:', error);
+      
+      // Revert on failure
+      setLocalInputValues(prev => {
+        const reverted = { ...prev };
+        Object.entries(currentQueue).forEach(([k, update]) => {
+          const originalValue = paymentsData[update.rowIndex]?.[update.month] || "";
+          reverted[k] = originalValue;
+        });
+        return reverted;
+      });
+      
+      setPendingUpdates(prev => {
+        const newState = { ...prev };
+        Object.keys(currentQueue).forEach(k => {
+          delete newState[k];
+        });
+        return newState;
+      });
+    }
+  }, 1000);
   
-}, [updatePayment]); // Remove batchUpdateQueue from dependencies
-
+}, [updatePayment, updateMultiplePayments, paymentsData]);
 
 // // Modify your debouncedUpdate to use batching
 // const batchedUpdate = useCallback((updates) => {
