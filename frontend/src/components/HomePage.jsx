@@ -62,8 +62,13 @@ const HomePage = ({
   const [localInputValues, setLocalInputValues] = useState({});
 const [pendingUpdates, setPendingUpdates] = useState({});
 const debounceTimersRef = useRef({});
+// Add this state for batching
+const [batchUpdateQueue, setBatchUpdateQueue] = useState({});
+const batchTimerRef = useRef(null);
+
 const isUpdatingRef = useRef(false);
 const [currentPage, setCurrentPage] = useState(1);
+
   
 
   // Sync selectedYear with currentYear for Reports view
@@ -431,7 +436,7 @@ const debouncedUpdate = useCallback((rowIndex, month, value, year) => {
   
   // Set new batch timer
   batchTimerRef.current = setTimeout(async () => {
-    const currentQueue = { ...batchUpdateQueue };
+    // const currentQueue = { ...batchUpdateQueue };
     const queueWithCurrent = {
       ...currentQueue,
       [key]: {
@@ -498,29 +503,27 @@ const debouncedUpdate = useCallback((rowIndex, month, value, year) => {
   
 }, [updatePayment, updateMultiplePayments, paymentsData, batchUpdateQueue]);
 
-// Add this state for batching
-const [batchUpdateQueue, setBatchUpdateQueue] = useState({});
-const batchTimerRef = useRef(null);
 
-// Modify your debouncedUpdate to use batching
-const batchedUpdate = useCallback((updates) => {
-  // Clear existing batch timer
-  if (batchTimerRef.current) {
-    clearTimeout(batchTimerRef.current);
-  }
 
-  batchTimerRef.current = setTimeout(async () => {
-    if (Object.keys(updates).length > 1) {
-      // Send all updates in a single API call
-      await updateMultiplePayments(updates); // You'd need to create this API endpoint
-    } else {
-      // Single update as before
-      const [key, value] = Object.entries(updates)[0];
-      const [rowIndex, month] = key.split('-');
-      await updatePayment(parseInt(rowIndex), month, value.newValue, value.year);
-    }
-  }, 1000);
-}, [updatePayment]);
+// // Modify your debouncedUpdate to use batching
+// const batchedUpdate = useCallback((updates) => {
+//   // Clear existing batch timer
+//   if (batchTimerRef.current) {
+//     clearTimeout(batchTimerRef.current);
+//   }
+
+//   batchTimerRef.current = setTimeout(async () => {
+//     if (Object.keys(updates).length > 1) {
+//       // Send all updates in a single API call
+//       await updateMultiplePayments(updates); // You'd need to create this API endpoint
+//     } else {
+//       // Single update as before
+//       const [key, value] = Object.entries(updates)[0];
+//       const [rowIndex, month] = key.split('-');
+//       await updatePayment(parseInt(rowIndex), month, value.newValue, value.year);
+//     }
+//   }, 1000);
+// }, [updatePayment]);
 // Handle input changes
 const handleInputChange = useCallback((rowIndex, month, value) => {
   const key = `${rowIndex}-${month}`;
