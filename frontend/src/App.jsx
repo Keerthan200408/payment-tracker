@@ -589,7 +589,8 @@ const App = () => {
   };
 
   const updatePayment = async (rowIndex, month, monthUpdates, year = currentYear) => {
-  if (!paymentsData[rowIndex]) {
+  console.log("updatePayment called:", { rowIndex, month, monthUpdates, year });
+    if (!paymentsData[rowIndex]) {
     console.error("App.jsx: Invalid rowIndex:", rowIndex);
     return;
   }
