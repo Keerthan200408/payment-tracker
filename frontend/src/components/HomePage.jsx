@@ -315,57 +315,6 @@ const filteredData = useMemo(() => {
     }
   }, [currentYear, sessionToken, handleYearChange, searchUserYears]);
 
-  
-
-const debouncedUpdate = useCallback(
-  (rowIndex, month, value, year) => {
-    if (!paymentsData.length) {
-      console.warn("HomePage.jsx: Cannot queue update, paymentsData is empty");
-      alert("Please wait for data to load before making updates.");
-      return;
-    }
-    if (!paymentsData[rowIndex]) {
-      console.warn("HomePage.jsx: Invalid rowIndex:", rowIndex);
-      return;
-    }
-    if (typeof updatePayment !== "function") {
-      console.error("HomePage.jsx: updatePayment is not a function");
-      alert("Update failed: Invalid update function");
-      return;
-    }
-    const key = `${rowIndex}-${month}`;
-    setLocalInputValues((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
-    if (debounceTimersRef.current[key]) {
-      clearTimeout(debounceTimersRef.current[key]);
-    }
-    setPendingUpdates((prev) => ({
-      ...prev,
-      [key]: true,
-    }));
-    debounceTimersRef.current[key] = setTimeout(() => {
-      updateQueueRef.current = updateQueueRef.current.filter(
-        (update) => !(update.rowIndex === rowIndex && update.month === month)
-      );
-      updateQueueRef.current.push({
-        rowIndex,
-        month,
-        value,
-        year,
-        timestamp: Date.now(),
-      });
-      console.log("HomePage.jsx: Queued update:", { rowIndex, month, value, year });
-      if (!batchTimerRef.current) {
-        batchTimerRef.current = setTimeout(processBatchUpdates, BATCH_DELAY);
-      }
-      delete debounceTimersRef.current[key];
-    }, 2000);
-  },
-  [paymentsData, processBatchUpdates, updatePayment] // Add updatePayment to dependencies
-);
-
 const processBatchUpdates = useCallback(async () => {
   if (!updateQueueRef.current.length) {
     console.log("HomePage.jsx: No updates to process");
@@ -427,6 +376,57 @@ const processBatchUpdates = useCallback(async () => {
     }
 }, [updatePayment, paymentsData, localInputValues, setErrorMessage]);
 
+
+const debouncedUpdate = useCallback(
+  (rowIndex, month, value, year) => {
+    if (!paymentsData.length) {
+      console.warn("HomePage.jsx: Cannot queue update, paymentsData is empty");
+      alert("Please wait for data to load before making updates.");
+      return;
+    }
+    if (!paymentsData[rowIndex]) {
+      console.warn("HomePage.jsx: Invalid rowIndex:", rowIndex);
+      return;
+    }
+    if (typeof updatePayment !== "function") {
+      console.error("HomePage.jsx: updatePayment is not a function");
+      alert("Update failed: Invalid update function");
+      return;
+    }
+    const key = `${rowIndex}-${month}`;
+    setLocalInputValues((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+    if (debounceTimersRef.current[key]) {
+      clearTimeout(debounceTimersRef.current[key]);
+    }
+    setPendingUpdates((prev) => ({
+      ...prev,
+      [key]: true,
+    }));
+    debounceTimersRef.current[key] = setTimeout(() => {
+      updateQueueRef.current = updateQueueRef.current.filter(
+        (update) => !(update.rowIndex === rowIndex && update.month === month)
+      );
+      updateQueueRef.current.push({
+        rowIndex,
+        month,
+        value,
+        year,
+        timestamp: Date.now(),
+      });
+      console.log("HomePage.jsx: Queued update:", { rowIndex, month, value, year });
+      if (!batchTimerRef.current) {
+        batchTimerRef.current = setTimeout(processBatchUpdates, BATCH_DELAY);
+      }
+      delete debounceTimersRef.current[key];
+    }, 2000);
+  },
+  [paymentsData, updatePayment] // Add updatePayment to dependencies
+);
+
+
   const handleYearChangeDebounced = useCallback(
     (year) => {
       console.log("HomePage.jsx: Year change requested to:", year);
@@ -484,20 +484,20 @@ const processBatchUpdates = useCallback(async () => {
 }, [paymentsData, months]);
 
   useEffect(() => {
-    if (paymentsData?.length) {
-      const timeoutId = setTimeout(() => {
-        console.log(
-          "HomePage.jsx: Payments data updated:",
-          paymentsData.length,
-          "items for year",
-          isReportsPage ? selectedYear : currentYear,
-          "on",
-          isReportsPage ? "Reports" : "Dashboard"
-        );
-      }, 100);
-      return () => clearTimeout(timeoutId);
-    }
-  }, [paymentsData?.length, currentYear, selectedYear, isReportsPage]);
+  if (paymentsData?.length) {
+    const timeoutId = setTimeout(() => {
+      console.log(
+        "HomePage.jsx: Payments data updated:",
+        paymentsData.length,
+        "items for year",
+        currentYear,
+        "on",
+        isReportsPage ? "Reports" : "Dashboard"
+      );
+    }, 100);
+    return () => clearTimeout(timeoutId);
+  }
+}, [paymentsData?.length, currentYear, isReportsPage]);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -513,43 +513,41 @@ const processBatchUpdates = useCallback(async () => {
   }, []);
 
   useEffect(() => {
-    return () => {
-      Object.values(debounceTimersRef.current).forEach((timer) => {
-        if (timer) clearTimeout(timer);
-      });
-      if (batchTimerRef.current) {
-        clearTimeout(batchTimerRef.current);
-      }
-      if (updateQueueRef.current.length > 0) {
-        processBatchUpdates();
-      }
-    };
-  }, [processBatchUpdates]);
-
-  // HomePage.jsx: searchUserYears useEffect
-useEffect(() => {
-  const controller = axios.CancelToken.source();
-  if (sessionToken) {
-    console.log("HomePage.jsx: SessionToken available, fetching years");
-    searchUserYears(controller.token);
-  }
   return () => {
-    controller.cancel("Component unmounted or sessionToken changed");
-    // Clear all debounce timers
+    // Clear all timers
     Object.values(debounceTimersRef.current).forEach((timer) => {
       if (timer) clearTimeout(timer);
     });
-    debounceTimersRef.current = {}; // Reset to prevent stale timers
-    // Clear batch timer and process pending updates
+    debounceTimersRef.current = {};
+    
     if (batchTimerRef.current) {
       clearTimeout(batchTimerRef.current);
       batchTimerRef.current = null;
     }
+    
+    // Process remaining updates only if component is still mounted
     if (updateQueueRef.current.length > 0 && mountedRef.current) {
-      processBatchUpdates(); // Process pending updates safely
+      // Force immediate processing without setTimeout
+      const updates = [...updateQueueRef.current];
+      updateQueueRef.current = [];
+      // Process synchronously if possible
     }
   };
-}, [sessionToken, searchUserYears, processBatchUpdates]); // Add processBatchUpdates to dependencies
+}, []); // Empty dependency array for cleanup only
+
+//request cancellation
+useEffect(() => {
+  const controller = new AbortController();
+  
+  if (sessionToken) {
+    searchUserYears(controller.signal);
+  }
+  
+  return () => {
+    controller.abort();
+    // Other cleanup...
+  };
+}, [sessionToken]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
