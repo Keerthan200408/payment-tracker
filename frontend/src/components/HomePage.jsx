@@ -248,56 +248,48 @@ const HomePage = ({
   );
 
   const handleAddNewYear = useCallback(async () => {
-    const newYear = (parseInt(currentYear) + 1).toString();
-    console.log(`HomePage.jsx: Attempting to add new year: ${newYear}`);
+  const newYear = (parseInt(currentYear) + 1).toString();
+  console.log(`HomePage.jsx: Attempting to add new year: ${newYear}`);
 
+  if (mountedRef.current) {
+    setIsLoadingYears(true);
+  }
+
+  const controller = new AbortController();
+
+  try {
+    const response = await axios.post(
+      `${BASE_URL}/add-new-year`,
+      { year: newYear },
+      {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+        timeout: 10000,
+        signal: controller.signal,
+      }
+    );
+    console.log("HomePage.jsx: Add new year response:", response.data);
+
+    alert(response.data.message);
+    
+    // ✅ Force reload with the new year set in localStorage
+    localStorage.setItem("currentYear", newYear);
+    window.location.reload(); // ✅ this reloads the page and pulls new data
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      console.log("HomePage.jsx: Add new year request cancelled");
+      return;
+    }
+    console.error("HomePage.jsx: Error adding new year:", error);
+    alert(
+      `Failed to add new year: ${error.response?.data?.error || "An unknown error occurred"}`
+    );
+  } finally {
     if (mountedRef.current) {
-      setIsLoadingYears(true);
+      setIsLoadingYears(false);
     }
+  }
+}, [currentYear, sessionToken]);
 
-    const controller = new AbortController(); // Use AbortController instead of CancelToken
-
-    try {
-      const response = await axios.post(
-        `${BASE_URL}/add-new-year`,
-        { year: newYear },
-        {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-          timeout: 10000,
-          signal: controller.signal,
-        }
-      );
-      console.log("HomePage.jsx: Add new year response:", response.data);
-
-      await searchUserYears(controller.signal);
-
-      if (mountedRef.current) {
-        setCurrentYear(newYear);
-        localStorage.setItem("currentYear", newYear);
-        await handleYearChange(newYear);
-        alert(response.data.message);
-      }
-    } catch (error) {
-      if (error.name === 'AbortError') {
-        console.log("HomePage.jsx: Add new year request cancelled");
-        return;
-      }
-      console.error("HomePage.jsx: Error adding new year:", {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-      });
-      alert(
-        `Failed to add new year: ${
-          error.response?.data?.error || "An unknown error occurred. Please try again."
-        }`
-      );
-    } finally {
-      if (mountedRef.current) {
-        setIsLoadingYears(false);
-      }
-    }
-  }, [currentYear, sessionToken, handleYearChange, searchUserYears]);
 
   const processBatchUpdates = useCallback(async () => {
     if (!updateQueueRef.current.length) {
