@@ -112,24 +112,6 @@ useEffect(() => {
 }, [paymentsData, months]);
 
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const retryWithBackoff = async (fn, retries = 3, delay = 1000) => {
-  for (let i = 0; i < retries; i++) {
-    try {
-      return await fn();
-    } catch (error) {
-      if (error.response?.status === 429 && i < retries - 1) {
-        console.log(`HomePage.jsx: Rate limit hit, retrying in ${delay}ms...`);
-        await sleep(delay);
-        delay *= 2; // Exponential backoff
-      } else {
-        throw error;
-      }
-    }
-  }
-};
-
 // REPLACE the existing useEffect cleanup with:
 useEffect(() => {
   mountedRef.current = true;
@@ -443,127 +425,125 @@ const processBatchUpdates = useCallback(async (queueToProcess) => {
   }
 }, [updatePayment, updateMultiplePayments, paymentsData]);
 
-const cancelTokensRef = useRef({});
+// const cancelTokensRef = useRef({});
 
 
-const debouncedUpdate = useCallback((rowIndex, month, value, year) => {
-  const key = `${rowIndex}-${month}`;
+// const debouncedUpdate = useCallback((rowIndex, month, value, year) => {
+//   const key = `${rowIndex}-${month}`;
   
-  // Set pending state immediately
-  setPendingUpdates(prev => ({
-    ...prev,
-    [key]: true
-  }));
+//   // Set pending state immediately
+//   setPendingUpdates(prev => ({
+//     ...prev,
+//     [key]: true
+//   }));
   
-  // Add to batch queue
-  setBatchUpdateQueue(prev => ({
-    ...prev,
-    [key]: {
-      rowIndex,
-      month,
-      newValue: value,
-      year,
-      timestamp: Date.now()
-    }
-  }));
+//   // Add to batch queue
+//   setBatchUpdateQueue(prev => ({
+//     ...prev,
+//     [key]: {
+//       rowIndex,
+//       month,
+//       newValue: value,
+//       year,
+//       timestamp: Date.now()
+//     }
+//   }));
   
-  // Clear existing batch timer
-  if (batchTimerRef.current) {
-    clearTimeout(batchTimerRef.current);
-  }
+//   // Clear existing batch timer
+//   if (batchTimerRef.current) {
+//     clearTimeout(batchTimerRef.current);
+//   }
   
-  // Set new batch timer
-  batchTimerRef.current = setTimeout(async () => {
-    const currentQueue = { ...batchUpdateQueue };
-    const queueWithCurrent = {
-      ...currentQueue,
-      [key]: {
-        rowIndex,
-        month,
-        newValue: value,
-        year,
-        timestamp: Date.now()
-      }
-    };
+//   // Set new batch timer
+//   batchTimerRef.current = setTimeout(async () => {
+//     const currentQueue = { ...batchUpdateQueue };
+//     const queueWithCurrent = {
+//       ...currentQueue,
+//       [key]: {
+//         rowIndex,
+//         month,
+//         newValue: value,
+//         year,
+//         timestamp: Date.now()
+//       }
+//     };
     
-    if (Object.keys(queueWithCurrent).length > 0) {
-      try {
-        if (Object.keys(queueWithCurrent).length > 1) {
-          // Batch update for multiple changes
-          await updateMultiplePayments(queueWithCurrent);
-        } else {
-          // Single update
-          const [updateKey, updateValue] = Object.entries(queueWithCurrent)[0];
-          await updatePayment(
-            updateValue.rowIndex,
-            updateValue.month,
-            updateValue.newValue,
-            updateValue.year
-          );
-        }
+//     if (Object.keys(queueWithCurrent).length > 0) {
+//       try {
+//         if (Object.keys(queueWithCurrent).length > 1) {
+//           // Batch update for multiple changes
+//           await updateMultiplePayments(queueWithCurrent);
+//         } else {
+//           // Single update
+//           const [updateKey, updateValue] = Object.entries(queueWithCurrent)[0];
+//           await updatePayment(
+//             updateValue.rowIndex,
+//             updateValue.month,
+//             updateValue.newValue,
+//             updateValue.year
+//           );
+//         }
         
-        // Clear successful updates from pending state
-        setPendingUpdates(prev => {
-          const newState = { ...prev };
-          Object.keys(queueWithCurrent).forEach(k => {
-            delete newState[k];
-          });
-          return newState;
-        });
+//         // Clear successful updates from pending state
+//         setPendingUpdates(prev => {
+//           const newState = { ...prev };
+//           Object.keys(queueWithCurrent).forEach(k => {
+//             delete newState[k];
+//           });
+//           return newState;
+//         });
         
-      } catch (error) {
-        console.error('Update failed:', error);
+//       } catch (error) {
+//         console.error('Update failed:', error);
         
-        // Revert failed updates in local state
-        setLocalInputValues(prev => {
-          const reverted = { ...prev };
-          Object.entries(queueWithCurrent).forEach(([k, update]) => {
-            const originalValue = paymentsData[update.rowIndex]?.[update.month] || "";
-            reverted[k] = originalValue;
-          });
-          return reverted;
-        });
+//         // Revert failed updates in local state
+//         setLocalInputValues(prev => {
+//           const reverted = { ...prev };
+//           Object.entries(queueWithCurrent).forEach(([k, update]) => {
+//             const originalValue = paymentsData[update.rowIndex]?.[update.month] || "";
+//             reverted[k] = originalValue;
+//           });
+//           return reverted;
+//         });
         
-        // Clear pending states
-        setPendingUpdates(prev => {
-          const newState = { ...prev };
-          Object.keys(queueWithCurrent).forEach(k => {
-            delete newState[k];
-          });
-          return newState;
-        });
-      }
+//         // Clear pending states
+//         setPendingUpdates(prev => {
+//           const newState = { ...prev };
+//           Object.keys(queueWithCurrent).forEach(k => {
+//             delete newState[k];
+//           });
+//           return newState;
+//         });
+//       }
       
-      // Clear the batch queue
-      setBatchUpdateQueue({});
-    }
-  }, 1000); // 1 second batch window
+//       // Clear the batch queue
+//       setBatchUpdateQueue({});
+//     }
+//   }, 1000); // 1 second batch window
   
-}, [updatePayment, updateMultiplePayments, paymentsData, batchUpdateQueue]);
+// }, [updatePayment, updateMultiplePayments, paymentsData, batchUpdateQueue]);
 
-// Add this state for batching
-const [batchUpdateQueue, setBatchUpdateQueue] = useState({});
-const batchTimerRef = useRef(null);
+
 
 // Modify your debouncedUpdate to use batching
-const batchedUpdate = useCallback((updates) => {
-  // Clear existing batch timer
-  if (batchTimerRef.current) {
-    clearTimeout(batchTimerRef.current);
-  }
+// const batchedUpdate = useCallback((updates) => {
+//   // Clear existing batch timer
+//   if (batchTimerRef.current) {
+//     clearTimeout(batchTimerRef.current);
+//   }
 
-  batchTimerRef.current = setTimeout(async () => {
-    if (Object.keys(updates).length > 1) {
-      // Send all updates in a single API call
-      await updateMultiplePayments(updates); // You'd need to create this API endpoint
-    } else {
-      // Single update as before
-      const [key, value] = Object.entries(updates)[0];
-      const [rowIndex, month] = key.split('-');
-      await updatePayment(parseInt(rowIndex), month, value.newValue, value.year);
-    }
-  }, 1000);
-}, [updatePayment]);
+//   batchTimerRef.current = setTimeout(async () => {
+//     if (Object.keys(updates).length > 1) {
+//       // Send all updates in a single API call
+//       await updateMultiplePayments(updates); // You'd need to create this API endpoint
+//     } else {
+//       // Single update as before
+//       const [key, value] = Object.entries(updates)[0];
+//       const [rowIndex, month] = key.split('-');
+//       await updatePayment(parseInt(rowIndex), month, value.newValue, value.year);
+//     }
+//   }, 1000);
+// }, [updatePayment]);
 
 // REPLACE the existing handleInputChange function with:
 const handleInputChange = useCallback((rowIndex, month, value) => {
@@ -594,23 +574,23 @@ const handleInputChange = useCallback((rowIndex, month, value) => {
   }, 1000);
 }, [currentYear, processBatchUpdates, batchQueue]);
 
-const apiCacheRef = useRef({});
+// const apiCacheRef = useRef({});
 
-const cachedApiCall = useCallback(async (key, apiFunction) => {
-  if (apiCacheRef.current[key]) {
-    return apiCacheRef.current[key];
-  }
+// const cachedApiCall = useCallback(async (key, apiFunction) => {
+//   if (apiCacheRef.current[key]) {
+//     return apiCacheRef.current[key];
+//   }
   
-  const result = await apiFunction();
-  apiCacheRef.current[key] = result;
+//   const result = await apiFunction();
+//   apiCacheRef.current[key] = result;
   
-  // Clear cache after 5 minutes
-  setTimeout(() => {
-    delete apiCacheRef.current[key];
-  }, 5 * 60 * 1000);
+//   // Clear cache after 5 minutes
+//   setTimeout(() => {
+//     delete apiCacheRef.current[key];
+//   }, 5 * 60 * 1000);
   
-  return result;
-}, []);
+//   return result;
+// }, []);
 
 
 
