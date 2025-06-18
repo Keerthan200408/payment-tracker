@@ -558,9 +558,9 @@ const App = () => {
         ]);
         alert(`CSV import completed successfully! ${importedCount} records imported.`);
         csvFileInputRef.current.value = "";
-        setTimeout(() => {
-          window.location.reload();
-        }, 2000);
+        // setTimeout(() => {
+        //   window.location.reload();
+        // }, 2000);
       } catch (error) {
         console.error("Import CSV error:", error);
         let errorMessage = "Failed to import CSV data: ";
