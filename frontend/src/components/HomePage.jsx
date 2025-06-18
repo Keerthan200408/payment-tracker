@@ -432,44 +432,42 @@ const debouncedUpdate = useCallback((rowIndex, month, value, year) => {
     [key]: true
   }));
   
+  // Add to batch queue
+  setBatchUpdateQueue(prev => ({
+    ...prev,
+    [key]: {
+      rowIndex,
+      month,
+      newValue: value,
+      year,
+      timestamp: Date.now()
+    }
+  }));
+  
   // Clear existing batch timer
   if (batchTimerRef.current) {
     clearTimeout(batchTimerRef.current);
   }
   
   // Set new batch timer
-  batchTimerRef.current = setTimeout(async () => {
-    // Get current queue state
-    setBatchUpdateQueue(currentQueue => {
-      const updatedQueue = {
-        ...currentQueue,
-        [key]: {
-          rowIndex,
-          month,
-          newValue: value,
-          year,
-          timestamp: Date.now()
-        }
-      };
-      
-      // Process the batch immediately
-      processBatch(updatedQueue);
-      return {};
-    });
+  batchTimerRef.current = setTimeout(() => {
+    processBatch();
   }, 1000);
-}, [updatePayment, updateMultiplePayments, paymentsData]);
+}, []);
 
 // Add this helper function right after debouncedUpdate
-const processBatch = useCallback(async (queueToProcess) => {
-  if (Object.keys(queueToProcess).length === 0) return;
+const processBatch = useCallback(async () => {
+  const currentQueue = { ...batchUpdateQueue };
+  
+  if (Object.keys(currentQueue).length === 0) return;
   
   try {
-    if (Object.keys(queueToProcess).length > 1) {
+    if (Object.keys(currentQueue).length > 1) {
       // Batch update for multiple changes
-      await updateMultiplePayments(queueToProcess);
+      await updateMultiplePayments(currentQueue);
     } else {
       // Single update
-      const [updateKey, updateValue] = Object.entries(queueToProcess)[0];
+      const [updateKey, updateValue] = Object.entries(currentQueue)[0];
       await updatePayment(
         updateValue.rowIndex,
         updateValue.month,
@@ -481,11 +479,14 @@ const processBatch = useCallback(async (queueToProcess) => {
     // Clear successful updates from pending state
     setPendingUpdates(prev => {
       const newState = { ...prev };
-      Object.keys(queueToProcess).forEach(k => {
+      Object.keys(currentQueue).forEach(k => {
         delete newState[k];
       });
       return newState;
     });
+    
+    // Clear the batch queue
+    setBatchUpdateQueue({});
     
   } catch (error) {
     console.error('Update failed:', error);
@@ -493,7 +494,7 @@ const processBatch = useCallback(async (queueToProcess) => {
     // Revert failed updates in local state
     setLocalInputValues(prev => {
       const reverted = { ...prev };
-      Object.entries(queueToProcess).forEach(([k, update]) => {
+      Object.entries(currentQueue).forEach(([k, update]) => {
         const originalValue = paymentsData[update.rowIndex]?.[update.month] || "";
         reverted[k] = originalValue;
       });
@@ -503,13 +504,18 @@ const processBatch = useCallback(async (queueToProcess) => {
     // Clear pending states
     setPendingUpdates(prev => {
       const newState = { ...prev };
-      Object.keys(queueToProcess).forEach(k => {
+      Object.keys(currentQueue).forEach(k => {
         delete newState[k];
       });
       return newState;
     });
+    
+    // Clear the batch queue
+    setBatchUpdateQueue({});
   }
-}, [updatePayment, updateMultiplePayments, paymentsData]);
+}, [batchUpdateQueue, updatePayment, updateMultiplePayments, paymentsData]);
+
+
 
 
 
@@ -530,6 +536,19 @@ const cachedApiCall = useCallback(async (key, apiFunction) => {
   
   return result;
 }, []);
+
+const handleInputChange = useCallback((rowIndex, month, value) => {
+  const key = `${rowIndex}-${month}`;
+  
+  // Update local state immediately for responsive UI
+  setLocalInputValues(prev => ({
+    ...prev,
+    [key]: value
+  }));
+
+  // Trigger debounced API update
+  debouncedUpdate(rowIndex, month, value, currentYear);
+}, [debouncedUpdate, currentYear]);
 
 
 
