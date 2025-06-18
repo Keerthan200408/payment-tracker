@@ -533,14 +533,23 @@ app.post("/api/refresh-token", async (req, res) => {
 // Get Clients
 app.get("/api/get-clients", authenticateToken, async (req, res) => {
   try {
+    console.log(`Fetching clients for user: ${req.user.username}`);
+    
     const headers = ["User", "Client_Name", "Email", "Type", "Monthly_Payment"];
     await ensureSheet("Clients", headers);
+    
     const clients = await readSheet("Clients", "A2:E");
-    const userClients = clients.filter((client) => client[0] === req.user.username);
+    if (!clients) {
+      return res.json([]);
+    }
+    
+    const userClients = clients.filter((client) => 
+      client && client[0] === req.user.username
+    );
 
     const processedClients = userClients.map((client) => {
       if (!client || client.length < headers.length) {
-        console.warn(`Invalid client row for user ${req.user.username}:`, client);
+        console.warn(`Invalid client row:`, client);
         return null;
       }
       return {
@@ -550,18 +559,17 @@ app.get("/api/get-clients", authenticateToken, async (req, res) => {
         Type: client[3] || "",
         Amount_To_Be_Paid: parseFloat(client[4]) || 0,
       };
-    }).filter((c) => c !== null);
+    }).filter(Boolean);
 
-    console.log(`Fetched ${processedClients.length} clients for user ${req.user.username}`);
+    console.log(`Returning ${processedClients.length} clients`);
     res.json(processedClients);
+    
   } catch (error) {
-    console.error(`Get clients error:`, {
-      message: error.message,
-      stack: error.stack,
-      code: error.code,
-      response: error.response?.data,
+    console.error(`Get clients error:`, error);
+    res.status(500).json({ 
+      error: `Failed to fetch clients: ${error.message}`,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
-    res.status(500).json({ error: `Failed to fetch clients: ${error.message}` });
   }
 });
 // Add Client

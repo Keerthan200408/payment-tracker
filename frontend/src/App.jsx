@@ -620,20 +620,12 @@ const updatePayment = async (rowIndex, month, value, year = currentYear) => {
     alert("Please enter a valid number");
     return;
   }
+  
   const months = [
-    "january",
-    "february",
-    "march",
-    "april",
-    "may",
-    "june",
-    "july",
-    "august",
-    "september",
-    "october",
-    "november",
-    "december",
+    "january", "february", "march", "april", "may", "june",
+    "july", "august", "september", "october", "november", "december",
   ];
+  
   const savePaymentWithRetry = async (payload, retries = 3, delayMs = 2000) => {
     for (let i = 0; i < retries; i++) {
       try {
@@ -665,18 +657,23 @@ const updatePayment = async (rowIndex, month, value, year = currentYear) => {
     }
     throw new Error("Max retries reached for save payment");
   };
+  
   const timeoutKey = `${rowIndex}-${month}-${Date.now()}`;
   if (saveTimeouts.current[timeoutKey]) {
     clearTimeout(saveTimeouts.current[timeoutKey]);
   }
+  
+  // Initialize updatedRowData with current row data
+  let updatedRowData = { ...paymentsData[rowIndex] };
+  
   saveTimeouts.current[timeoutKey] = setTimeout(async () => {
-    let updatedRowData; // Store rowData for payload
     try {
       // Optimistic update
       setPaymentsData((prev) => {
         const updatedPayments = [...prev];
         const rowData = { ...updatedPayments[rowIndex] };
         rowData[month] = value || "";
+        
         const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
         const activeMonths = months.filter(
           (m) => rowData[m] && parseFloat(rowData[m]) >= 0
@@ -687,6 +684,7 @@ const updatePayment = async (rowIndex, month, value, year = currentYear) => {
           0
         );
         const currentYearDuePayment = Math.max(expectedPayment - totalPayments, 0);
+        
         let prevYearCumulativeDue = 0;
         if (parseInt(year) > 2025) {
           const originalDuePayment = parseFloat(prev[rowIndex]?.Due_Payment) || 0;
@@ -702,17 +700,20 @@ const updatePayment = async (rowIndex, month, value, year = currentYear) => {
           const originalCurrentYearDue = Math.max(originalExpectedPayment - originalTotalPayments, 0);
           prevYearCumulativeDue = Math.max(originalDuePayment - originalCurrentYearDue, 0);
         }
+        
         rowData.Due_Payment = (currentYearDuePayment + prevYearCumulativeDue).toFixed(2);
         updatedPayments[rowIndex] = rowData;
-        updatedRowData = rowData; // Store for payload
+        updatedRowData = rowData; // Update the reference
         return updatedPayments;
       });
+      
       const payloadData = {
         clientName: updatedRowData.Client_Name,
         type: updatedRowData.Type,
         month,
         value: value || "",
       };
+      
       const response = await savePaymentWithRetry(payloadData);
       if (response.updatedRow) {
         setPaymentsData((prev) =>
@@ -725,7 +726,8 @@ const updatePayment = async (rowIndex, month, value, year = currentYear) => {
       setErrorMessage(
         `Failed to save payment for ${updatedRowData?.Client_Name || "unknown"}: ${error.response?.data?.error || error.message}`
       );
-      setPaymentsData((prev) => prev); // No-op, but keeps state consistent
+      // Revert optimistic update on error
+      setPaymentsData((prev) => [...prev]);
     } finally {
       delete saveTimeouts.current[timeoutKey];
     }
