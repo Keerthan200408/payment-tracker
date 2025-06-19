@@ -531,46 +531,54 @@ const App = () => {
         console.log(`Importing ${data.length} records...`);
 
         const sendInBatches = async (data, batchSize = 50) => {
-          const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-          let successCount = 0;
+  const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  let successCount = 0;
+  const maxRetries = 3;
 
-          for (let i = 0; i < data.length; i += batchSize) {
-            const batch = data.slice(i, i + batchSize);
-            try {
-              console.log(
-                `Sending batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(data.length / batchSize)}...`
-              );
-              const response = await axios.post(
-                `${BASE_URL}/import-csv`,
-                batch,
-                {
-                  headers: {
-                    Authorization: `Bearer ${sessionToken}`,
-                    "Content-Type": "application/json",
-                  },
-                  params: { year: currentYear },
-                  timeout: 30000,
-                }
-              );
-              successCount += batch.length;
-              console.log(`Batch ${Math.floor(i / batchSize) + 1} completed successfully`);
-
-              if (i + batchSize < data.length) {
-                await delay(500);
-              }
-            } catch (error) {
-              console.error(`Error in batch ${Math.floor(i / batchSize) + 1}:`, error);
-              if (error.response?.status === 429 || error.code === "ECONNABORTED") {
-                console.log("Rate limit hit, waiting 2 seconds before retry...");
-                await delay(2000);
-                i -= batchSize;
-                continue;
-              }
-              throw error;
-            }
+  for (let i = 0; i < data.length; i += batchSize) {
+    const batch = data.slice(i, i + batchSize);
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(
+          `Sending batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(data.length / batchSize)} (Attempt ${attempt})...`
+        );
+        const response = await axios.post(
+          `${BASE_URL}/import-csv`,
+          batch,
+          {
+            headers: {
+              Authorization: `Bearer ${sessionToken}`,
+              "Content-Type": "application/json",
+            },
+            params: { year: currentYear },
+            timeout: 30000,
           }
-          return successCount;
-        };
+        );
+        successCount += batch.length;
+        console.log(`Batch ${Math.floor(i / batchSize) + 1} completed successfully`);
+        break; // Exit retry loop on success
+      } catch (error) {
+        console.error(`Error in batch ${Math.floor(i / batchSize) + 1} (Attempt ${attempt}):`, error);
+        if (
+          (error.response?.status === 429 ||
+           error.code === "ECONNABORTED" ||
+           error.code === "ERR_NETWORK") &&
+          attempt < maxRetries
+        ) {
+          const waitTime = 2000 * attempt;
+          console.log(`Retrying after ${waitTime}ms...`);
+          await delay(waitTime);
+          continue;
+        }
+        throw error; // Rethrow if max retries reached or other error
+      }
+    }
+    if (i + batchSize < data.length) {
+      await delay(500);
+    }
+  }
+  return successCount;
+};
 
         const importedCount = await sendInBatches(data);
         await Promise.all([

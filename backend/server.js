@@ -23,6 +23,7 @@ app.use(
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
+    exposedHeaders: ["Content-Type"],
     preflightContinue: false,
     optionsSuccessStatus: 204,
   })
@@ -1205,15 +1206,18 @@ app.post("/api/add-new-year", authenticateToken, async (req, res) => {
 app.post("/api/import-csv", authenticateToken, async (req, res) => {
   const csvData = req.body;
   const year = req.query.year || new Date().getFullYear().toString();
-  if (clientName.length > 100 || type.length > 50) {
-  return res.status(400).json({ error: "Client name or type too long" });
-}
-if (paymentValue > 1e6) {
-  return res.status(400).json({ error: "Payment value too large" });
-}
   if (!Array.isArray(csvData)) {
-    return res.status(400).json({ error: "Amount to be paid too large" });
+  return res.status(400).json({ error: "CSV data must be an array" });
+}
+
+for (const record of csvData) {
+  if (record.Client_Name?.length > 100 || record.Type?.length > 50) {
+    return res.status(400).json({ error: "Client name or type too long" });
   }
+  if (parseFloat(record.Amount_To_Be_Paid) > 1e6) {
+    return res.status(400).json({ error: "Payment value too large" });
+  }
+}
   
   try {
     await ensureSheet("Clients", ["User", "Client_Name", "Email", "Type", "Monthly_Payment"]);
