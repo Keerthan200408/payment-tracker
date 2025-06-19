@@ -27,6 +27,9 @@ app.use(
     optionsSuccessStatus: 204,
   })
 );
+
+app.options("*", cors());
+
 // Add this middleware BEFORE your routes
 app.use((req, res, next) => {
   // Remove or relax COOP policy for Google Sign-in
