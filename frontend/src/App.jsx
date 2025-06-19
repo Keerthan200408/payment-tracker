@@ -261,7 +261,7 @@ const importCsv = async (e) => {
   const file = e.target.files[0];
   if (!file) return;
   setIsImporting(true);
-  setErrorMessage(""); // Changed from setError(null)
+  setErrorMessage("");
   try {
     const text = await file.text();
     const rows = text.split('\n').filter(row => row.trim()).map(row => {
@@ -271,7 +271,9 @@ const importCsv = async (e) => {
     if (rows.length === 0) {
       throw new Error('CSV file is empty.');
     }
-    const records = rows.map(row => {
+    const records = [];
+    const errors = [];
+    rows.forEach((row, index) => {
       let clientName = '', type = '', amount = 0, email = '', phoneNumber = '';
       row.forEach(cell => {
         if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cell)) {
@@ -287,31 +289,42 @@ const importCsv = async (e) => {
         }
       });
       if (!clientName || !type || !amount) {
-        throw new Error('Missing required fields (Client Name, Type, Amount) in CSV');
+        console.warn(`Skipping invalid row at index ${index + 1}:`, row);
+        errors.push(`Row ${index + 1}: Missing required fields (Client Name, Type, or Amount)`);
+        return;
       }
-      return { Client_Name: clientName, Type: type, Amount_To_Be_Paid: amount, Email: email, Phone_Number: phoneNumber };
+      records.push({ Client_Name: clientName, Type: type, Amount_To_Be_Paid: amount, Email: email, Phone_Number: phoneNumber });
     });
+    if (records.length === 0) {
+      throw new Error('No valid rows found in CSV. All rows are missing required fields.');
+    }
     const batchSize = 50;
-    console.log(`Importing ${records.length} records...`);
+    console.log(`Importing ${records.length} valid records...`);
     for (let i = 0; i < records.length; i += batchSize) {
       const batch = records.slice(i, i + batchSize);
       console.log(`Sending batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(records.length / batchSize)}...`);
       await axios.post(`${BASE_URL}/import-csv`, batch, {
         headers: { Authorization: `Bearer ${sessionToken}` },
         params: { year: currentYear },
-        timeout: 30000,
+        timeout: 45000, // Increased from 30000
       });
       await new Promise(resolve => setTimeout(resolve, 500));
     }
-    // Clear cache after successful import
-    const cacheKey = `payments_${currentYear}_${sessionToken}`;
-    delete apiCacheRef.current[cacheKey];
-    alert(`CSV imported successfully! ${records.length} records imported. Reloading page...`);
+    // Clear both payments and clients cache
+    const cacheKeyPayments = `payments_${currentYear}_${sessionToken}`;
+    const cacheKeyClients = `clients_${sessionToken}`;
+    delete apiCacheRef.current[cacheKeyPayments];
+    delete apiCacheRef.current[cacheKeyClients];
+    const message = errors.length > 0 
+      ? `CSV imported successfully! ${records.length} valid records imported. ${errors.length} row(s) skipped due to errors:\n${errors.join('\n')}`
+      : `CSV imported successfully! ${records.length} records imported.`;
+    alert(message);
+    setErrorMessage(errors.length > 0 ? errors.join('\n') : '');
     await new Promise(resolve => setTimeout(resolve, 2000));
     window.location.reload();
   } catch (err) {
     console.error('Import CSV error:', err);
-    setErrorMessage(err.response?.data?.error || err.message || 'Failed to import CSV'); // Changed from setError
+    setErrorMessage(err.response?.data?.error || err.message || 'Failed to import CSV');
   } finally {
     setIsImporting(false);
     csvFileInputRef.current.value = null;
