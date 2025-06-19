@@ -235,7 +235,7 @@ async function updateSheet(range, values) {
       return;
     } catch (error) {
       if (error.status === 429 && retryCount < maxRetries) {
-        const delayMs = Math.pow(2, retryCount) * 2000 + Math.random() * 100;
+        const delayMs = Math.pow(2, retryCount) * 1000 + Math.random() * 100;
         console.log(`Rate limit exceeded for ${range}, retrying after ${delayMs}ms...`);
         await delay(delayMs);
         retryCount++;

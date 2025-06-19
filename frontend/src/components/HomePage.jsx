@@ -3,7 +3,7 @@ import axios from "axios";
 import { debounce } from 'lodash';
 
 const BASE_URL = "https://payment-tracker-aswa.onrender.com/api";
-const BATCH_DELAY = 2000;
+const BATCH_DELAY = 1000;
 const BATCH_SIZE = 5;
 const CACHE_DURATION = 5 * 60 * 1000;
 
@@ -134,7 +134,7 @@ const HomePage = ({
   // Utility functions
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  const retryWithBackoff = async (fn, retries = 3, delay = 1000) => {
+  const retryWithBackoff = async (fn, retries = 3, delay = 500) => {
     for (let i = 0; i < retries; i++) {
       try {
         return await fn();
@@ -396,7 +396,7 @@ const HomePage = ({
           batchTimerRef.current = setTimeout(processBatchUpdates, BATCH_DELAY);
         }
         delete debounceTimersRef.current[key];
-      }, 2000);
+      }, 1000);
     },
     [paymentsData, updatePayment]
   );

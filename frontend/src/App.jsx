@@ -625,7 +625,7 @@ const updatePayment = async (rowIndex, month, value, year = currentYear) => {
     "july", "august", "september", "october", "november", "december",
   ];
   
-  const savePaymentWithRetry = async (payload, retries = 3, delayMs = 2000) => {
+  const savePaymentWithRetry = async (payload, retries = 3, delayMs = 1000) => {
     for (let i = 0; i < retries; i++) {
       try {
         console.log("App.jsx: Saving payment for:", payload.clientName, month, value, year);
