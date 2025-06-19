@@ -26,26 +26,25 @@ const ClientsPage = ({
   const totalPages = Math.ceil(totalEntries / entriesPerPage);
 
   useEffect(() => {
-    const loadClientsData = async () => {
-      if (!clientsData || clientsData.length === 0) {
-        setIsLoading(true);
-        setError(null);
-        try {
-          console.log("Fetching clients data...");
-          await fetchClients(sessionToken);
-        } catch (err) {
-          console.error("Error fetching clients:", err);
-          setError("Failed to load clients data");
-        } finally {
-          setIsLoading(false);
-        }
+  const loadClientsData = async () => {
+    if (!clientsData || clientsData.length === 0) {
+      setIsLoading(true);
+      setError(null);
+      try {
+        console.log("Fetching clients data...");
+        await fetchClients(sessionToken);
+      } catch (err) {
+        console.error("Error fetching clients:", err);
+        setError("Failed to load clients data");
+      } finally {
+        setIsLoading(false);
       }
-    };
-
-    if (sessionToken) {
-      loadClientsData();
     }
-  }, [sessionToken, clientsData, fetchClients]);
+  };
+  if (sessionToken) {
+    loadClientsData();
+  }
+}, [sessionToken, clientsData, fetchClients]);
 
   const filteredClients = clientsData?.filter(
     (client) =>
