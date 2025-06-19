@@ -21,30 +21,31 @@ const ClientsPage = ({
   const [error, setError] = useState(null);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const hasFetched = useRef(false);
   const entriesPerPage = 10;
   const totalEntries = clientsData?.length || 0;
   const totalPages = Math.ceil(totalEntries / entriesPerPage);
 
   useEffect(() => {
   const loadClientsData = async () => {
-    if (!clientsData || clientsData.length === 0) {
-      setIsLoading(true);
-      setError(null);
-      try {
-        console.log("Fetching clients data...");
-        await fetchClients(sessionToken);
-      } catch (err) {
-        console.error("Error fetching clients:", err);
-        setError("Failed to load clients data");
-      } finally {
-        setIsLoading(false);
-      }
+    if (hasFetched.current || clientsData?.length > 0) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      console.log('Fetching clients data...');
+      await fetchClients(sessionToken);
+      hasFetched.current = true;
+    } catch (err) {
+      console.error('Error fetching clients:', err);
+      setError(err.response?.data?.error || 'Failed to load clients data');
+    } finally {
+      setIsLoading(false);
     }
   };
   if (sessionToken) {
     loadClientsData();
   }
-}, [sessionToken, clientsData, fetchClients]);
+}, [sessionToken, fetchClients]);
 
   const filteredClients = clientsData?.filter(
     (client) =>

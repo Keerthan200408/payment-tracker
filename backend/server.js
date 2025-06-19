@@ -538,45 +538,29 @@ app.post("/api/refresh-token", async (req, res) => {
 });
 
 // Get Clients
-app.get("/api/get-clients", authenticateToken, async (req, res) => {
+app.get('/api/get-clients', authenticateToken, async (req, res) => {
   try {
     console.log(`Fetching clients for user: ${req.user.username}`);
-    
-    const headers = ["User", "Client_Name", "Email", "Type", "Monthly_Payment", "Phone_Number"];
-    await ensureSheet("Clients", headers);
-    
-    const clients = await readSheet("Clients", "A2:F"); // Updated range
-    if (!clients) {
-      return res.json([]);
-    }
-    
-    const userClients = clients.filter((client) => 
-      client && client[0] === req.user.username
-    );
-
-    const processedClients = userClients.map((client) => {
-      if (!client || client.length < headers.length) {
-        console.warn(`Invalid client row:`, client);
-        return null;
-      }
+    const headers = ['User', 'Client_Name', 'Email', 'Type', 'Monthly_Payment', 'Phone_Number'];
+    await retryWithBackoff(() => ensureSheet('Clients', headers));
+    const clients = await retryWithBackoff(() => readSheet('Clients', 'A2:F'));
+    const userClients = clients.filter(client => client && client[0] === req.user.username);
+    const processedClients = userClients.map(client => {
+      const paddedClient = [...client, ...Array(headers.length - client.length).fill('')];
       return {
-        User: client[0] || "",
-        Client_Name: client[1] || "",
-        Email: client[2] || "",
-        Type: client[3] || "",
-        Amount_To_Be_Paid: parseFloat(client[4]) || 0,
-        Phone_Number: client[5] || "",
+        User: paddedClient[0] || '',
+        Client_Name: paddedClient[1] || '',
+        Email: paddedClient[2] || '',
+        Type: paddedClient[3] || '',
+        Amount_To_Be_Paid: parseFloat(paddedClient[4]) || 0,
+        Phone_Number: paddedClient[5] || '',
       };
     }).filter(Boolean);
-
     console.log(`Returning ${processedClients.length} clients`);
     res.json(processedClients);
   } catch (error) {
-    console.error(`Get clients error:`, error);
-    res.status(500).json({ 
-      error: `Failed to fetch clients: ${error.message}`,
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
+    console.error('Get clients error:', error.message);
+    res.status(500).json({ error: `Failed to fetch clients: ${error.message}` });
   }
 });
 // Add Client
@@ -1269,224 +1253,112 @@ app.post("/api/add-new-year", authenticateToken, async (req, res) => {
 });
 
 // Import CSV
-app.post("/api/import-csv", authenticateToken, async (req, res) => {
+app.post('/api/import-csv', authenticateToken, async (req, res) => {
   const csvData = req.body;
   const year = req.query.year || new Date().getFullYear().toString();
   if (!Array.isArray(csvData)) {
-    return res.status(400).json({ error: "CSV data must be an array" });
+    return res.status(400).json({ error: 'CSV data must be an array' });
   }
-
   for (const record of csvData) {
-    if (record.Client_Name?.length > 100 || record.Type?.length > 50) {
-      return res.status(400).json({ error: "Client name or type too long" });
+    if (!record.Client_Name || !record.Type || !record.Amount_To_Be_Paid) {
+      return res.status(400).json({ error: 'Missing required fields in CSV data' });
+    }
+    if (record.Client_Name.length > 100 || record.Type.length > 50) {
+      return res.status(400).json({ error: 'Client name or type too long' });
     }
     if (parseFloat(record.Amount_To_Be_Paid) > 1e6) {
-      return res.status(400).json({ error: "Payment value too large" });
-    }
-    // Validate phone number if provided
-    if (record.Phone_Number) {
-      const phone = record.Phone_Number.toString().trim();
-      if (!/^\+?[\d\s-]{10,15}$/.test(phone)) {
-        return res.status(400).json({ error: "Invalid phone number format" });
-      }
+      return res.status(400).json({ error: 'Payment value too large' });
     }
   }
-
   try {
-    await ensureSheet("Clients", ["User", "Client_Name", "Email", "Type", "Monthly_Payment", "Phone_Number"]);
-    await ensureSheet(
-      "Payments",
-      [
-        "User",
-        "Client_Name",
-        "Type",
-        "Amount_To_Be_Paid",
-        "January",
-        "February",
-        "March",
-        "April",
-        "May",
-        "June",
-        "July",
-        "August",
-        "September",
-        "October",
-        "November",
-        "December",
-        "Due_Payment",
-      ],
-      year
-    );
-    let clients = await readSheet("Clients", "A2:F"); // Updated range for Phone_Number
-    let payments = await readSheet(getPaymentSheetName(year), "A2:R");
-
+    await retryWithBackoff(() => ensureSheet('Clients', ['User', 'Client_Name', 'Email', 'Type', 'Monthly_Payment', 'Phone_Number']));
+    await retryWithBackoff(() => ensureSheet('Payments', ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment'], year));
+    let clients = await retryWithBackoff(() => readSheet('Clients', 'A2:F'));
+    let payments = await retryWithBackoff(() => readSheet(getPaymentSheetName(year), 'A2:R'));
     const clientsBatch = [];
     const paymentsBatch = [];
-
     for (const record of csvData) {
       let { Client_Name, Type, Email, Amount_To_Be_Paid, Phone_Number } = record;
-      Client_Name = sanitizeInput(Client_Name || "Unknown Client");
-      Type = sanitizeInput(Type || "Unknown Type");
-      Email = Email ? sanitizeInput(Email) : "";
-      Phone_Number = Phone_Number ? sanitizeInput(Phone_Number) : "";
+      Client_Name = sanitizeInput(Client_Name);
+      Type = sanitizeInput(Type);
+      Email = Email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(Email) ? sanitizeInput(Email) : '';
+      Phone_Number = Phone_Number && /^\+?[\d\s-]{10,15}$/.test(Phone_Number) ? sanitizeInput(Phone_Number) : '';
       Amount_To_Be_Paid = parseFloat(Amount_To_Be_Paid);
-      if (isNaN(Amount_To_Be_Paid) || Amount_To_Be_Paid <= 0) {
+      if (isNaN(Amount_To_Be_Paid) || Amount_To_Be_Paid <= 0 || !['GST', 'IT Return'].includes(Type)) {
         continue;
       }
-      if (Email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(Email)) {
-        continue;
-      }
-      if (Phone_Number && !/^\+?[\d\s-]{10,15}$/.test(Phone_Number)) {
-        continue;
-      }
-      if (!["GST", "IT Return"].includes(Type)) {
-        continue;
-      }
-      const clientExists = clients.some(
-        (client) => client[0] === req.user.username && client[1] === Client_Name && client[3] === Type
-      );
+      const clientExists = clients.some(client => client[0] === req.user.username && client[1] === Client_Name && client[3] === Type);
       if (!clientExists) {
         clientsBatch.push([req.user.username, Client_Name, Email, Type, Amount_To_Be_Paid, Phone_Number]);
         clients.push([req.user.username, Client_Name, Email, Type, Amount_To_Be_Paid, Phone_Number]);
       }
-      const paymentExists = payments.some(
-        (payment) => payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type
-      );
+      const paymentExists = payments.some(payment => payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type);
       if (!paymentExists) {
-        paymentsBatch.push([
-          req.user.username,
-          Client_Name,
-          Type,
-          Amount_To_Be_Paid,
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          Amount_To_Be_Paid, // Due_Payment
-        ]);
-        payments.push([
-          req.user.username,
-          Client_Name,
-          Type,
-          Amount_To_Be_Paid,
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          Amount_To_Be_Paid,
-        ]);
+        paymentsBatch.push([req.user.username, Client_Name, Type, Amount_To_Be_Paid, '', '', '', '', '', '', '', '', '', '', '', '', Amount_To_Be_Paid]);
+        payments.push([req.user.username, Client_Name, Type, Amount_To_Be_Paid, '', '', '', '', '', '', '', '', '', '', '', '', Amount_To_Be_Paid]);
       }
     }
-
     if (clientsBatch.length > 0) {
-      await appendSheet("Clients", clientsBatch);
+      await retryWithBackoff(() => appendSheet('Clients', clientsBatch));
     }
     if (paymentsBatch.length > 0) {
-      await appendSheet(getPaymentSheetName(year), paymentsBatch);
+      await retryWithBackoff(() => appendSheet(getPaymentSheetName(year), paymentsBatch));
     }
-
-    res.status(200).json({ message: "CSV data imported successfully" });
+    res.status(200).json({ message: 'CSV data imported successfully' });
   } catch (error) {
-    console.error("Import CSV error:", error.message);
-    res.status(500).json({ error: "Internal server error" });
+    console.error('Import CSV error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // Update Client
-app.put("/api/update-client", authenticateToken, async (req, res) => {
+app.put('/api/update-client', authenticateToken, async (req, res) => {
   const { oldClient, newClient } = req.body;
+  const year = new Date().getFullYear().toString();
   if (!oldClient || !newClient || !oldClient.Client_Name || !oldClient.Type || !newClient.Client_Name || !newClient.Type || !newClient.Amount_To_Be_Paid) {
-    return res.status(400).json({ error: "All required fields must be provided" });
+    return res.status(400).json({ error: 'All required fields must be provided' });
   }
   let { Client_Name: oldClientName, Type: oldType } = oldClient;
-  let { Client_Name: newClientName, Type: newType, Amount_To_Be_Paid: newAmount } = newClient;
+  let { Client_Name, Type, Amount_To_Be_Paid, Email, Phone_Number } = newClient;
   oldClientName = sanitizeInput(oldClientName);
   oldType = sanitizeInput(oldType);
-  newClientName = sanitizeInput(newClientName);
-  newType = sanitizeInput(newType);
-  const paymentValue = parseFloat(newAmount);
+  Client_Name = sanitizeInput(Client_Name);
+  Type = sanitizeInput(Type);
+  Email = Email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(Email) ? sanitizeInput(Email) : '';
+  Phone_Number = Phone_Number && /^\+?[\d\s-]{10,15}$/.test(Phone_Number) ? sanitizeInput(Phone_Number) : '';
+  const paymentValue = parseFloat(Amount_To_Be_Paid);
   if (isNaN(paymentValue) || paymentValue <= 0) {
-    return res.status(400).json({ error: "Amount to be paid must be a positive number" });
+    return res.status(400).json({ error: 'Amount to be paid must be a positive number' });
   }
-  if (!["GST", "IT Return"].includes(newType)) {
+  if (!['GST', 'IT Return'].includes(Type)) {
     return res.status(400).json({ error: 'Type must be either "GST" or "IT Return"' });
   }
   try {
-    await ensureSheet("Clients", ["User", "Client_Name", "Email", "Type", "Monthly_Payment"]);
-    let clients = await readSheet("Clients", "A2:E");
-    const clientIndex = clients.findIndex(
-      (client) => client[0] === req.user.username && client[1] === oldClientName && client[3] === oldType
-    );
+    await retryWithBackoff(() => ensureSheet('Clients', ['User', 'Client_Name', 'Email', 'Type', 'Monthly_Payment', 'Phone_Number']));
+    let clients = await retryWithBackoff(() => readSheet('Clients', 'A2:F'));
+    const clientIndex = clients.findIndex(client => client[0] === req.user.username && client[1] === oldClientName && client[3] === oldType);
     if (clientIndex === -1) {
-      return res.status(404).json({ error: "Client not found" });
+      return res.status(404).json({ error: 'Client not found' });
     }
-
-    const sheets = google.sheets({ version: "v4", auth });
-    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
-    const paymentSheets = spreadsheet.data.sheets
-      .filter((sheet) => sheet.properties.title.startsWith("Payments_"))
-      .map((sheet) => sheet.properties.title);
-
-    const email = clients[clientIndex][2] || "";
-    clients[clientIndex] = [req.user.username, newClientName, email, newType, paymentValue];
-    await writeSheet("Clients", "A2:E", clients);
-
+    clients[clientIndex] = [req.user.username, Client_Name, Email, Type, paymentValue, Phone_Number];
+    await retryWithBackoff(() => writeSheet('Clients', 'A2:F', clients));
+    const paymentSheets = (await google.sheets({ version: 'v4', auth }).spreadsheets.get({ spreadsheetId })).data.sheets
+      .filter(sheet => sheet.properties.title.startsWith('Payments_'))
+      .map(sheet => sheet.properties.title);
     for (const sheetName of paymentSheets) {
-      await ensureSheet(
-        "Payments",
-        [
-          "User",
-          "Client_Name",
-          "Type",
-          "Amount_To_Be_Paid",
-          "January",
-          "February",
-          "March",
-          "April",
-          "May",
-          "June",
-          "July",
-          "August",
-          "September",
-          "October",
-          "November",
-          "December",
-          "Due_Payment",
-        ],
-        sheetName.split("_")[1]
-      );
-      let payments = await readSheet(sheetName, "A2:R");
-      const paymentIndex = payments.findIndex(
-        (payment) => payment[0] === req.user.username && payment[1] === oldClientName && payment[2] === oldType
-      );
+      await retryWithBackoff(() => ensureSheet('Payments', ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment'], sheetName.split('_')[1]));
+      let payments = await retryWithBackoff(() => readSheet(sheetName, 'A2:R'));
+      const paymentIndex = payments.findIndex(payment => payment[0] === req.user.username && payment[1] === oldClientName && payment[2] === oldType);
       if (paymentIndex !== -1) {
         const monthlyPayments = payments[paymentIndex].slice(4, 16);
-        const duePayment = payments[paymentIndex][16] || "0";
-        payments[paymentIndex] = [req.user.username, newClientName, newType, paymentValue, ...monthlyPayments, duePayment];
-        await writeSheet(sheetName, "A2:R", payments);
+        payments[paymentIndex] = [req.user.username, Client_Name, Type, paymentValue, ...monthlyPayments, paymentValue];
+        await retryWithBackoff(() => writeSheet(sheetName, 'A2:R', payments));
       }
     }
-
-    res.json({ message: "Client updated successfully" });
+    res.json({ message: 'Client updated successfully' });
   } catch (error) {
-    console.error("Update client error:", error.message);
-    res.status(500).json({ error: "Internal server error" });
+    console.error('Update client error:', error.message);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

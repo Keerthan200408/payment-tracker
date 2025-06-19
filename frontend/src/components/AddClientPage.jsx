@@ -18,7 +18,7 @@ const AddClientPage = ({
   const [type, setType] = useState('');
   const [amountToBePaid, setAmountToBePaid] = useState('');
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState(''); // New state for success message
+  const [success, setSuccess] = useState('');
 
   useEffect(() => {
     if (editClient) {
@@ -34,6 +34,8 @@ const AddClientPage = ({
     e.preventDefault();
     setError('');
     setSuccess('');
+
+    // Validate required fields
     if (!clientName || !type || !amountToBePaid) {
       setError('Client name, type, and amount are required.');
       return;
@@ -43,10 +45,12 @@ const AddClientPage = ({
       setError('Amount must be a positive number.');
       return;
     }
+    // Validate optional email
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       setError('Please enter a valid email address.');
       return;
     }
+    // Validate optional phone number (10-15 digits, optional +, spaces, hyphens)
     if (phoneNumber && !/^\+?[\d\s-]{10,15}$/.test(phoneNumber)) {
       setError('Please enter a valid phone number (10-15 digits, optional + or -).');
       return;
@@ -56,22 +60,28 @@ const AddClientPage = ({
       if (editClient) {
         await axios.put(`${BASE_URL}/update-client`, {
           oldClient: { Client_Name: editClient.Client_Name, Type: editClient.Type },
-          newClient: { Client_Name: clientName, Type: type, Amount_To_Be_Paid: amount, Email: email, Phone_Number: phoneNumber },
+          newClient: {
+            Client_Name: clientName,
+            Type: type,
+            Amount_To_Be_Paid: amount,
+            Email: email || '',
+            Phone_Number: phoneNumber || '',
+          },
         }, {
           headers: { Authorization: `Bearer ${sessionToken}` },
         });
       } else {
         await axios.post(`${BASE_URL}/add-client`, {
           clientName,
-          email,
+          email: email || '',
           type,
           monthlyPayment: amount,
-          phoneNumber,
+          phoneNumber: phoneNumber || '',
         }, {
           headers: { Authorization: `Bearer ${sessionToken}` },
         });
       }
-      // Set success message and trigger reload
+      // Show success message and reload page (matches CSV import UX)
       setSuccess(`${editClient ? 'Client updated' : 'Client added'} successfully! Reloading page...`);
       await new Promise((resolve) => setTimeout(resolve, 2000));
       window.location.reload();
