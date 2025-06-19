@@ -102,11 +102,14 @@ async function ensureSheet(sheetName, headers, year = null) {
           requests: [{ addSheet: { properties: { title: actualSheetName } } }],
         },
       });
+      const sheetHeaders = sheetName === "Clients"
+        ? ["User", "Client_Name", "Email", "Type", "Monthly_Payment", "Phone_Number"]
+        : headers;
       await sheets.spreadsheets.values.update({
         spreadsheetId,
         range: `${actualSheetName}!A1`,
         valueInputOption: "RAW",
-        resource: { values: [headers] },
+        resource: { values: [sheetHeaders] },
       });
     } else if (sheetName === "Users") {
       const existingHeaders = await sheets.spreadsheets.values.get({
@@ -539,10 +542,10 @@ app.get("/api/get-clients", authenticateToken, async (req, res) => {
   try {
     console.log(`Fetching clients for user: ${req.user.username}`);
     
-    const headers = ["User", "Client_Name", "Email", "Type", "Monthly_Payment"];
+    const headers = ["User", "Client_Name", "Email", "Type", "Monthly_Payment", "Phone_Number"];
     await ensureSheet("Clients", headers);
     
-    const clients = await readSheet("Clients", "A2:E");
+    const clients = await readSheet("Clients", "A2:F"); // Updated range
     if (!clients) {
       return res.json([]);
     }
@@ -562,12 +565,12 @@ app.get("/api/get-clients", authenticateToken, async (req, res) => {
         Email: client[2] || "",
         Type: client[3] || "",
         Amount_To_Be_Paid: parseFloat(client[4]) || 0,
+        Phone_Number: client[5] || "",
       };
     }).filter(Boolean);
 
     console.log(`Returning ${processedClients.length} clients`);
     res.json(processedClients);
-    
   } catch (error) {
     console.error(`Get clients error:`, error);
     res.status(500).json({ 
@@ -578,32 +581,36 @@ app.get("/api/get-clients", authenticateToken, async (req, res) => {
 });
 // Add Client
 app.post("/api/add-client", authenticateToken, async (req, res) => {
-  let { clientName, email, type, monthlyPayment } = req.body;
+  let { clientName, email, type, monthlyPayment, phoneNumber } = req.body;
   const year = new Date().getFullYear().toString();
   const paymentValue = parseFloat(monthlyPayment);
   if (clientName.length > 100 || type.length > 50) {
-  return res.status(400).json({ error: "Client name or type too long" });
-}
-if (paymentValue > 1e6) {
-  return res.status(400).json({ error: "Monthly payment exceeds maximum limit" });
-}
+    return res.status(400).json({ error: "Client name or type too long" });
+  }
+  if (paymentValue > 1e6) {
+    return res.status(400).json({ error: "Monthly payment exceeds maximum limit" });
+  }
   if (!clientName || !type || !monthlyPayment) {
     return res.status(400).json({ error: "Client name, type, and monthly payment are required" });
   }
   clientName = sanitizeInput(clientName);
   type = sanitizeInput(type);
   email = email ? sanitizeInput(email) : "";
+  phoneNumber = phoneNumber ? sanitizeInput(phoneNumber) : "";
   if (isNaN(paymentValue) || paymentValue <= 0) {
     return res.status(400).json({ error: "Monthly payment must be a positive number" });
   }
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({ error: "Invalid email address" });
   }
+  if (phoneNumber && !/^\+?[\d\s-]{10,15}$/.test(phoneNumber)) {
+    return res.status(400).json({ error: "Invalid phone number format" });
+  }
   if (!["GST", "IT Return"].includes(type)) {
     return res.status(400).json({ error: 'Type must be either "GST" or "IT Return"' });
   }
   try {
-    await ensureSheet("Clients", ["User", "Client_Name", "Email", "Type", "Monthly_Payment"]);
+    await ensureSheet("Clients", ["User", "Client_Name", "Email", "Type", "Monthly_Payment", "Phone_Number"]);
     await ensureSheet(
       "Payments",
       [
@@ -627,13 +634,72 @@ if (paymentValue > 1e6) {
       ],
       year
     );
-    await appendSheet("Clients", [[req.user.username, clientName, email, type, paymentValue]]);
+    await appendSheet("Clients", [[req.user.username, clientName, email, type, paymentValue, phoneNumber]]);
     await appendSheet(getPaymentSheetName(year), [
-      [req.user.username, clientName, type, paymentValue, "", "", "", "", "", "", "", "", "", "", "", "", "0"],
+      [req.user.username, clientName, type, paymentValue, "", "", "", "", "", "", "", "", "", "", "", "", paymentValue],
     ]);
     res.status(201).json({ message: "Client added successfully" });
   } catch (error) {
     console.error("Add client error:", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.put("/api/update-client", authenticateToken, async (req, res) => {
+  const { oldClient, newClient } = req.body;
+  const year = new Date().getFullYear().toString();
+  if (!oldClient || !newClient || !oldClient.Client_Name || !oldClient.Type || !newClient.Client_Name || !newClient.Type || !newClient.Amount_To_Be_Paid) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+  const amount = parseFloat(newClient.Amount_To_Be_Paid);
+  if (isNaN(amount) || amount <= 0) {
+    return res.status(400).json({ error: "Invalid payment amount" });
+  }
+  if (newClient.Client_Name.length > 100 || newClient.Type.length > 50) {
+    return res.status(400).json({ error: "Client name or type too long" });
+  }
+  if (newClient.Email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newClient.Email)) {
+    return res.status(400).json({ error: "Invalid email address" });
+  }
+  if (newClient.Phone_Number && !/^\+?[\d\s-]{10,15}$/.test(newClient.Phone_Number)) {
+    return res.status(400).json({ error: "Invalid phone number format" });
+  }
+  if (!["GST", "IT Return"].includes(newClient.Type)) {
+    return res.status(400).json({ error: 'Type must be either "GST" or "IT Return"' });
+  }
+  try {
+    const clients = await readSheet("Clients", "A2:F");
+    const clientIndex = clients.findIndex(
+      (client) => client[0] === req.user.username && client[1] === oldClient.Client_Name && client[3] === oldClient.Type
+    );
+    if (clientIndex === -1) {
+      return res.status(404).json({ error: "Client not found" });
+    }
+    clients[clientIndex] = [
+      req.user.username,
+      newClient.Client_Name,
+      newClient.Email || "",
+      newClient.Type,
+      amount,
+      newClient.Phone_Number || "",
+    ];
+    await updateSheet("Clients", "A2:F", clients);
+
+    const payments = await readSheet(getPaymentSheetName(year), "A2:R");
+    const paymentIndex = payments.findIndex(
+      (payment) => payment[0] === req.user.username && payment[1] === oldClient.Client_Name && payment[2] === oldClient.Type
+    );
+    if (paymentIndex !== -1) {
+      payments[paymentIndex][1] = newClient.Client_Name;
+      payments[paymentIndex][2] = newClient.Type;
+      payments[paymentIndex][3] = amount;
+      payments[paymentIndex][16] = amount; // Update Due_Payment
+      await updateSheet(getPaymentSheetName(year), "A2:R", payments);
+    }
+
+    res.status(200).json({ message: "Client updated successfully" });
+  } catch (error) {
+    console.error("Update client error:", error.message);
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -1207,20 +1273,27 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
   const csvData = req.body;
   const year = req.query.year || new Date().getFullYear().toString();
   if (!Array.isArray(csvData)) {
-  return res.status(400).json({ error: "CSV data must be an array" });
-}
+    return res.status(400).json({ error: "CSV data must be an array" });
+  }
 
-for (const record of csvData) {
-  if (record.Client_Name?.length > 100 || record.Type?.length > 50) {
-    return res.status(400).json({ error: "Client name or type too long" });
+  for (const record of csvData) {
+    if (record.Client_Name?.length > 100 || record.Type?.length > 50) {
+      return res.status(400).json({ error: "Client name or type too long" });
+    }
+    if (parseFloat(record.Amount_To_Be_Paid) > 1e6) {
+      return res.status(400).json({ error: "Payment value too large" });
+    }
+    // Validate phone number if provided
+    if (record.Phone_Number) {
+      const phone = record.Phone_Number.toString().trim();
+      if (!/^\+?[\d\s-]{10,15}$/.test(phone)) {
+        return res.status(400).json({ error: "Invalid phone number format" });
+      }
+    }
   }
-  if (parseFloat(record.Amount_To_Be_Paid) > 1e6) {
-    return res.status(400).json({ error: "Payment value too large" });
-  }
-}
-  
+
   try {
-    await ensureSheet("Clients", ["User", "Client_Name", "Email", "Type", "Monthly_Payment"]);
+    await ensureSheet("Clients", ["User", "Client_Name", "Email", "Type", "Monthly_Payment", "Phone_Number"]);
     await ensureSheet(
       "Payments",
       [
@@ -1244,22 +1317,26 @@ for (const record of csvData) {
       ],
       year
     );
-    let clients = await readSheet("Clients", "A2:E");
+    let clients = await readSheet("Clients", "A2:F"); // Updated range for Phone_Number
     let payments = await readSheet(getPaymentSheetName(year), "A2:R");
 
     const clientsBatch = [];
     const paymentsBatch = [];
 
     for (const record of csvData) {
-      let { Client_Name, Type, Email, Amount_To_Be_Paid } = record;
+      let { Client_Name, Type, Email, Amount_To_Be_Paid, Phone_Number } = record;
       Client_Name = sanitizeInput(Client_Name || "Unknown Client");
       Type = sanitizeInput(Type || "Unknown Type");
       Email = Email ? sanitizeInput(Email) : "";
+      Phone_Number = Phone_Number ? sanitizeInput(Phone_Number) : "";
       Amount_To_Be_Paid = parseFloat(Amount_To_Be_Paid);
       if (isNaN(Amount_To_Be_Paid) || Amount_To_Be_Paid <= 0) {
         continue;
       }
       if (Email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(Email)) {
+        continue;
+      }
+      if (Phone_Number && !/^\+?[\d\s-]{10,15}$/.test(Phone_Number)) {
         continue;
       }
       if (!["GST", "IT Return"].includes(Type)) {
@@ -1269,8 +1346,8 @@ for (const record of csvData) {
         (client) => client[0] === req.user.username && client[1] === Client_Name && client[3] === Type
       );
       if (!clientExists) {
-        clientsBatch.push([req.user.username, Client_Name, Email, Type, Amount_To_Be_Paid]);
-        clients.push([req.user.username, Client_Name, Email, Type, Amount_To_Be_Paid]);
+        clientsBatch.push([req.user.username, Client_Name, Email, Type, Amount_To_Be_Paid, Phone_Number]);
+        clients.push([req.user.username, Client_Name, Email, Type, Amount_To_Be_Paid, Phone_Number]);
       }
       const paymentExists = payments.some(
         (payment) => payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type
@@ -1293,7 +1370,7 @@ for (const record of csvData) {
           "",
           "",
           "",
-          "0",
+          Amount_To_Be_Paid, // Due_Payment
         ]);
         payments.push([
           req.user.username,
@@ -1312,7 +1389,7 @@ for (const record of csvData) {
           "",
           "",
           "",
-          "0",
+          Amount_To_Be_Paid,
         ]);
       }
     }

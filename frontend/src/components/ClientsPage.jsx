@@ -25,10 +25,8 @@ const ClientsPage = ({
   const totalEntries = clientsData?.length || 0;
   const totalPages = Math.ceil(totalEntries / entriesPerPage);
 
-  // Ensure data is loaded when component mounts
   useEffect(() => {
     const loadClientsData = async () => {
-      // Only fetch if clientsData is empty or null
       if (!clientsData || clientsData.length === 0) {
         setIsLoading(true);
         setError(null);
@@ -79,22 +77,18 @@ const ClientsPage = ({
 
       console.log("Delete response:", response.data);
 
-      // Update local state immediately for better UX
       const updatedClients = clientsData.filter(
         (c) => !(c.Client_Name === client.Client_Name && c.Type === client.Type)
       );
       setClientsData(updatedClients);
 
-      // Adjust current page if necessary
       const newTotalPages = Math.ceil(updatedClients.length / entriesPerPage);
       if (currentPage > newTotalPages && newTotalPages > 0) {
         setCurrentPage(newTotalPages);
       }
 
-      // Refresh data with proper year parameter
       const refreshPromises = [fetchClients(sessionToken)];
       
-      // Only refresh payments if fetchPayments function expects year parameter
       if (fetchPayments.length >= 2) {
         refreshPromises.push(fetchPayments(sessionToken, currentYear));
       } else {
@@ -102,7 +96,6 @@ const ClientsPage = ({
       }
       
       await Promise.all(refreshPromises);
-      
     } catch (error) {
       console.error(
         "Delete client error:",
@@ -114,14 +107,12 @@ const ClientsPage = ({
         }`
       );
       
-      // Revert local state on error
       await fetchClients(sessionToken);
     } finally {
       setDeleteInProgress(false);
     }
   };
 
-  // Loading state
   if (isLoading && (!clientsData || clientsData.length === 0)) {
     return (
       <div className="p-6">
@@ -135,7 +126,6 @@ const ClientsPage = ({
     );
   }
 
-  // Error state
   if (error) {
     return (
       <div className="p-6">
@@ -157,7 +147,6 @@ const ClientsPage = ({
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
-      {/* Header Section */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
         <div className="flex gap-3 mb-4 sm:mb-0">
           <button
@@ -207,7 +196,6 @@ const ClientsPage = ({
         </div>
       </div>
 
-      {/* Loading overlay for delete operations */}
       {deleteInProgress && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg shadow-xl">
@@ -217,7 +205,6 @@ const ClientsPage = ({
         </div>
       )}
 
-      {/* Table Section */}
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -233,6 +220,12 @@ const ClientsPage = ({
                   Monthly Amount
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Email
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Phone Number
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Status
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -244,7 +237,7 @@ const ClientsPage = ({
               {paginatedClients.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={7}
                     className="px-6 py-12 text-center text-gray-500"
                   >
                     <div className="flex flex-col items-center">
@@ -279,6 +272,16 @@ const ClientsPage = ({
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
                         ₹{(client.Amount_To_Be_Paid || 0).toLocaleString()}.00
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        {client.Email || "N/A"}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        {client.Phone_Number || "N/A"}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -317,7 +320,6 @@ const ClientsPage = ({
         </div>
       </div>
 
-      {/* Pagination Section */}
       {filteredClients.length > 0 && (
         <div className="flex flex-col sm:flex-row justify-between items-center mt-6 space-y-3 sm:space-y-0">
           <p className="text-sm sm:text-base text-gray-700">

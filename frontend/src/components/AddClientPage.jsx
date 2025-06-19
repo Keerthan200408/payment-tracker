@@ -13,16 +13,18 @@ const AddClientPage = ({
   setEditClient,
 }) => {
   const [clientName, setClientName] = useState('');
-  const [email, setEmail] = useState(''); // New state for email
+  const [email, setEmail] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [type, setType] = useState('');
   const [amountToBePaid, setAmountToBePaid] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState(''); // New state for success message
 
-  // Pre-fill form if editing a client
   useEffect(() => {
     if (editClient) {
       setClientName(editClient.Client_Name);
-      setEmail(editClient.Email); // Populate email if editing
+      setEmail(editClient.Email);
+      setPhoneNumber(editClient.Phone_Number || '');
       setType(editClient.Type);
       setAmountToBePaid(editClient.Amount_To_Be_Paid.toString());
     }
@@ -30,6 +32,8 @@ const AddClientPage = ({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
+    setSuccess('');
     if (!clientName || !type || !amountToBePaid) {
       setError('Client name, type, and amount are required.');
       return;
@@ -43,36 +47,34 @@ const AddClientPage = ({
       setError('Please enter a valid email address.');
       return;
     }
+    if (phoneNumber && !/^\+?[\d\s-]{10,15}$/.test(phoneNumber)) {
+      setError('Please enter a valid phone number (10-15 digits, optional + or -).');
+      return;
+    }
 
     try {
       if (editClient) {
-        // Update existing client
         await axios.put(`${BASE_URL}/update-client`, {
           oldClient: { Client_Name: editClient.Client_Name, Type: editClient.Type },
-          newClient: { Client_Name: clientName, Type: type, Amount_To_Be_Paid: amount, Email: email },
+          newClient: { Client_Name: clientName, Type: type, Amount_To_Be_Paid: amount, Email: email, Phone_Number: phoneNumber },
         }, {
           headers: { Authorization: `Bearer ${sessionToken}` },
         });
       } else {
-        // Add new client
         await axios.post(`${BASE_URL}/add-client`, {
           clientName,
-          email, // Not used in your app, but endpoint expects it
+          email,
           type,
           monthlyPayment: amount,
+          phoneNumber,
         }, {
           headers: { Authorization: `Bearer ${sessionToken}` },
         });
       }
-      fetchClients(sessionToken);
-      fetchPayments(sessionToken, new Date().getFullYear().toString());
-      setClientName('');
-      setEmail(''); // Reset email field
-      setType('');
-      setAmountToBePaid('');
-      setError('');
-      setEditClient(null);
-      setPage('clients');
+      // Set success message and trigger reload
+      setSuccess(`${editClient ? 'Client updated' : 'Client added'} successfully! Reloading page...`);
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      window.location.reload();
     } catch (err) {
       console.error('Add/Edit client error:', err);
       setError(err.response?.data?.error || 'Failed to save client.');
@@ -86,6 +88,7 @@ const AddClientPage = ({
           {editClient ? 'Edit Client' : 'Add Client'}
         </h2>
         {error && <p className="text-red-500 mb-4 text-sm">{error}</p>}
+        {success && <p className="text-green-500 mb-4 text-sm">{success}</p>}
         <div className="bg-white p-6 rounded-lg shadow-sm">
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-medium mb-2">Client Name</label>
@@ -105,6 +108,16 @@ const AddClientPage = ({
               onChange={(e) => setEmail(e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base placeholder-gray-400"
               placeholder="Enter email (optional)"
+            />
+          </div>
+          <div className="mb-4">
+            <label className="block text-gray-700 text-sm font-medium mb-2">Phone Number (Optional)</label>
+            <input
+              type="text"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base placeholder-gray-400"
+              placeholder="Enter phone number (e.g., +1234567890)"
             />
           </div>
           <div className="mb-4">

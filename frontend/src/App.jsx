@@ -140,19 +140,19 @@ const App = () => {
 }, []);
 
   const fetchClients = async (token) => {
-    try {
-      console.log("Fetching clients with token:", token?.substring(0, 10) + "...");
-      const response = await axios.get(`${BASE_URL}/get-clients`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      console.log("Clients fetched:", response.data);
-      setClientsData(Array.isArray(response.data) ? response.data : []);
-    } catch (error) {
-      console.error("Fetch clients error:", error.response?.data?.error || error.message);
-      setClientsData([]);
-      handleSessionError(error);
-    }
-  };
+  try {
+    console.log("Fetching clients with token:", token?.substring(0, 10) + "...");
+    const response = await axios.get(`${BASE_URL}/get-clients`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    console.log("Clients fetched:", response.data);
+    setClientsData(Array.isArray(response.data) ? response.data : []);
+  } catch (error) {
+    console.error("Fetch clients error:", error.response?.data?.error || error.message);
+    setClientsData([]);
+    handleSessionError(error);
+  }
+};
 
   const CACHE_DURATION = 5 * 60 * 1000; // Add this constant
   const fetchPayments = async (token, year) => {
@@ -313,6 +313,7 @@ const importCsv = async (e) => {
                 hasGST: 0,
                 hasITReturn: 0,
                 hasEmail: 0,
+                hasPhone: 0, // Add phone detection
                 avgLength: 0,
                 containsNumbers: 0,
                 isName: 0,
@@ -327,6 +328,7 @@ const importCsv = async (e) => {
           let gstCount = 0;
           let itReturnCount = 0;
           let emailCount = 0;
+          let phoneCount = 0;
           let totalLength = 0;
           let numberCount = 0;
           let nameCount = 0;
@@ -352,6 +354,9 @@ const importCsv = async (e) => {
             if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
               emailCount++;
             }
+            if (/^\+?[\d\s-]{10,15}$/.test(val)) {
+              phoneCount++;
+            }
             if (/\d/.test(val)) {
               numberCount++;
             }
@@ -368,6 +373,7 @@ const importCsv = async (e) => {
           col.hasGST = gstCount / col.values.length;
           col.hasITReturn = itReturnCount / col.values.length;
           col.hasEmail = emailCount / col.values.length;
+          col.hasPhone = phoneCount / col.values.length;
           col.avgLength = totalLength / col.values.length;
           col.containsNumbers = numberCount / col.values.length;
           col.isName = nameCount / col.values.length;
@@ -407,6 +413,16 @@ const importCsv = async (e) => {
           }
         });
         if (emailIndex !== -1) columnTypes.Email = emailIndex;
+
+        let phoneIndex = -1;
+        let maxPhone = 0;
+        columnData.forEach((col, index) => {
+          if (col.hasPhone > maxPhone && col.hasPhone >= 0.3) {
+            maxPhone = col.hasPhone;
+            phoneIndex = index;
+          }
+        });
+        if (phoneIndex !== -1) columnTypes.Phone_Number = phoneIndex;
 
         let nameIndex = -1;
         let maxNameScore = 0;
@@ -479,6 +495,10 @@ const importCsv = async (e) => {
             columnMapping.Email !== undefined
               ? (cols[columnMapping.Email] || "").trim()
               : "";
+          const phone =
+            columnMapping.Phone_Number !== undefined
+              ? (cols[columnMapping.Phone_Number] || "").trim()
+              : "";
           const amountStr =
             columnMapping.Amount_To_Be_Paid !== undefined
               ? (cols[columnMapping.Amount_To_Be_Paid] || "0").trim()
@@ -507,10 +527,15 @@ const importCsv = async (e) => {
             email = "";
           }
 
+          if (phone && !/^\+?[\d\s-]{10,15}$/.test(phone)) {
+            phone = "";
+          }
+
           data.push({
             Client_Name: clientName,
             Type: type,
             Email: email,
+            Phone_Number: phone,
             Amount_To_Be_Paid: amount,
             january: 0,
             february: 0,
@@ -612,18 +637,14 @@ const importCsv = async (e) => {
 
       const importedCount = await sendInBatches(data);
 
-      // Wait 2 seconds to ensure server data is updated
       await new Promise((resolve) => setTimeout(resolve, 2000));
-
       setErrorMessage(
         `CSV import completed successfully! ${importedCount} records imported. Reloading page...`
       );
       csvFileInputRef.current.value = "";
-
-      // Trigger page reload
       setTimeout(() => {
         window.location.reload();
-      }, 1000); // Delay reload to allow user to see success message
+      }, 1000);
     } catch (error) {
       console.error("Import CSV error:", error);
       let errorMessage = "Failed to import CSV data: ";
