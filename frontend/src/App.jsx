@@ -261,7 +261,7 @@ const importCsv = async (e) => {
   const file = e.target.files[0];
   if (!file) return;
   setIsImporting(true);
-  setError(null);
+  setErrorMessage(""); // Changed from setError(null)
   try {
     const text = await file.text();
     const rows = text.split('\n').filter(row => row.trim()).map(row => {
@@ -292,8 +292,10 @@ const importCsv = async (e) => {
       return { Client_Name: clientName, Type: type, Amount_To_Be_Paid: amount, Email: email, Phone_Number: phoneNumber };
     });
     const batchSize = 50;
+    console.log(`Importing ${records.length} records...`);
     for (let i = 0; i < records.length; i += batchSize) {
       const batch = records.slice(i, i + batchSize);
+      console.log(`Sending batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(records.length / batchSize)}...`);
       await axios.post(`${BASE_URL}/import-csv`, batch, {
         headers: { Authorization: `Bearer ${sessionToken}` },
         params: { year: currentYear },
@@ -301,12 +303,15 @@ const importCsv = async (e) => {
       });
       await new Promise(resolve => setTimeout(resolve, 500));
     }
+    // Clear cache after successful import
+    const cacheKey = `payments_${currentYear}_${sessionToken}`;
+    delete apiCacheRef.current[cacheKey];
     alert(`CSV imported successfully! ${records.length} records imported. Reloading page...`);
     await new Promise(resolve => setTimeout(resolve, 2000));
     window.location.reload();
   } catch (err) {
     console.error('Import CSV error:', err);
-    setError(err.message || 'Failed to import CSV');
+    setErrorMessage(err.response?.data?.error || err.message || 'Failed to import CSV'); // Changed from setError
   } finally {
     setIsImporting(false);
     csvFileInputRef.current.value = null;
