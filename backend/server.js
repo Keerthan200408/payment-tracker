@@ -576,6 +576,7 @@ app.get("/api/get-clients", authenticateToken, async (req, res) => {
 app.post("/api/add-client", authenticateToken, async (req, res) => {
   let { clientName, email, type, monthlyPayment } = req.body;
   const year = new Date().getFullYear().toString();
+  const paymentValue = parseFloat(monthlyPayment);
   if (clientName.length > 100 || type.length > 50) {
   return res.status(400).json({ error: "Client name or type too long" });
 }
@@ -588,7 +589,6 @@ if (paymentValue > 1e6) {
   clientName = sanitizeInput(clientName);
   type = sanitizeInput(type);
   email = email ? sanitizeInput(email) : "";
-  const paymentValue = parseFloat(monthlyPayment);
   if (isNaN(paymentValue) || paymentValue <= 0) {
     return res.status(400).json({ error: "Monthly payment must be a positive number" });
   }
