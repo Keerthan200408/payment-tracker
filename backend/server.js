@@ -56,6 +56,23 @@ const paymentLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+const retryWithBackoff = async (fn, retries = 3, delay = 500) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (error.response?.status === 429 && i < retries - 1) {
+        console.log(`Rate limit hit, retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 2; // Exponential backoff
+      } else {
+        throw error;
+      }
+    }
+  }
+};
+
 app.use(globalLimiter);
 app.use("/api/save-payment", paymentLimiter);
 
@@ -64,6 +81,7 @@ app.use(cookieParser());
 
 // Parse JSON
 app.use(express.json());
+
 
 // Health check
 app.get("/", (req, res) => {
