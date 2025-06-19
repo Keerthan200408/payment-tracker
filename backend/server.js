@@ -1256,58 +1256,98 @@ app.post("/api/add-new-year", authenticateToken, async (req, res) => {
 app.post('/api/import-csv', authenticateToken, async (req, res) => {
   const csvData = req.body;
   const year = req.query.year || new Date().getFullYear().toString();
-  if (!Array.isArray(csvData)) {
-    return res.status(400).json({ error: 'CSV data must be an array' });
+  console.log(`Importing CSV for user: ${req.user.username}, year: ${year}, records: ${csvData?.length || 0}`);
+  
+  if (!Array.isArray(csvData) || csvData.length === 0) {
+    console.error('Invalid CSV data: not an array or empty');
+    return res.status(400).json({ error: 'CSV data must be a non-empty array' });
   }
-  for (const record of csvData) {
-    if (!record.Client_Name || !record.Type || !record.Amount_To_Be_Paid) {
-      return res.status(400).json({ error: 'Missing required fields in CSV data' });
+
+  // Validate all records
+  for (let i = 0; i < csvData.length; i++) {
+    const record = csvData[i];
+    if (!record.Client_Name || !record.Type || record.Amount_To_Be_Paid == null) {
+      console.error(`Invalid record at index ${i}: missing required fields`, record);
+      return res.status(400).json({ error: `Missing required fields in record at index ${i}` });
     }
-    if (record.Client_Name.length > 100 || record.Type.length > 50) {
-      return res.status(400).json({ error: 'Client name or type too long' });
+    if (typeof record.Client_Name !== 'string' || record.Client_Name.length > 100) {
+      console.error(`Invalid Client_Name at index ${i}:`, record.Client_Name);
+      return res.status(400).json({ error: `Invalid Client_Name at index ${i}` });
     }
-    if (parseFloat(record.Amount_To_Be_Paid) > 1e6) {
-      return res.status(400).json({ error: 'Payment value too large' });
+    if (typeof record.Type !== 'string' || !['GST', 'IT Return'].includes(record.Type)) {
+      console.error(`Invalid Type at index ${i}:`, record.Type);
+      return res.status(400).json({ error: `Invalid Type at index ${i}` });
+    }
+    const amount = parseFloat(record.Amount_To_Be_Paid);
+    if (isNaN(amount) || amount <= 0 || amount > 1e6) {
+      console.error(`Invalid Amount_To_Be_Paid at index ${i}:`, record.Amount_To_Be_Paid);
+      return res.status(400).json({ error: `Invalid Amount_To_Be_Paid at index ${i}` });
+    }
+    if (record.Email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(record.Email)) {
+      console.warn(`Invalid Email at index ${i}, setting to empty:`, record.Email);
+      record.Email = '';
+    }
+    if (record.Phone_Number && !/^\+?[\d\s-]{10,15}$/.test(record.Phone_Number)) {
+      console.warn(`Invalid Phone_Number at index ${i}, setting to empty:`, record.Phone_Number);
+      record.Phone_Number = '';
     }
   }
+
   try {
+    console.log('Ensuring sheets...');
     await retryWithBackoff(() => ensureSheet('Clients', ['User', 'Client_Name', 'Email', 'Type', 'Monthly_Payment', 'Phone_Number']));
     await retryWithBackoff(() => ensureSheet('Payments', ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment'], year));
-    let clients = await retryWithBackoff(() => readSheet('Clients', 'A2:F'));
-    let payments = await retryWithBackoff(() => readSheet(getPaymentSheetName(year), 'A2:R'));
+    
+    console.log('Reading existing data...');
+    let clients = await retryWithBackoff(() => readSheet('Clients', 'A2:F')) || [];
+    let payments = await retryWithBackoff(() => readSheet(getPaymentSheetName(year), 'A2:R')) || [];
+    
     const clientsBatch = [];
     const paymentsBatch = [];
-    for (const record of csvData) {
+
+    for (let i = 0; i < csvData.length; i++) {
+      const record = csvData[i];
       let { Client_Name, Type, Email, Amount_To_Be_Paid, Phone_Number } = record;
+      console.log(`Processing record ${i}:`, { Client_Name, Type, Amount_To_Be_Paid });
+      
       Client_Name = sanitizeInput(Client_Name);
       Type = sanitizeInput(Type);
-      Email = Email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(Email) ? sanitizeInput(Email) : '';
-      Phone_Number = Phone_Number && /^\+?[\d\s-]{10,15}$/.test(Phone_Number) ? sanitizeInput(Phone_Number) : '';
+      Email = Email ? sanitizeInput(Email) : '';
+      Phone_Number = Phone_Number ? sanitizeInput(Phone_Number) : '';
       Amount_To_Be_Paid = parseFloat(Amount_To_Be_Paid);
-      if (isNaN(Amount_To_Be_Paid) || Amount_To_Be_Paid <= 0 || !['GST', 'IT Return'].includes(Type)) {
-        continue;
-      }
-      const clientExists = clients.some(client => client[0] === req.user.username && client[1] === Client_Name && client[3] === Type);
+
+      const clientExists = clients.some(client => client && client[0] === req.user.username && client[1] === Client_Name && client[3] === Type);
       if (!clientExists) {
         clientsBatch.push([req.user.username, Client_Name, Email, Type, Amount_To_Be_Paid, Phone_Number]);
         clients.push([req.user.username, Client_Name, Email, Type, Amount_To_Be_Paid, Phone_Number]);
       }
-      const paymentExists = payments.some(payment => payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type);
+
+      const paymentExists = payments.some(payment => payment && payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type);
       if (!paymentExists) {
         paymentsBatch.push([req.user.username, Client_Name, Type, Amount_To_Be_Paid, '', '', '', '', '', '', '', '', '', '', '', '', Amount_To_Be_Paid]);
         payments.push([req.user.username, Client_Name, Type, Amount_To_Be_Paid, '', '', '', '', '', '', '', '', '', '', '', '', Amount_To_Be_Paid]);
       }
     }
+
     if (clientsBatch.length > 0) {
+      console.log(`Appending ${clientsBatch.length} clients...`);
       await retryWithBackoff(() => appendSheet('Clients', clientsBatch));
     }
     if (paymentsBatch.length > 0) {
+      console.log(`Appending ${paymentsBatch.length} payments...`);
       await retryWithBackoff(() => appendSheet(getPaymentSheetName(year), paymentsBatch));
     }
-    res.status(200).json({ message: 'CSV data imported successfully' });
+
+    console.log('CSV import completed successfully');
+    res.status(200).json({ message: 'CSV data imported successfully', imported: csvData.length });
   } catch (error) {
-    console.error('Import CSV error:', error.message);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('Import CSV error:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      response: error.response?.data,
+    });
+    res.status(500).json({ error: `Failed to import CSV: ${error.message}` });
   }
 });
 
