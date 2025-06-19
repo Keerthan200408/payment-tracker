@@ -257,365 +257,400 @@ const App = () => {
   }
 };
 
-  const importCsv = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+const importCsv = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
 
-    setIsImporting(true);
+  setIsImporting(true);
 
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const text = event.target.result;
-        const parseCSVLine = (line) => {
-          const result = [];
-          let current = "";
-          let inQuotes = false;
+  const reader = new FileReader();
+  reader.onload = async (event) => {
+    try {
+      const text = event.target.result;
+      const parseCSVLine = (line) => {
+        const result = [];
+        let current = "";
+        let inQuotes = false;
 
-          for (let i = 0; i < line.length; i++) {
-            const char = line[i];
-            if (char === '"') {
-              inQuotes = !inQuotes;
-            } else if (char === "," && !inQuotes) {
-              result.push(current.trim().replace(/^"|"$/g, ""));
-              current = "";
-            } else {
-              current += char;
-            }
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === "," && !inQuotes) {
+            result.push(current.trim().replace(/^"|"$/g, ""));
+            current = "";
+          } else {
+            current += char;
           }
-          result.push(current.trim().replace(/^"|"$/g, ""));
-          return result.filter((col) => col !== "");
-        };
-
-        const rows = text
-          .split("\n")
-          .map((row) => row.trim())
-          .filter((row) => row && row.length > 0);
-
-        if (rows.length === 0) {
-          alert("CSV file is empty.");
-          csvFileInputRef.current.value = "";
-          setIsImporting(false);
-          return;
         }
+        result.push(current.trim().replace(/^"|"$/g, ""));
+        return result.filter((col) => col !== "");
+      };
 
-        const detectColumns = (rows) => {
-          const sampleSize = Math.min(10, rows.length);
-          const columnData = [];
+      const rows = text
+        .split("\n")
+        .map((row) => row.trim())
+        .filter((row) => row && row.length > 0);
 
-          for (let i = 0; i < sampleSize; i++) {
-            const cols = parseCSVLine(rows[i]);
-            for (let j = 0; j < cols.length; j++) {
-              if (!columnData[j]) {
-                columnData[j] = {
-                  values: [],
-                  isNumeric: 0,
-                  hasGST: 0,
-                  hasITReturn: 0,
-                  hasEmail: 0,
-                  avgLength: 0,
-                  containsNumbers: 0,
-                  isName: 0,
-                };
-              }
-              columnData[j].values.push(cols[j]);
-            }
-          }
-
-          columnData.forEach((col, index) => {
-            let numericCount = 0;
-            let gstCount = 0;
-            let itReturnCount = 0;
-            let emailCount = 0;
-            let totalLength = 0;
-            let numberCount = 0;
-            let nameCount = 0;
-
-            col.values.forEach((value) => {
-              const val = value.toLowerCase().trim();
-              totalLength += val.length;
-
-              if (/^\d+(\.\d+)?$/.test(val) || /^\d+$/.test(val)) {
-                numericCount++;
-              }
-              if (val.includes("gst") || val === "gst") {
-                gstCount++;
-              }
-              if (
-                val.includes("it return") ||
-                val.includes("itreturn") ||
-                val === "it return" ||
-                val === "itreturn"
-              ) {
-                itReturnCount++;
-              }
-              if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
-                emailCount++;
-              }
-              if (/\d/.test(val)) {
-                numberCount++;
-              }
-              if (
-                val.split(" ").length >= 2 &&
-                !/^\d/.test(val) &&
-                val.length > 5
-              ) {
-                nameCount++;
-              }
-            });
-
-            col.isNumeric = numericCount / col.values.length;
-            col.hasGST = gstCount / col.values.length;
-            col.hasITReturn = itReturnCount / col.values.length;
-            col.hasEmail = emailCount / col.values.length;
-            col.avgLength = totalLength / col.values.length;
-            col.containsNumbers = numberCount / col.values.length;
-            col.isName = nameCount / col.values.length;
-          });
-
-          const columnTypes = {};
-          let amountIndex = -1;
-          let maxNumeric = 0;
-          columnData.forEach((col, index) => {
-            if (col.isNumeric > maxNumeric && col.isNumeric >= 0.7) {
-              maxNumeric = col.isNumeric;
-              amountIndex = index;
-            }
-          });
-          if (amountIndex !== -1) columnTypes.Amount_To_Be_Paid = amountIndex;
-
-          let typeIndex = -1;
-          let maxTypeScore = 0;
-          columnData.forEach((col, index) => {
-            const typeScore = col.hasGST + col.hasITReturn;
-            if (
-              typeScore > maxTypeScore &&
-              (col.hasGST > 0 || col.hasITReturn > 0)
-            ) {
-              maxTypeScore = typeScore;
-              typeIndex = index;
-            }
-          });
-          if (typeIndex !== -1) columnTypes.Type = typeIndex;
-
-          let emailIndex = -1;
-          let maxEmail = 0;
-          columnData.forEach((col, index) => {
-            if (col.hasEmail > maxEmail && col.hasEmail >= 0.3) {
-              maxEmail = col.hasEmail;
-              emailIndex = index;
-            }
-          });
-          if (emailIndex !== -1) columnTypes.Email = emailIndex;
-
-          let nameIndex = -1;
-          let maxNameScore = 0;
-          columnData.forEach((col, index) => {
-            if (!Object.values(columnTypes).includes(index)) {
-              const nameScore = col.isName + col.avgLength / 20;
-              if (nameScore > maxNameScore) {
-                maxNameScore = nameScore;
-                nameIndex = index;
-              }
-            }
-          });
-          if (nameIndex !== -1) columnTypes.Client_Name = nameIndex;
-
-          if (columnTypes.Client_Name === undefined) {
-            for (let i = 0; i < columnData.length; i++) {
-              if (!Object.values(columnTypes).includes(i)) {
-                columnTypes.Client_Name = i;
-                break;
-              }
-            }
-          }
-
-          return columnTypes;
-        };
-
-        console.log("Analyzing CSV structure...");
-        const columnMapping = detectColumns(rows);
-        console.log("Detected column mapping:", columnMapping);
-
-        if (columnMapping.Client_Name === undefined) {
-          alert("Could not detect Client Name column. Please ensure your CSV has client names.");
-          csvFileInputRef.current.value = "";
-          setIsImporting(false);
-          return;
-        }
-
-        if (columnMapping.Amount_To_Be_Paid === undefined) {
-          alert("Could not detect Amount column. Please ensure your CSV has numeric amounts.");
-          csvFileInputRef.current.value = "";
-          setIsImporting(false);
-          return;
-        }
-
-        const processDataWithDelay = async (rows, batchSize = 10) => {
-          const data = [];
-          const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-          for (let i = 0; i < rows.length; i++) {
-            const row = rows[i];
-            if (!row || row.trim() === "") continue;
-
-            const cols = parseCSVLine(row);
-            if (cols.length < 2) continue;
-
-            const clientName =
-              columnMapping.Client_Name !== undefined
-                ? (cols[columnMapping.Client_Name] || "").trim()
-                : "";
-            const rawType =
-              columnMapping.Type !== undefined
-                ? (cols[columnMapping.Type] || "").trim()
-                : "";
-            const email =
-              columnMapping.Email !== undefined
-                ? (cols[columnMapping.Email] || "").trim()
-                : "";
-            const amountStr =
-              columnMapping.Amount_To_Be_Paid !== undefined
-                ? (cols[columnMapping.Amount_To_Be_Paid] || "0").trim()
-                : "0";
-
-            if (!clientName || clientName === "") continue;
-
-            let type = "GST";
-            if (rawType) {
-              const lowerType = rawType.toLowerCase();
-              if (
-                lowerType.includes("it return") ||
-                lowerType.includes("itreturn") ||
-                lowerType === "it return"
-              ) {
-                type = "IT Return";
-              } else if (lowerType.includes("gst") || lowerType === "gst") {
-                type = "GST";
-              }
-            }
-
-            const amount = parseFloat(amountStr.replace(/[^\d.-]/g, ""));
-            if (isNaN(amount) || amount <= 0) continue;
-
-            if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-              email = "";
-            }
-
-            data.push({
-              Client_Name: clientName,
-              Type: type,
-              Email: email,
-              Amount_To_Be_Paid: amount,
-            });
-
-            if (data.length % batchSize === 0) {
-              console.log(`Processed ${data.length} records...`);
-              await delay(100);
-            }
-          }
-
-          return data;
-        };
-
-        console.log("Processing CSV data...");
-        const data = await processDataWithDelay(rows);
-
-        if (data.length === 0) {
-          alert("No valid data found in CSV file. Please check your data format.");
-          csvFileInputRef.current.value = "";
-          setIsImporting(false);
-          return;
-        }
-
-        console.log(`Importing ${data.length} records...`);
-
-        const sendInBatches = async (data, batchSize = 50) => {
-  const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-  let successCount = 0;
-  const maxRetries = 3;
-
-  for (let i = 0; i < data.length; i += batchSize) {
-    const batch = data.slice(i, i + batchSize);
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        console.log(
-          `Sending batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(data.length / batchSize)} (Attempt ${attempt})...`
-        );
-        const response = await axios.post(
-          `${BASE_URL}/import-csv`,
-          batch,
-          {
-            headers: {
-              Authorization: `Bearer ${sessionToken}`,
-              "Content-Type": "application/json",
-            },
-            params: { year: currentYear },
-            timeout: 30000,
-          }
-        );
-        successCount += batch.length;
-        console.log(`Batch ${Math.floor(i / batchSize) + 1} completed successfully`);
-        break; // Exit retry loop on success
-      } catch (error) {
-        console.error(`Error in batch ${Math.floor(i / batchSize) + 1} (Attempt ${attempt}):`, error);
-        if (
-          (error.response?.status === 429 ||
-           error.code === "ECONNABORTED" ||
-           error.code === "ERR_NETWORK") &&
-          attempt < maxRetries
-        ) {
-          const waitTime = 2000 * attempt;
-          console.log(`Retrying after ${waitTime}ms...`);
-          await delay(waitTime);
-          continue;
-        }
-        throw error; // Rethrow if max retries reached or other error
-      }
-    }
-    if (i + batchSize < data.length) {
-      await delay(500);
-    }
-  }
-  return successCount;
-};
-
-        const importedCount = await sendInBatches(data);
-        await Promise.all([
-          fetchClients(sessionToken),
-          fetchPayments(sessionToken, currentYear),
-        ]);
-        alert(`CSV import completed successfully! ${importedCount} records imported.`);
+      if (rows.length === 0) {
+        alert("CSV file is empty.");
         csvFileInputRef.current.value = "";
-        // setTimeout(() => {
-        //   window.location.reload();
-        // }, 2000);
-      } catch (error) {
-        console.error("Import CSV error:", error);
-        let errorMessage = "Failed to import CSV data: ";
-        if (error.response) {
-          errorMessage += error.response.data?.error || error.response.statusText;
-        } else if (error.request) {
-          errorMessage += "No response from server. Please check your connection.";
-        } else {
-          errorMessage += error.message;
-        }
-        alert(errorMessage);
-        handleSessionError(error);
-        csvFileInputRef.current.value = "";
-      } finally {
         setIsImporting(false);
+        return;
       }
-    };
 
-    reader.onerror = () => {
-      alert("Error reading file. Please try again.");
-      setIsImporting(false);
+      const detectColumns = (rows) => {
+        const sampleSize = Math.min(10, rows.length);
+        const columnData = [];
+
+        for (let i = 0; i < sampleSize; i++) {
+          const cols = parseCSVLine(rows[i]);
+          for (let j = 0; j < cols.length; j++) {
+            if (!columnData[j]) {
+              columnData[j] = {
+                values: [],
+                isNumeric: 0,
+                hasGST: 0,
+                hasITReturn: 0,
+                hasEmail: 0,
+                avgLength: 0,
+                containsNumbers: 0,
+                isName: 0,
+              };
+            }
+            columnData[j].values.push(cols[j]);
+          }
+        }
+
+        columnData.forEach((col, index) => {
+          let numericCount = 0;
+          let gstCount = 0;
+          let itReturnCount = 0;
+          let emailCount = 0;
+          let totalLength = 0;
+          let numberCount = 0;
+          let nameCount = 0;
+
+          col.values.forEach((value) => {
+            const val = value.toLowerCase().trim();
+            totalLength += val.length;
+
+            if (/^\d+(\.\d+)?$/.test(val) || /^\d+$/.test(val)) {
+              numericCount++;
+            }
+            if (val.includes("gst") || val === "gst") {
+              gstCount++;
+            }
+            if (
+              val.includes("it return") ||
+              val.includes("itreturn") ||
+              val === "it return" ||
+              val === "itreturn"
+            ) {
+              itReturnCount++;
+            }
+            if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
+              emailCount++;
+            }
+            if (/\d/.test(val)) {
+              numberCount++;
+            }
+            if (
+              val.split(" ").length >= 2 &&
+              !/^\d/.test(val) &&
+              val.length > 5
+            ) {
+              nameCount++;
+            }
+          });
+
+          col.isNumeric = numericCount / col.values.length;
+          col.hasGST = gstCount / col.values.length;
+          col.hasITReturn = itReturnCount / col.values.length;
+          col.hasEmail = emailCount / col.values.length;
+          col.avgLength = totalLength / col.values.length;
+          col.containsNumbers = numberCount / col.values.length;
+          col.isName = nameCount / col.values.length;
+        });
+
+        const columnTypes = {};
+        let amountIndex = -1;
+        let maxNumeric = 0;
+        columnData.forEach((col, index) => {
+          if (col.isNumeric > maxNumeric && col.isNumeric >= 0.7) {
+            maxNumeric = col.isNumeric;
+            amountIndex = index;
+          }
+        });
+        if (amountIndex !== -1) columnTypes.Amount_To_Be_Paid = amountIndex;
+
+        let typeIndex = -1;
+        let maxTypeScore = 0;
+        columnData.forEach((col, index) => {
+          const typeScore = col.hasGST + col.hasITReturn;
+          if (
+            typeScore > maxTypeScore &&
+            (col.hasGST > 0 || col.hasITReturn > 0)
+          ) {
+            maxTypeScore = typeScore;
+            typeIndex = index;
+          }
+        });
+        if (typeIndex !== -1) columnTypes.Type = typeIndex;
+
+        let emailIndex = -1;
+        let maxEmail = 0;
+        columnData.forEach((col, index) => {
+          if (col.hasEmail > maxEmail && col.hasEmail >= 0.3) {
+            maxEmail = col.hasEmail;
+            emailIndex = index;
+          }
+        });
+        if (emailIndex !== -1) columnTypes.Email = emailIndex;
+
+        let nameIndex = -1;
+        let maxNameScore = 0;
+        columnData.forEach((col, index) => {
+          if (!Object.values(columnTypes).includes(index)) {
+            const nameScore = col.isName + col.avgLength / 20;
+            if (nameScore > maxNameScore) {
+              maxNameScore = nameScore;
+              nameIndex = index;
+            }
+          }
+        });
+        if (nameIndex !== -1) columnTypes.Client_Name = nameIndex;
+
+        if (columnTypes.Client_Name === undefined) {
+          for (let i = 0; i < columnData.length; i++) {
+            if (!Object.values(columnTypes).includes(i)) {
+              columnTypes.Client_Name = i;
+              break;
+            }
+          }
+        }
+
+        return columnTypes;
+      };
+
+      console.log("Analyzing CSV structure...");
+      const columnMapping = detectColumns(rows);
+      console.log("Detected column mapping:", columnMapping);
+
+      if (columnMapping.Client_Name === undefined) {
+        alert(
+          "Could not detect Client Name column. Please ensure your CSV has client names."
+        );
+        csvFileInputRef.current.value = "";
+        setIsImporting(false);
+        return;
+      }
+
+      if (columnMapping.Amount_To_Be_Paid === undefined) {
+        alert(
+          "Could not detect Amount column. Please ensure your CSV has numeric amounts."
+        );
+        csvFileInputRef.current.value = "";
+        setIsImporting(false);
+        return;
+      }
+
+      const processDataWithDelay = async (rows, batchSize = 10) => {
+        const data = [];
+        const delay = (ms) =>
+          new Promise((resolve) => setTimeout(resolve, ms));
+
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i];
+          if (!row || row.trim() === "") continue;
+
+          const cols = parseCSVLine(row);
+          if (cols.length < 2) continue;
+
+          const clientName =
+            columnMapping.Client_Name !== undefined
+              ? (cols[columnMapping.Client_Name] || "").trim()
+              : "";
+          const rawType =
+            columnMapping.Type !== undefined
+              ? (cols[columnMapping.Type] || "").trim()
+              : "";
+          const email =
+            columnMapping.Email !== undefined
+              ? (cols[columnMapping.Email] || "").trim()
+              : "";
+          const amountStr =
+            columnMapping.Amount_To_Be_Paid !== undefined
+              ? (cols[columnMapping.Amount_To_Be_Paid] || "0").trim()
+              : "0";
+
+          if (!clientName || clientName === "") continue;
+
+          let type = "GST";
+          if (rawType) {
+            const lowerType = rawType.toLowerCase();
+            if (
+              lowerType.includes("it return") ||
+              lowerType.includes("itreturn") ||
+              lowerType === "it return"
+            ) {
+              type = "IT Return";
+            } else if (lowerType.includes("gst") || lowerType === "gst") {
+              type = "GST";
+            }
+          }
+
+          const amount = parseFloat(amountStr.replace(/[^\d.-]/g, ""));
+          if (isNaN(amount) || amount <= 0) continue;
+
+          if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            email = "";
+          }
+
+          data.push({
+            Client_Name: clientName,
+            Type: type,
+            Email: email,
+            Amount_To_Be_Paid: amount,
+            january: 0,
+            february: 0,
+            march: 0,
+            april: 0,
+            may: 0,
+            june: 0,
+            july: 0,
+            august: 0,
+            september: 0,
+            october: 0,
+            november: 0,
+            december: 0,
+            Due_Payment: amount,
+          });
+
+          if (data.length % batchSize === 0) {
+            console.log(`Processed ${data.length} records...`);
+            await delay(100);
+          }
+        }
+
+        return data;
+      };
+
+      console.log("Processing CSV data...");
+      const data = await processDataWithDelay(rows);
+
+      if (data.length === 0) {
+        alert(
+          "No valid data found in CSV file. Please check your data format."
+        );
+        csvFileInputRef.current.value = "";
+        setIsImporting(false);
+        return;
+      }
+
+      console.log(`Importing ${data.length} records...`);
+
+      const sendInBatches = async (data, batchSize = 50) => {
+        const delay = (ms) =>
+          new Promise((resolve) => setTimeout(resolve, ms));
+        let successCount = 0;
+        const maxRetries = 3;
+
+        for (let i = 0; i < data.length; i += batchSize) {
+          const batch = data.slice(i, i + batchSize);
+          for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+              console.log(
+                `Sending batch ${
+                  Math.floor(i / batchSize) + 1
+                }/${Math.ceil(data.length / batchSize)} (Attempt ${attempt})...`
+              );
+              const response = await axios.post(
+                `${BASE_URL}/import-csv`,
+                batch,
+                {
+                  headers: {
+                    Authorization: `Bearer ${sessionToken}`,
+                    "Content-Type": "application/json",
+                  },
+                  params: { year: currentYear },
+                  timeout: 30000,
+                }
+              );
+              successCount += batch.length;
+              console.log(
+                `Batch ${Math.floor(i / batchSize) + 1} completed successfully`
+              );
+              break;
+            } catch (error) {
+              console.error(
+                `Error in batch ${
+                  Math.floor(i / batchSize) + 1
+                } (Attempt ${attempt}):`,
+                error
+              );
+              if (
+                (error.response?.status === 429 ||
+                 error.code === "ECONNABORTED" ||
+                 error.code === "ERR_NETWORK") &&
+                attempt < maxRetries
+              ) {
+                const waitTime = 2000 * attempt;
+                console.log(`Retrying after ${waitTime}ms...`);
+                await delay(waitTime);
+                continue;
+              }
+              throw error;
+            }
+          }
+          if (i + batchSize < data.length) {
+            await delay(500);
+          }
+        }
+        return successCount;
+      };
+
+      const importedCount = await sendInBatches(data);
+
+      // Wait 2 seconds to ensure server data is updated
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      setErrorMessage(
+        `CSV import completed successfully! ${importedCount} records imported. Reloading page...`
+      );
       csvFileInputRef.current.value = "";
-    };
 
-    reader.readAsText(file);
+      // Trigger page reload
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000); // Delay reload to allow user to see success message
+    } catch (error) {
+      console.error("Import CSV error:", error);
+      let errorMessage = "Failed to import CSV data: ";
+      if (error.response) {
+        errorMessage +=
+          error.response.data?.error || error.response.statusText;
+      } else if (error.request) {
+        errorMessage += "No response from server. Please check your connection.";
+      } else {
+        errorMessage += error.message;
+      }
+      setErrorMessage(errorMessage);
+      handleSessionError(error);
+      csvFileInputRef.current.value = "";
+    } finally {
+      setIsImporting(false);
+    }
   };
+
+  reader.onerror = () => {
+    setErrorMessage("Error reading file. Please try again.");
+    setIsImporting(false);
+    csvFileInputRef.current.value = "";
+  };
+
+  reader.readAsText(file);
+};
 
 const updatePayment = async (rowIndex, month, value, year = currentYear) => {
   console.log("updatePayment called:", { rowIndex, month, value, year });
