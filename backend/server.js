@@ -104,6 +104,64 @@ const getPaymentSheetName = (year) => `Payments_${year}`;
 // Helper: Delay function for retry logic
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+async function ensureSheet(sheetName, headers, year = null) {
+  const sheets = google.sheets({ version: "v4", auth });
+  try {
+    const actualSheetName = year ? getPaymentSheetName(year) : sheetName;
+    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
+    const sheetExists = spreadsheet.data.sheets.some(
+      (sheet) => sheet.properties.title === actualSheetName
+    );
+    if (!sheetExists) {
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          requests: [{ addSheet: { properties: { title: actualSheetName } } }],
+        },
+      });
+      const sheetHeaders = sheetName === "Clients"
+        ? ["User", "Client_Name", "Email", "Type", "Monthly_Payment", "Phone_Number"]
+        : sheetName === "Types"
+        ? ["Type", "User"]
+        : headers;
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `${actualSheetName}!A1`,
+        valueInputOption: "RAW",
+        resource: { values: [sheetHeaders] },
+      });
+    } else if (sheetName === "Users") {
+      const existingHeaders = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: `${sheetName}!A1:C1`,
+      });
+      if (!existingHeaders.data.values[0].includes("GoogleEmail")) {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: `${sheetName}!A1`,
+          valueInputOption: "RAW",
+          resource: { values: [["Username", "Password", "GoogleEmail"]] },
+        });
+      }
+    } else if (sheetName === "Types") {
+      const existingHeaders = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: `${sheetName}!A1:B1`,
+      });
+      if (!existingHeaders.data.values || existingHeaders.data.values[0][1] !== "User") {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: `${sheetName}!A1:B1`,
+          valueInputOption: "RAW",
+          resource: { values: [["Type", "User"]] },
+        });
+      }
+    }
+  } catch (error) {
+    console.error(`Error ensuring sheet ${sheetName}${year ? "_" + year : ""}:`, error.message);
+    throw error;
+  }
+}
 // Helper: Ensure sheet exists with headers
 async function ensureTypesSheet() {
   const sheets = google.sheets({ version: "v4", auth });
@@ -139,33 +197,6 @@ async function ensureTypesSheet() {
           resource: { values: [["Type", "User"]] },
         });
       }
-    }
-  } catch (error) {
-    console.error("Error ensuring Types sheet:", error.message);
-    throw error;
-  }
-}
-
-async function ensureTypesSheet() {
-  const sheets = google.sheets({ version: "v4", auth });
-  try {
-    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
-    const sheetExists = spreadsheet.data.sheets.some(
-      (sheet) => sheet.properties.title === "Types"
-    );
-    if (!sheetExists) {
-      await sheets.spreadsheets.batchUpdate({
-        spreadsheetId,
-        requestBody: {
-          requests: [{ addSheet: { properties: { title: "Types" } } }],
-        },
-      });
-      await sheets.spreadsheets.values.update({
-        spreadsheetId,
-        range: "Types!A1",
-        valueInputOption: "RAW",
-        resource: { values: [["Type"]] },
-      });
     }
   } catch (error) {
     console.error("Error ensuring Types sheet:", error.message);
