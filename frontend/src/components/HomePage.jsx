@@ -512,13 +512,18 @@ const [newType, setNewType] = useState("");
     };
   }, []);
 
-  const handleAddType = async () => {
+const handleAddType = async () => {
+  console.log('HomePage.jsx: handleAddType called with type:', newType);
   if (!newType.trim()) {
-    setLocalErrorMessage("Type name cannot be empty.");
+    setLocalErrorMessage('Type name cannot be empty.');
+    return;
+  }
+  if (newType.trim().length > 50) {
+    setLocalErrorMessage('Type name must be 50 characters or less.');
     return;
   }
   try {
-    console.log("HomePage.jsx: Adding new type:", newType);
+    console.log('HomePage.jsx: Sending POST to /api/add-type');
     await axios.post(
       `${BASE_URL}/add-type`,
       { type: newType.trim() },
@@ -527,14 +532,26 @@ const [newType, setNewType] = useState("");
         timeout: 10000,
       }
     );
-    setNewType("");
+    setNewType('');
     setIsTypeModalOpen(false);
-    alert("Type added successfully.");
+    setLocalErrorMessage('');
     const cacheKey = `types_${sessionToken}`;
     delete apiCacheRef.current[cacheKey];
+    console.log('HomePage.jsx: Types cache cleared, key:', cacheKey);
+    const typesResponse = await axios.get(`${BASE_URL}/get-types`, {
+      headers: { Authorization: `Bearer ${sessionToken}` },
+      timeout: 10000,
+    });
+    setCachedData(cacheKey, typesResponse.data);
+    console.log('HomePage.jsx: Types cache updated with:', typesResponse.data);
+    alert('Type added successfully.');
   } catch (error) {
-    console.error("HomePage.jsx: Error adding type:", error);
-    setLocalErrorMessage(`Failed to add type: ${error.response?.data?.error || error.message}`);
+    console.error('HomePage.jsx: Error adding type:', error);
+    const errorMsg = error.response?.data?.error || error.message;
+    setLocalErrorMessage(`Failed to add type: ${errorMsg}`);
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      setPage('login');
+    }
   }
 };
 
@@ -562,9 +579,15 @@ const [newType, setNewType] = useState("");
   }, [hideContextMenu]);
 
   {isTypeModalOpen && (
-  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+  <div
+    className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    onClick={() => console.log('HomePage.jsx: Modal background rendered')}
+  >
     <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
       <h2 className="text-lg font-semibold mb-4">Add New Type</h2>
+      {localErrorMessage && (
+        <p className="text-red-500 mb-4 text-sm">{localErrorMessage}</p>
+      )}
       <input
         type="text"
         value={newType}
@@ -574,13 +597,21 @@ const [newType, setNewType] = useState("");
       />
       <div className="flex justify-end gap-2">
         <button
-          onClick={() => setIsTypeModalOpen(false)}
+          onClick={() => {
+            console.log('HomePage.jsx: Cancel button clicked');
+            setIsTypeModalOpen(false);
+            setNewType('');
+            setLocalErrorMessage('');
+          }}
           className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
         >
           Cancel
         </button>
         <button
-          onClick={handleAddType}
+          onClick={() => {
+            console.log('HomePage.jsx: Add Type submit button clicked');
+            handleAddType();
+          }}
           className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700"
         >
           Add Type
@@ -690,11 +721,21 @@ const [newType, setNewType] = useState("");
                 <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
   Type
   <button
-    onClick={() => setIsTypeModalOpen(true)}
+    onClick={() => {
+      console.log('HomePage.jsx: Add Type button clicked');
+      setIsTypeModalOpen(true);
+    }}
     className="ml-2 text-blue-600 hover:text-blue-800 text-xs"
     title="Add New Type"
   >
-    <i className="fas fa-plus-circle"></i>
+    <span className="inline-flex items-center">
+      {typeof window !== 'undefined' && window.FontAwesome ? (
+        <i className="fas fa-plus-circle mr-1"></i>
+      ) : (
+        <span className="mr-1">+</span>
+      )}
+      Add Type
+    </span>
   </button>
 </th>
                 <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
