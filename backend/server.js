@@ -1586,6 +1586,20 @@ app.get("/api/debug-routes", (req, res) => {
   });
 });
 
+app.post("/api/logout", authenticateToken, async (req, res) => {
+  const username = req.user.username;
+  try {
+    // Invalidate token (e.g., add to a blacklist or clear from storage)
+    console.log(`Logging out user ${username}`);
+    // If using a token blacklist, store the token in a database or cache
+    // For simplicity, we'll assume the client clears the token
+    res.json({ message: "Logged out successfully" });
+  } catch (error) {
+    console.error("Logout error:", error.message);
+    res.status(500).json({ error: "Failed to logout" });
+  }
+});
+
 app.post('/api/add-type', authenticateToken, async (req, res) => {
   let { type } = req.body;
   const username = req.user.username;

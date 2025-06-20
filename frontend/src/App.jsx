@@ -32,24 +32,25 @@ const App = () => {
   const [types, setTypes] = useState([]);
 
 const fetchTypes = async (token) => {
-  const cacheKey = `types_${token}`;
+  if (!token || !currentUser) return;
+  const cacheKey = `types_${currentUser}_${token}`;
   if (apiCacheRef.current[cacheKey] && Date.now() - apiCacheRef.current[cacheKey].timestamp < CACHE_DURATION) {
-    console.log("App.jsx: Using cached types");
+    console.log(`App.jsx: Using cached types for ${currentUser}`);
     setTypes(apiCacheRef.current[cacheKey].data);
     return;
   }
   try {
-    console.log("Fetching types with token:", token?.substring(0, 10) + "...");
+    console.log(`App.jsx: Fetching types for ${currentUser} with token:`, token?.substring(0, 10) + "...");
     const response = await axios.get(`${BASE_URL}/get-types`, {
       headers: { Authorization: `Bearer ${token}` },
       timeout: 10000,
     });
     const typesData = Array.isArray(response.data) ? response.data : [];
-    console.log("Types fetched:", typesData);
+    console.log(`App.jsx: Types fetched for ${currentUser}:`, typesData);
     setTypes(typesData);
     apiCacheRef.current[cacheKey] = { data: typesData, timestamp: Date.now() };
   } catch (error) {
-    console.error("Fetch types error:", error.response?.data?.error || error.message);
+    console.error(`App.jsx: Fetch types error for ${currentUser}:`, error.response?.data?.error || error.message);
     setTypes([]);
     handleSessionError(error);
   }
@@ -231,19 +232,27 @@ useEffect(() => {
   };
 
   const logout = () => {
-    console.log("Logging out user:", currentUser);
-    setCurrentUser(null);
-    setSessionToken(null);
-    localStorage.removeItem("currentUser");
-    localStorage.removeItem("sessionToken");
-    localStorage.removeItem("currentPage");
-    localStorage.removeItem("availableYears");
-    localStorage.removeItem("currentYear");
-    setClientsData([]);
-    setPaymentsData([]);
-    setPage("signIn");
-    setIsProfileMenuOpen(false);
-  };
+  console.log("Logging out user:", currentUser);
+  setCurrentUser(null);
+  setSessionToken(null);
+  localStorage.removeItem("currentUser");
+  localStorage.removeItem("sessionToken");
+  localStorage.removeItem("currentPage");
+  localStorage.removeItem("availableYears");
+  localStorage.removeItem("currentYear");
+  setClientsData([]);
+  setPaymentsData([]);
+  setTypes([]); // Clear types state
+  apiCacheRef.current = {}; // Clear cache
+  setPage("signIn");
+  setIsProfileMenuOpen(false);
+  // Invalidate token on backend
+  axios.post(`${BASE_URL}/logout`, {}, {
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  }).catch(error => {
+    console.error("Logout API error:", error.message);
+  });
+};
 
   const handleContextMenu = (e, rowIndex) => {
     e.preventDefault();
@@ -291,9 +300,21 @@ useEffect(() => {
 const importCsv = async (e) => {
   const file = e.target.files[0];
   if (!file) return;
+  if (!sessionToken || !currentUser) {
+    setErrorMessage("Please sign in to import CSV.");
+    return;
+  }
   setIsImporting(true);
   setErrorMessage("");
   try {
+    // Refresh types before import
+    await fetchTypes(sessionToken);
+    if (!types.length) {
+      throw new Error(`No types available for user ${currentUser}. Add types first.`);
+    }
+    const capitalizedTypes = types.map(type => type.toUpperCase());
+    console.log(`App.jsx: Valid types for ${currentUser}:`, capitalizedTypes);
+
     const text = await file.text();
     const rows = text.split('\n').filter(row => row.trim()).map(row => {
       const cols = row.split(',').map(cell => cell.trim().replace(/^"|"$/g, ''));
@@ -302,7 +323,6 @@ const importCsv = async (e) => {
     if (rows.length === 0) {
       throw new Error('CSV file is empty.');
     }
-    const capitalizedTypes = types.map(type => type.toUpperCase()); // User-specific types
     const records = [];
     const errors = [];
     rows.forEach((row, index) => {
