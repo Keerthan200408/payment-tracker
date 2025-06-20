@@ -567,7 +567,7 @@ const handleAddType = async () => {
           }
         );
         console.log(`HomePage.jsx: Added ${capitalizedType} for ${currentUser}`, response.data);
-        setNewTypeModalOpen(false);
+        setIsTypeModalOpen(false);
         setSearchQuery("");
         setLocalErrorMessage("");
         const cacheKey = `types_${sessionToken}`;
