@@ -647,62 +647,100 @@ app.post("/api/add-client", authenticateToken, async (req, res) => {
   }
 });
 
-app.put("/api/update-client", authenticateToken, async (req, res) => {
+// Update Client
+app.put('/api/update-client', authenticateToken, async (req, res) => {
   const { oldClient, newClient } = req.body;
   const year = new Date().getFullYear().toString();
   if (!oldClient || !newClient || !oldClient.Client_Name || !oldClient.Type || !newClient.Client_Name || !newClient.Type || !newClient.Amount_To_Be_Paid) {
-    return res.status(400).json({ error: "Missing required fields" });
+    return res.status(400).json({ error: 'All required fields must be provided' });
   }
-  const amount = parseFloat(newClient.Amount_To_Be_Paid);
-  if (isNaN(amount) || amount <= 0) {
-    return res.status(400).json({ error: "Invalid payment amount" });
+  let { Client_Name: oldClientName, Type: oldType } = oldClient;
+  let { Client_Name, Type, Amount_To_Be_Paid, Email, Phone_Number } = newClient;
+  oldClientName = sanitizeInput(oldClientName);
+  oldType = sanitizeInput(oldType);
+  Client_Name = sanitizeInput(Client_Name);
+  Type = sanitizeInput(Type);
+  Email = Email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(Email) ? sanitizeInput(Email) : '';
+  Phone_Number = Phone_Number && /^\+?[\d\s-]{10,15}$/.test(Phone_Number) ? sanitizeInput(Phone_Number) : '';
+  const paymentValue = parseFloat(Amount_To_Be_Paid);
+  if (isNaN(paymentValue) || paymentValue <= 0) {
+    return res.status(400).json({ error: 'Amount to be paid must be a positive number' });
   }
-  if (newClient.Client_Name.length > 100 || newClient.Type.length > 50) {
-    return res.status(400).json({ error: "Client name or type too long" });
+  if (paymentValue > 1000000) {
+    return res.status(400).json({ error: 'Amount to be paid exceeds maximum limit of 1,000,000' });
   }
-  if (newClient.Email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newClient.Email)) {
-    return res.status(400).json({ error: "Invalid email address" });
+  if (Client_Name.length > 100 || Type.length > 50) {
+    return res.status(400).json({ error: 'Client name or type too long' });
   }
-  if (newClient.Phone_Number && !/^\+?[\d\s-]{10,15}$/.test(newClient.Phone_Number)) {
-    return res.status(400).json({ error: "Invalid phone number format" });
-  }
-  if (!["GST", "IT Return"].includes(newClient.Type)) {
+  if (!['GST', 'IT Return'].includes(Type)) {
     return res.status(400).json({ error: 'Type must be either "GST" or "IT Return"' });
   }
   try {
-    const clients = await readSheet("Clients", "A2:F");
-    const clientIndex = clients.findIndex(
-      (client) => client[0] === req.user.username && client[1] === oldClient.Client_Name && client[3] === oldClient.Type
-    );
+    await retryWithBackoff(() => ensureSheet('Clients', ['User', 'Client_Name', 'Email', 'Type', 'Monthly_Payment', 'Phone_Number']));
+    let clients = await retryWithBackoff(() => readSheet('Clients', 'A2:F'));
+    if (!Array.isArray(clients)) {
+      console.error('Invalid clients data structure:', clients);
+      return res.status(500).json({ error: 'Invalid client data in sheet' });
+    }
+    const clientIndex = clients.findIndex(client => client && Array.isArray(client) && client[0] === req.user.username && client[1] === oldClientName && client[3] === oldType);
     if (clientIndex === -1) {
-      return res.status(404).json({ error: "Client not found" });
+      return res.status(404).json({ error: 'Client not found' });
     }
-    clients[clientIndex] = [
-      req.user.username,
-      newClient.Client_Name,
-      newClient.Email || "",
-      newClient.Type,
-      amount,
-      newClient.Phone_Number || "",
-    ];
-    await updateSheet("Clients", "A2:F", clients);
-
-    const payments = await readSheet(getPaymentSheetName(year), "A2:R");
-    const paymentIndex = payments.findIndex(
-      (payment) => payment[0] === req.user.username && payment[1] === oldClient.Client_Name && payment[2] === oldClient.Type
-    );
-    if (paymentIndex !== -1) {
-      payments[paymentIndex][1] = newClient.Client_Name;
-      payments[paymentIndex][2] = newClient.Type;
-      payments[paymentIndex][3] = amount;
-      payments[paymentIndex][16] = amount; // Update Due_Payment
-      await updateSheet(getPaymentSheetName(year), "A2:R", payments);
+    clients[clientIndex] = [req.user.username, Client_Name, Email, Type, paymentValue, Phone_Number];
+    console.log(`Updating Clients sheet with ${clients.length} rows`);
+    await retryWithBackoff(() => writeSheet('Clients', 'A2:F', clients));
+    const paymentSheets = (await google.sheets({ version: 'v4', auth }).spreadsheets.get({ spreadsheetId })).data.sheets
+      .filter(sheet => sheet.properties.title.startsWith('Payments_'))
+      .map(sheet => sheet.properties.title);
+    for (const sheetName of paymentSheets) {
+      const sheetYear = sheetName.split('_')[1];
+      await retryWithBackoff(() => ensureSheet('Payments', ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment'], sheetYear));
+      let payments = await retryWithBackoff(() => readSheet(sheetName, 'A2:R'));
+      if (!Array.isArray(payments)) {
+        console.error(`Invalid payments data structure for ${sheetName}:`, payments);
+        continue;
+      }
+      const paymentIndex = payments.findIndex(payment => payment && Array.isArray(payment) && payment[0] === req.user.username && payment[1] === oldClientName && payment[2] === oldType);
+      if (paymentIndex !== -1) {
+        const monthlyPayments = payments[paymentIndex].slice(4, 16);
+        const amountToBePaid = paymentValue;
+        const activeMonths = monthlyPayments.filter(m => m && parseFloat(m) >= 0).length;
+        const expectedPayment = amountToBePaid * activeMonths;
+        const totalPayments = monthlyPayments.reduce((sum, m) => sum + (parseFloat(m) || 0), 0);
+        let currentYearDuePayment = Math.max(expectedPayment - totalPayments, 0);
+        let prevYearCumulativeDue = 0;
+        if (parseInt(sheetYear) > 2025) {
+          const prevYear = (parseInt(sheetYear) - 1).toString();
+          try {
+            const prevPayments = await readSheet(getPaymentSheetName(prevYear), 'A2:R');
+            const prevPayment = prevPayments.find(p => p && Array.isArray(p) && p[0] === req.user.username && p[1] === oldClientName && p[2] === oldType);
+            prevYearCumulativeDue = prevPayment && prevPayment[16] ? parseFloat(prevPayment[16]) || 0 : 0;
+          } catch (error) {
+            console.warn(`No data found for previous year ${prevYear}:`, error.message);
+          }
+        }
+        payments[paymentIndex] = [
+          req.user.username,
+          Client_Name,
+          Type,
+          paymentValue,
+          ...monthlyPayments,
+          (currentYearDuePayment + prevYearCumulativeDue).toFixed(2)
+        ];
+        console.log(`Updating ${sheetName} with ${payments.length} rows`);
+        await retryWithBackoff(() => writeSheet(sheetName, 'A2:R', payments));
+      }
     }
-
-    res.status(200).json({ message: "Client updated successfully" });
+    res.json({ message: 'Client updated successfully' });
   } catch (error) {
-    console.error("Update client error:", error.message);
-    res.status(500).json({ error: "Internal server error" });
+    console.error('Update client error:', {
+      message: error.message,
+      stack: error.stack,
+      oldClient,
+      newClient,
+      user: req.user.username
+    });
+    res.status(500).json({ error: `Failed to update client: ${error.message}` });
   }
 });
 
