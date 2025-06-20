@@ -38,6 +38,7 @@ const HomePage = ({
   handleYearChange = () => {},
   setErrorMessage = () => {},
   apiCacheRef = useRef({}), // Default to new ref if not provided
+  currentUser = null,
   onMount = () => {},
   fetchTypes = () => {},
 }) => {
@@ -546,44 +547,42 @@ const HomePage = ({
   }, []);
 
 const handleAddType = async () => {
-    console.log("HomePage.jsx: handleAddType called with type:", newType);
-    if (!newType.trim()) {
-      setLocalErrorMessage("Type name cannot be empty.");
-      return;
-    }
-    if (newType.trim().length > 50) {
-      setLocalErrorMessage("Type name must be 50 characters or less.");
-      return;
-    }
-    const capitalizedType = newType.trim().toUpperCase();
-    try {
-      console.log("HomePage.jsx: Sending POST to /api/add-type with type:", capitalizedType);
-      await axios.post(
-        `${BASE_URL}/add-type`,
-        { type: capitalizedType },
-        {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-          timeout: 10000,
-        }
-      );
-      setNewType("");
-      setIsTypeModalOpen(false);
-      setLocalErrorMessage("");
-      const cacheKey = `types_${sessionToken}`;
-      delete apiCacheRef.current[cacheKey];
-      console.log("HomePage.jsx: Types cache cleared, key:", cacheKey);
-      await fetchTypes(); // Call fetchTypes prop
-      console.log("HomePage.jsx: Types state updated via fetchTypes");
-      alert(`Type ${capitalizedType} added successfully.`);
-    } catch (error) {
-      console.error("HomePage.jsx: Error adding type:", error);
-      const errorMsg = error.response?.data?.error || error.message;
-      setLocalErrorMessage(errorMsg === "Type already exists" ? "Type already exists." : `Failed to add type: ${errorMsg}`);
-      if (error.response?.status === 401 || error.response?.status === 403) {
-        setPage("login");
+      console.log(`HomePage.jsx: type: ${newType}, user: ${currentUser}`);
+      if (!newType.trim()) {
+        setLocalErrorMessage("Type name cannot be empty.");
+        return;
       }
-    }
-  };
+      if (newType.trim().length > 50) {
+        setLocalErrorMessage("Type name too long.");
+        return;
+      }
+      const capitalizedType = newType.trim().toUpperCase();
+      try {
+        const response = await axios.post(
+          `${BASE_URL}/add-type`,
+          { type: capitalizedType },
+          {
+            headers: { Authorization: `Bearer ${sessionToken}` },
+            timeout: 2000,
+          }
+        );
+        console.log(`HomePage.jsx: Added ${capitalizedType} for ${currentUser}`, response.data);
+        setNewTypeModalOpen(false);
+        setSearchQuery("");
+        setLocalErrorMessage("");
+        const cacheKey = `types_${sessionToken}`;
+        delete apiCacheRef.current[cacheKey];
+        await fetchTypes();
+        alert(`Type ${capitalizedType} added successfully.`);
+      } catch (error) {
+        console.error(`HomePage.jsx: Error adding type for ${currentUser}:`, error);
+        const errorMsg = error.response?.data?.error || error.message;
+        setLocalErrorMessage(errorMsg === "Type already exists for this user" ? "This type already exists." : `Failed to add type: ${errorMsg}`);
+        if (error.response?.status === 401 || errorMsg.includes("Invalid token")) {
+          setPage("signIn");
+        }
+      }
+    };
 
   // Updated useEffect for fetching years
   useEffect(() => {

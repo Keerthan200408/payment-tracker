@@ -105,46 +105,43 @@ const getPaymentSheetName = (year) => `Payments_${year}`;
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Helper: Ensure sheet exists with headers
-async function ensureSheet(sheetName, headers, year = null) {
+async function ensureTypesSheet() {
   const sheets = google.sheets({ version: "v4", auth });
   try {
-    const actualSheetName = year ? getPaymentSheetName(year) : sheetName;
     const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
     const sheetExists = spreadsheet.data.sheets.some(
-      (sheet) => sheet.properties.title === actualSheetName
+      (sheet) => sheet.properties.title === "Types"
     );
     if (!sheetExists) {
       await sheets.spreadsheets.batchUpdate({
         spreadsheetId,
         requestBody: {
-          requests: [{ addSheet: { properties: { title: actualSheetName } } }],
+          requests: [{ addSheet: { properties: { title: "Types" } } }],
         },
       });
-      const sheetHeaders = sheetName === "Clients"
-        ? ["User", "Client_Name", "Email", "Type", "Monthly_Payment", "Phone_Number"]
-        : headers;
       await sheets.spreadsheets.values.update({
         spreadsheetId,
-        range: `${actualSheetName}!A1`,
+        range: "Types!A1:B1",
         valueInputOption: "RAW",
-        resource: { values: [sheetHeaders] },
+        resource: { values: [["Type", "User"]] },
       });
-    } else if (sheetName === "Users") {
+    } else {
+      // Ensure headers include User column
       const existingHeaders = await sheets.spreadsheets.values.get({
         spreadsheetId,
-        range: `${sheetName}!A1:C1`,
+        range: "Types!A1:B1",
       });
-      if (!existingHeaders.data.values[0].includes("GoogleEmail")) {
+      if (!existingHeaders.data.values || existingHeaders.data.values[0][1] !== "User") {
         await sheets.spreadsheets.values.update({
           spreadsheetId,
-          range: `${sheetName}!A1`,
+          range: "Types!A1:B1",
           valueInputOption: "RAW",
-          resource: { values: [["Username", "Password", "GoogleEmail"]] },
+          resource: { values: [["Type", "User"]] },
         });
       }
     }
   } catch (error) {
-    console.error(`Error ensuring sheet ${sheetName}${year ? "_" + year : ""}:`, error.message);
+    console.error("Error ensuring Types sheet:", error.message);
     throw error;
   }
 }
@@ -612,6 +609,7 @@ app.get('/api/get-clients', authenticateToken, async (req, res) => {
 app.post("/api/add-client", authenticateToken, async (req, res) => {
   let { clientName, email, type, monthlyPayment, phoneNumber } = req.body;
   const year = new Date().getFullYear().toString();
+  const username = req.user.username;
   const paymentValue = parseFloat(monthlyPayment);
   if (clientName.length > 100 || type.length > 50) {
     return res.status(400).json({ error: "Client name or type too long" });
@@ -623,7 +621,7 @@ app.post("/api/add-client", authenticateToken, async (req, res) => {
     return res.status(400).json({ error: "Client name, type, and monthly payment are required" });
   }
   clientName = sanitizeInput(clientName);
-  type = sanitizeInput(type);
+  type = sanitizeInput(type.trim().toUpperCase()); // Capitalize type
   email = email ? sanitizeInput(email) : "";
   phoneNumber = phoneNumber ? sanitizeInput(phoneNumber) : "";
   if (isNaN(paymentValue) || paymentValue <= 0) {
@@ -637,9 +635,10 @@ app.post("/api/add-client", authenticateToken, async (req, res) => {
   }
   try {
     await ensureTypesSheet();
-    const validTypes = await readSheet("Types", "A2:A");
-    if (!validTypes.some((t) => t[0] === type)) {
-      return res.status(400).json({ error: `Type must be one of: ${validTypes.map((t) => t[0]).join(", ")}` });
+    const validTypes = await readSheet("Types", "A2:B");
+    const userTypes = validTypes.filter(t => t[1] === username).map(t => t[0]);
+    if (!userTypes.includes(type)) {
+      return res.status(400).json({ error: `Type must be one of: ${userTypes.join(", ")}` });
     }
     await ensureSheet("Clients", ["User", "Client_Name", "Email", "Type", "Monthly_Payment", "Phone_Number"]);
     await ensureSheet(
@@ -665,14 +664,18 @@ app.post("/api/add-client", authenticateToken, async (req, res) => {
       ],
       year
     );
-    await appendSheet("Clients", [[req.user.username, clientName, email, type, paymentValue, phoneNumber]]);
+    await appendSheet("Clients", [[username, clientName, email, type, paymentValue, phoneNumber]]);
     await appendSheet(getPaymentSheetName(year), [
-      [req.user.username, clientName, type, paymentValue, "", "", "", "", "", "", "", "", "", "", "", "", paymentValue],
+      [username, clientName, type, paymentValue, "", "", "", "", "", "", "", "", "", "", "", "", paymentValue],
     ]);
     res.status(201).json({ message: "Client added successfully" });
   } catch (error) {
-    console.error("Add client error:", error.message);
-    res.status(500).json({ error: "Internal server error" });
+    console.error("Add client error:", {
+      message: error.message,
+      stack: error.stack,
+      username,
+    });
+    res.status(500).json({ error: `Failed to add client: ${error.message}` });
   }
 });
 
@@ -680,15 +683,16 @@ app.post("/api/add-client", authenticateToken, async (req, res) => {
 app.put('/api/update-client', authenticateToken, async (req, res) => {
   const { oldClient, newClient } = req.body;
   const year = new Date().getFullYear().toString();
+  const username = req.user.username;
   if (!oldClient || !newClient || !oldClient.Client_Name || !oldClient.Type || !newClient.Client_Name || !newClient.Type || !newClient.Amount_To_Be_Paid) {
     return res.status(400).json({ error: 'All required fields must be provided' });
   }
   let { Client_Name: oldClientName, Type: oldType } = oldClient;
   let { Client_Name, Type, Amount_To_Be_Paid, Email, Phone_Number } = newClient;
   oldClientName = sanitizeInput(oldClientName);
-  oldType = sanitizeInput(oldType);
+  oldType = sanitizeInput(oldType.trim().toUpperCase());
   Client_Name = sanitizeInput(Client_Name);
-  Type = sanitizeInput(Type);
+  Type = sanitizeInput(Type.trim().toUpperCase());
   Email = Email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(Email) ? sanitizeInput(Email) : '';
   Phone_Number = Phone_Number && /^\+?[\d\s-]{10,15}$/.test(Phone_Number) ? sanitizeInput(Phone_Number) : '';
   const paymentValue = parseFloat(Amount_To_Be_Paid);
@@ -703,9 +707,10 @@ app.put('/api/update-client', authenticateToken, async (req, res) => {
   }
   try {
     await ensureTypesSheet();
-    const validTypes = await readSheet("Types", "A2:A");
-    if (!validTypes.some((t) => t[0] === Type)) {
-      return res.status(400).json({ error: `Type must be one of: ${validTypes.map((t) => t[0]).join(", ")}` });
+    const validTypes = await readSheet("Types", "A2:B");
+    const userTypes = validTypes.filter(t => t[1] === username).map(t => t[0]);
+    if (!userTypes.includes(Type)) {
+      return res.status(400).json({ error: `Type must be one of: ${userTypes.join(", ")}` });
     }
     await retryWithBackoff(() => ensureSheet('Clients', ['User', 'Client_Name', 'Email', 'Type', 'Monthly_Payment', 'Phone_Number']));
     let clients = await retryWithBackoff(() => readSheet('Clients', 'A2:F'));
@@ -713,11 +718,11 @@ app.put('/api/update-client', authenticateToken, async (req, res) => {
       console.error('Invalid clients data structure:', clients);
       return res.status(500).json({ error: 'Invalid client data in sheet' });
     }
-    const clientIndex = clients.findIndex(client => client && Array.isArray(client) && client[0] === req.user.username && client[1] === oldClientName && client[3] === oldType);
+    const clientIndex = clients.findIndex(client => client && Array.isArray(client) && client[0] === username && client[1] === oldClientName && client[3] === oldType);
     if (clientIndex === -1) {
       return res.status(404).json({ error: 'Client not found' });
     }
-    clients[clientIndex] = [req.user.username, Client_Name, Email, Type, paymentValue, Phone_Number];
+    clients[clientIndex] = [username, Client_Name, Email, Type, paymentValue, Phone_Number];
     console.log(`Updating Clients sheet with ${clients.length} rows`);
     await retryWithBackoff(() => writeSheet('Clients', 'A2:F', clients));
     const paymentSheets = (await google.sheets({ version: 'v4', auth }).spreadsheets.get({ spreadsheetId })).data.sheets
@@ -731,7 +736,7 @@ app.put('/api/update-client', authenticateToken, async (req, res) => {
         console.error(`Invalid payments data structure for ${sheetName}:`, payments);
         continue;
       }
-      const paymentIndex = payments.findIndex(payment => payment && Array.isArray(payment) && payment[0] === req.user.username && payment[1] === oldClientName && payment[2] === oldType);
+      const paymentIndex = payments.findIndex(payment => payment && Array.isArray(payment) && payment[0] === username && payment[1] === oldClientName && payment[2] === oldType);
       if (paymentIndex !== -1) {
         const monthlyPayments = payments[paymentIndex].slice(4, 16);
         const amountToBePaid = paymentValue;
@@ -744,14 +749,14 @@ app.put('/api/update-client', authenticateToken, async (req, res) => {
           const prevYear = (parseInt(sheetYear) - 1).toString();
           try {
             const prevPayments = await readSheet(getPaymentSheetName(prevYear), 'A2:R');
-            const prevPayment = prevPayments.find(p => p && Array.isArray(p) && p[0] === req.user.username && p[1] == oldClientName && p[2] === oldType);
+            const prevPayment = prevPayments.find(p => p && Array.isArray(p) && p[0] === username && p[1] == oldClientName && p[2] === oldType);
             prevYearCumulativeDue = prevPayment && prevPayment[16] ? parseFloat(prevPayment[16]) || 0 : 0;
           } catch (error) {
             console.warn(`No data found for previous year ${prevYear}:`, error.message);
           }
         }
         payments[paymentIndex] = [
-          req.user.username,
+          username,
           Client_Name,
           Type,
           paymentValue,
@@ -769,7 +774,7 @@ app.put('/api/update-client', authenticateToken, async (req, res) => {
       stack: error.stack,
       oldClient,
       newClient,
-      user: req.user.username
+      user: username,
     });
     res.status(500).json({ error: `Failed to update client: ${error.message}` });
   }
@@ -1343,7 +1348,8 @@ app.post("/api/add-new-year", authenticateToken, async (req, res) => {
 app.post('/api/import-csv', authenticateToken, async (req, res) => {
   const csvData = req.body;
   const year = req.query.year || new Date().getFullYear().toString();
-  console.log(`Importing CSV for user: ${req.user.username}, year: ${year}, records: ${csvData?.length || 0}`);
+  const username = req.user.username;
+  console.log(`Importing CSV for user: ${username}, year: ${year}, records: ${csvData?.length || 0}`);
   
   if (!Array.isArray(csvData) || csvData.length === 0) {
     console.error('CSV import error: Invalid CSV data: not an array or empty');
@@ -1352,8 +1358,8 @@ app.post('/api/import-csv', authenticateToken, async (req, res) => {
 
   try {
     await ensureTypesSheet();
-    const validTypes = await readSheet("Types", "A2:A");
-    const typesList = validTypes.map(row => row[0].toUpperCase()); // Capitalize types
+    const validTypes = await readSheet("Types", "A2:B");
+    const userTypes = validTypes.filter(t => t[1] === username).map(t => t[0]);
 
     // Validate all records
     for (let i = 0; i < csvData.length; i++) {
@@ -1366,9 +1372,10 @@ app.post('/api/import-csv', authenticateToken, async (req, res) => {
         console.error(`Invalid Client_Name at index ${i}:`, record.Client_Name);
         return res.status(400).json({ error: `Client_Name at index ${i} must be a valid string with up to 100 characters` });
       }
-      if (typeof record.Type !== 'string' || !typesList.includes(record.Type)) {
+      const typeUpper = record.Type.trim().toUpperCase();
+      if (typeof record.Type !== 'string' || !userTypes.includes(typeUpper)) {
         console.error(`Invalid Type at index ${i}:`, record.Type);
-        return res.status(400).json({ error: `Type at index ${i} must be one of: ${typesList.join(", ")}` });
+        return res.status(400).json({ error: `Type at index ${i} must be one of: ${userTypes.join(", ")}` });
       }
       const amount = parseFloat(record.Amount_To_Be_Paid);
       console.log(`Parsed Amount_To_Be_Paid at index ${i}:`, amount);
@@ -1387,7 +1394,7 @@ app.post('/api/import-csv', authenticateToken, async (req, res) => {
     }
 
     console.log('Ensuring sheets...');
-    await retryWithBackoff(() => ensureSheet('Clients', ['User', 'Client_Name', 'Email', 'Type', 'monthly_payment', 'Phone_Number']));
+    await retryWithBackoff(() => ensureSheet('Clients', ['User', 'Client_Name', 'Email', 'Type', 'Monthly_Payment', 'Phone_Number']));
     await retryWithBackoff(() => ensureSheet('Payments', ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment'], year));
     
     console.log('Reading existing data...');
@@ -1403,20 +1410,20 @@ app.post('/api/import-csv', authenticateToken, async (req, res) => {
       console.log(`Processing record ${i}:`, { Client_Name, Type, Amount_To_Be_Paid });
       
       Client_Name = sanitizeInput(Client_Name);
-      Type = sanitizeInput(Type);
+      Type = sanitizeInput(Type.trim().toUpperCase());
       Email = Email ? sanitizeInput(Email) : '';
       Phone_Number = Phone_Number ? sanitizeInput(Phone_Number) : '';
       Amount_To_Be_Paid = parseFloat(Amount_To_Be_Paid);
       console.log(`Writing Amount_To_Be_Paid for record ${i}:`, Amount_To_Be_Paid);
 
       // Always append to Clients sheet for new or updated records
-      const clientRow = [req.user.username, Client_Name, Email, Type, Amount_To_Be_Paid, Phone_Number];
+      const clientRow = [username, Client_Name, Email, Type, Amount_To_Be_Paid, Phone_Number];
       clientsBatch.push(clientRow);
       clients.push(clientRow);
       console.log(`Appending client row ${i}:`, clientRow);
 
       // Always append to Payments sheet for new or updated records
-      const paymentRow = [req.user.username, Client_Name, Type, Amount_To_Be_Paid, '', '', '', '', '', '', '', '', '', '', '', '', Amount_To_Be_Paid.toFixed(2)];
+      const paymentRow = [username, Client_Name, Type, Amount_To_Be_Paid, '', '', '', '', '', '', '', '', '', '', '', '', Amount_To_Be_Paid.toFixed(2)];
       paymentsBatch.push(paymentRow);
       payments.push(paymentRow);
       console.log(`Appending payment row ${i}:`, paymentRow);
@@ -1439,7 +1446,7 @@ app.post('/api/import-csv', authenticateToken, async (req, res) => {
       stack: error.stack,
       code: error.code,
       response: error.response?.data,
-      user: req.user.username,
+      user: username,
       year,
     });
     res.status(500).json({ error: `Failed to import CSV: ${error.message}` });
@@ -1550,6 +1557,7 @@ app.get("/api/debug-routes", (req, res) => {
 
 app.post('/api/add-type', authenticateToken, async (req, res) => {
   let { type } = req.body;
+  const username = req.user.username;
   if (!type) {
     console.error('No type provided');
     return res.status(400).json({ error: 'Type is required' });
@@ -1561,33 +1569,40 @@ app.post('/api/add-type', authenticateToken, async (req, res) => {
   }
   try {
     await ensureTypesSheet();
-    const existingTypes = await readSheet('Types', 'A2:A');
-    if (existingTypes.some(t => t[0] === type)) {
-      console.warn(`Type already exists: ${type}`);
-      return res.status(400).json({ error: 'Type already exists' });
+    const existingTypes = await readSheet('Types', 'A2:B');
+    if (existingTypes.some(t => t[0] === type && t[1] === username)) {
+      console.warn(`Type already exists for user: ${type}, ${username}`);
+      return res.status(400).json({ error: 'Type already exists for this user' });
     }
-    await appendSheet('Types', [[type]]);
-    console.log(`Type ${type} added successfully`);
+    await appendSheet('Types', [[type, username]]);
+    console.log(`Type ${type} added successfully for user ${username}`);
     return res.status(201).json({ message: 'Type added successfully' });
   } catch (error) {
     console.error('Add type error:', {
       message: error.message,
       stack: error.stack,
       inputType: type,
+      username,
     });
     return res.status(500).json({ error: `Failed to add type: ${error.message}` });
   }
 });
 
 app.get("/api/get-types", authenticateToken, async (req, res) => {
+  const username = req.user.username;
   try {
     await ensureTypesSheet();
-    const types = await readSheet("Types", "A2:A");
-    const processedTypes = types.map((t) => t[0]).filter(Boolean);
+    const typesData = await readSheet("Types", "A2:B");
+    const processedTypes = typesData.filter(t => t[1] === username).map(t => t[0]).filter(Boolean);
+    console.log(`Fetched ${processedTypes.length} types for user ${username}`);
     res.json(processedTypes);
   } catch (error) {
-    console.error("Get types error:", error.message);
-    res.status(500).json({ error: "Failed to fetch types" });
+    console.error("Get types error:", {
+      message: error.message,
+      stack: error.stack,
+      username,
+    });
+    res.status(500).json({ error: `Failed to fetch types: ${error.message}` });
   }
 });
 
