@@ -280,8 +280,10 @@ const importCsv = async (e) => {
           email = cell;
         } else if (/^\+?[\d\s-]{10,15}$/.test(cell)) {
           phoneNumber = cell;
-        } else if (cell === 'GST' || cell === 'IT Return') {
-          type = cell;
+        } else if (cell.toUpperCase() === 'GST') {
+          type = 'GST';
+        } else if (cell.toUpperCase().replace(/\s/g, '') === 'ITRETURN') {
+          type = 'IT Return';
         } else if (!isNaN(parseFloat(cell)) && parseFloat(cell) > 0) {
           amount = parseFloat(cell);
         } else if (cell) {
