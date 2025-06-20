@@ -1,6 +1,12 @@
-import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  useMemo,
+} from "react";
 import axios from "axios";
-import { debounce } from 'lodash';
+import { debounce } from "lodash";
 
 const BASE_URL = "https://payment-tracker-aswa.onrender.com/api";
 const BATCH_DELAY = 1000;
@@ -48,7 +54,7 @@ const HomePage = ({
   const tableRef = useRef(null);
   const [errorMessage, setLocalErrorMessage] = useState("");
   const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
-const [newType, setNewType] = useState("");
+  const [newType, setNewType] = useState("");
   const mountedRef = useRef(true);
 
   const MONTHS = [
@@ -125,7 +131,8 @@ const [newType, setNewType] = useState("");
           (statusFilter === "Paid" &&
             getPaymentStatus(row, monthFilter.toLowerCase()) === "Paid") ||
           (statusFilter === "PartiallyPaid" &&
-            getPaymentStatus(row, monthFilter.toLowerCase()) === "PartiallyPaid") ||
+            getPaymentStatus(row, monthFilter.toLowerCase()) ===
+              "PartiallyPaid") ||
           (statusFilter === "Unpaid" &&
             getPaymentStatus(row, monthFilter.toLowerCase()) === "Unpaid");
 
@@ -226,12 +233,14 @@ const [newType, setNewType] = useState("");
           setCachedData(cacheKey, years);
           console.log("HomePage.jsx: Fetched years:", years);
         } catch (error) {
-          if (error.name === 'AbortError') {
+          if (error.name === "AbortError") {
             console.log("HomePage.jsx: Year fetch aborted");
             return; // Ignore abort errors
           }
           console.error("HomePage.jsx: Error fetching user years:", error);
-          setLocalErrorMessage("Failed to fetch available years. Showing default year.");
+          setLocalErrorMessage(
+            "Failed to fetch available years. Showing default year."
+          );
           setAvailableYears(["2025"]);
         } finally {
           if (mountedRef.current) {
@@ -240,7 +249,13 @@ const [newType, setNewType] = useState("");
         }
       });
     },
-    [sessionToken, getCacheKey, getCachedData, setCachedData, createDedupedRequest]
+    [
+      sessionToken,
+      getCacheKey,
+      getCachedData,
+      setCachedData,
+      createDedupedRequest,
+    ]
   );
 
   // Debounced version of searchUserYears
@@ -250,48 +265,49 @@ const [newType, setNewType] = useState("");
   );
 
   const handleAddNewYear = useCallback(async () => {
-  const newYear = (parseInt(currentYear) + 1).toString();
-  console.log(`HomePage.jsx: Attempting to add new year: ${newYear}`);
+    const newYear = (parseInt(currentYear) + 1).toString();
+    console.log(`HomePage.jsx: Attempting to add new year: ${newYear}`);
 
-  if (mountedRef.current) {
-    setIsLoadingYears(true);
-  }
-
-  const controller = new AbortController();
-
-  try {
-    const response = await axios.post(
-      `${BASE_URL}/add-new-year`,
-      { year: newYear },
-      {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-        timeout: 10000,
-        signal: controller.signal,
-      }
-    );
-    console.log("HomePage.jsx: Add new year response:", response.data);
-
-    alert(response.data.message);
-    
-    // ✅ Force reload with the new year set in localStorage
-    localStorage.setItem("currentYear", newYear);
-    window.location.reload(); // ✅ this reloads the page and pulls new data
-  } catch (error) {
-    if (error.name === 'AbortError') {
-      console.log("HomePage.jsx: Add new year request cancelled");
-      return;
-    }
-    console.error("HomePage.jsx: Error adding new year:", error);
-    alert(
-      `Failed to add new year: ${error.response?.data?.error || "An unknown error occurred"}`
-    );
-  } finally {
     if (mountedRef.current) {
-      setIsLoadingYears(false);
+      setIsLoadingYears(true);
     }
-  }
-}, [currentYear, sessionToken]);
 
+    const controller = new AbortController();
+
+    try {
+      const response = await axios.post(
+        `${BASE_URL}/add-new-year`,
+        { year: newYear },
+        {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+          timeout: 10000,
+          signal: controller.signal,
+        }
+      );
+      console.log("HomePage.jsx: Add new year response:", response.data);
+
+      alert(response.data.message);
+
+      // ✅ Force reload with the new year set in localStorage
+      localStorage.setItem("currentYear", newYear);
+      window.location.reload(); // ✅ this reloads the page and pulls new data
+    } catch (error) {
+      if (error.name === "AbortError") {
+        console.log("HomePage.jsx: Add new year request cancelled");
+        return;
+      }
+      console.error("HomePage.jsx: Error adding new year:", error);
+      alert(
+        `Failed to add new year: ${
+          error.response?.data?.error || "An unknown error occurred"
+        }`
+      );
+    } finally {
+      if (mountedRef.current) {
+        setIsLoadingYears(false);
+      }
+    }
+  }, [currentYear, sessionToken]);
 
   const processBatchUpdates = useCallback(async () => {
     if (!updateQueueRef.current.length) {
@@ -303,7 +319,10 @@ const [newType, setNewType] = useState("");
     const updates = [...updateQueueRef.current];
     updateQueueRef.current = []; // Clear queue immediately
     batchTimerRef.current = null;
-    console.log(`HomePage.jsx: Processing batch of ${updates.length} updates`, updates);
+    console.log(
+      `HomePage.jsx: Processing batch of ${updates.length} updates`,
+      updates
+    );
     setIsUpdating(true);
 
     const updatedLocalValues = { ...localInputValues };
@@ -332,9 +351,16 @@ const [newType, setNewType] = useState("");
             return newPending;
           });
         } catch (error) {
-          console.error(`HomePage.jsx: Failed to update ${month} for row ${rowIndex}:`, error);
-          setLocalErrorMessage(`Failed to update ${month} for ${rowData.Client_Name}: ${error.message}`);
-          setErrorMessage(`Failed to update ${month} for ${rowData.Client_Name}: ${error.message}`);
+          console.error(
+            `HomePage.jsx: Failed to update ${month} for row ${rowIndex}:`,
+            error
+          );
+          setLocalErrorMessage(
+            `Failed to update ${month} for ${rowData.Client_Name}: ${error.message}`
+          );
+          setErrorMessage(
+            `Failed to update ${month} for ${rowData.Client_Name}: ${error.message}`
+          );
           updateQueueRef.current.push(update);
         }
       }
@@ -357,7 +383,9 @@ const [newType, setNewType] = useState("");
   const debouncedUpdate = useCallback(
     (rowIndex, month, value, year) => {
       if (!paymentsData.length) {
-        console.warn("HomePage.jsx: Cannot queue update, paymentsData is empty");
+        console.warn(
+          "HomePage.jsx: Cannot queue update, paymentsData is empty"
+        );
         alert("Please wait for data to load before making updates.");
         return;
       }
@@ -393,7 +421,12 @@ const [newType, setNewType] = useState("");
           year,
           timestamp: Date.now(),
         });
-        console.log("HomePage.jsx: Queued update:", { rowIndex, month, value, year });
+        console.log("HomePage.jsx: Queued update:", {
+          rowIndex,
+          month,
+          value,
+          year,
+        });
         if (!batchTimerRef.current) {
           batchTimerRef.current = setTimeout(processBatchUpdates, BATCH_DELAY);
         }
@@ -404,15 +437,14 @@ const [newType, setNewType] = useState("");
   );
 
   const handleYearChangeDebounced = useCallback(
-  (year) => {
-    console.log("HomePage.jsx: Year change requested to:", year);
-    localStorage.setItem("currentYear", year);
-    setCurrentYear(year);
-    window.location.reload(); // <-- force page reload after setting year
-  },
-  [setCurrentYear]
-);
-
+    (year) => {
+      console.log("HomePage.jsx: Year change requested to:", year);
+      localStorage.setItem("currentYear", year);
+      setCurrentYear(year);
+      window.location.reload(); // <-- force page reload after setting year
+    },
+    [setCurrentYear]
+  );
 
   const handleInputChange = useCallback(
     (rowIndex, month, value) => {
@@ -496,12 +528,12 @@ const [newType, setNewType] = useState("");
         if (timer) clearTimeout(timer);
       });
       debounceTimersRef.current = {};
-      
+
       if (batchTimerRef.current) {
         clearTimeout(batchTimerRef.current);
         batchTimerRef.current = null;
       }
-      
+
       // Process remaining updates only if component is still mounted
       if (updateQueueRef.current.length > 0 && mountedRef.current) {
         // Force immediate processing without setTimeout
@@ -512,48 +544,51 @@ const [newType, setNewType] = useState("");
     };
   }, []);
 
-const handleAddType = async () => {
-  console.log('HomePage.jsx: handleAddType called with type:', newType);
-  if (!newType.trim()) {
-    setLocalErrorMessage('Type name cannot be empty.');
-    return;
-  }
-  if (newType.trim().length > 50) {
-    setLocalErrorMessage('Type name must be 50 characters or less.');
-    return;
-  }
-  try {
-    console.log('HomePage.jsx: Sending POST to /api/add-type');
-    await axios.post(
-      `${BASE_URL}/add-type`,
-      { type: newType.trim() },
-      {
+  const handleAddType = async () => {
+    console.log("HomePage.jsx: handleAddType called with type:", newType);
+    if (!newType.trim()) {
+      setLocalErrorMessage("Type name cannot be empty.");
+      return;
+    }
+    if (newType.trim().length > 50) {
+      setLocalErrorMessage("Type name must be 50 characters or less.");
+      return;
+    }
+    try {
+      console.log("HomePage.jsx: Sending POST to /api/add-type");
+      await axios.post(
+        `${BASE_URL}/add-type`,
+        { type: newType.trim() },
+        {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+          timeout: 10000,
+        }
+      );
+      setNewType("");
+      setIsTypeModalOpen(false);
+      setLocalErrorMessage("");
+      const cacheKey = `types_${sessionToken}`;
+      delete apiCacheRef.current[cacheKey];
+      console.log("HomePage.jsx: Types cache cleared, key:", cacheKey);
+      const typesResponse = await axios.get(`${BASE_URL}/get-types`, {
         headers: { Authorization: `Bearer ${sessionToken}` },
         timeout: 10000,
+      });
+      setCachedData(cacheKey, typesResponse.data);
+      console.log(
+        "HomePage.jsx: Types cache updated with:",
+        typesResponse.data
+      );
+      alert("Type added successfully.");
+    } catch (error) {
+      console.error("HomePage.jsx: Error adding type:", error);
+      const errorMsg = error.response?.data?.error || error.message;
+      setLocalErrorMessage(`Failed to add type: ${errorMsg}`);
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        setPage("login");
       }
-    );
-    setNewType('');
-    setIsTypeModalOpen(false);
-    setLocalErrorMessage('');
-    const cacheKey = `types_${sessionToken}`;
-    delete apiCacheRef.current[cacheKey];
-    console.log('HomePage.jsx: Types cache cleared, key:', cacheKey);
-    const typesResponse = await axios.get(`${BASE_URL}/get-types`, {
-      headers: { Authorization: `Bearer ${sessionToken}` },
-      timeout: 10000,
-    });
-    setCachedData(cacheKey, typesResponse.data);
-    console.log('HomePage.jsx: Types cache updated with:', typesResponse.data);
-    alert('Type added successfully.');
-  } catch (error) {
-    console.error('HomePage.jsx: Error adding type:', error);
-    const errorMsg = error.response?.data?.error || error.message;
-    setLocalErrorMessage(`Failed to add type: ${errorMsg}`);
-    if (error.response?.status === 401 || error.response?.status === 403) {
-      setPage('login');
     }
-  }
-};
+  };
 
   // Updated useEffect for fetching years
   useEffect(() => {
@@ -577,55 +612,6 @@ const handleAddType = async () => {
     document.addEventListener("click", handleClickOutside);
     return () => document.removeEventListener("click", handleClickOutside);
   }, [hideContextMenu]);
-
-  {isTypeModalOpen && (
-  <div
-    className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-    onClick={() => console.log('HomePage.jsx: Modal background rendered')}
-  >
-    <div
-      className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md"
-      onClick={(e) => e.stopPropagation()}
-    >
-      <h2 className="text-lg font-semibold mb-4">Add New Type</h2>
-      {errorMessage && (
-        <p className="text-red-500 mb-4 text-sm">{errorMessage}</p>
-      )}
-      <input
-        type="text"
-        value={newType}
-        onChange={(e) => {
-          console.log('HomePage.jsx: Typing in newType input:', e.target.value);
-          setNewType(e.target.value);
-        }}
-        placeholder="Enter new type"
-        className="w-full p-2 border border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
-      />
-      <div className="flex justify-end gap-2">
-        <button
-          onClick={() => {
-            console.log('HomePage.jsx: Cancel button clicked');
-            setIsTypeModalOpen(false);
-            setNewType('');
-            setLocalErrorMessage('');
-          }}
-          className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={() => {
-            console.log('HomePage.jsx: Add Type submit button clicked');
-            handleAddType();
-          }}
-          className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700"
-        >
-          Add Type
-        </button>
-      </div>
-    </div>
-  </div>
-)}
 
   const renderDashboard = () => (
     <>
@@ -725,25 +711,25 @@ const handleAddType = async () => {
                   Client Name
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-  Type
-  <button
-    onClick={() => {
-      console.log('HomePage.jsx: Add Type button clicked');
-      setIsTypeModalOpen(true);
-    }}
-    className="ml-2 text-blue-600 hover:text-blue-800 text-xs"
-    title="Add New Type"
-  >
-    <span className="inline-flex items-center">
-      {typeof window !== 'undefined' && window.FontAwesome ? (
-        <i className="fas fa-plus-circle mr-1"></i>
-      ) : (
-        <span className="mr-1">+</span>
-      )}
-      Add Type
-    </span>
-  </button>
-</th>
+                  Type
+                  <button
+                    onClick={() => {
+                      console.log("HomePage.jsx: Add Type button clicked");
+                      setIsTypeModalOpen(true);
+                    }}
+                    className="ml-2 text-blue-600 hover:text-blue-800 text-xs"
+                    title="Add New Type"
+                  >
+                    <span className="inline-flex items-center">
+                      {typeof window !== "undefined" && window.FontAwesome ? (
+                        <i className="fas fa-plus-circle mr-1"></i>
+                      ) : (
+                        <span className="mr-1">+</span>
+                      )}
+                      Add Type
+                    </span>
+                  </button>
+                </th>
                 <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
                   Amount To Be Paid
                 </th>
@@ -873,7 +859,6 @@ const handleAddType = async () => {
       currentPage * entriesPerPage
     );
 
-    
     return (
       <>
         <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 mb-6">
@@ -1002,7 +987,8 @@ const handleAddType = async () => {
                   </>
                 )}
                 {[...Array(5)].map((_, i) => {
-                  const pageNum = currentPage <= 3 ? i + 1 : currentPage - 2 + i;
+                  const pageNum =
+                    currentPage <= 3 ? i + 1 : currentPage - 2 + i;
                   if (pageNum <= totalPages && pageNum > 0) {
                     return (
                       <button
@@ -1060,8 +1046,8 @@ const handleAddType = async () => {
             </div>
             <div className="ml-3">
               <p className="text-sm">
-                You're currently offline. Changes will be saved when connection is
-                restored.
+                You're currently offline. Changes will be saved when connection
+                is restored.
               </p>
             </div>
           </div>
@@ -1086,6 +1072,57 @@ const handleAddType = async () => {
         </div>
       )}
       {isReportsPage ? renderReports() : renderDashboard()}
+      {isTypeModalOpen && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={() => console.log("HomePage.jsx: Modal background rendered")}
+        >
+          <div
+            className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-semibold mb-4">Add New Type</h2>
+            {errorMessage && (
+              <p className="text-red-500 mb-4 text-sm">{errorMessage}</p>
+            )}
+            <input
+              type="text"
+              value={newType}
+              onChange={(e) => {
+                console.log(
+                  "HomePage.jsx: Typing in newType input:",
+                  e.target.value
+                );
+                setNewType(e.target.value);
+              }}
+              placeholder="Enter new type"
+              className="w-full p-2 border border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  console.log("HomePage.jsx: Cancel button clicked");
+                  setIsTypeModalOpen(false);
+                  setNewType("");
+                  setLocalErrorMessage("");
+                }}
+                className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  console.log("HomePage.jsx: Add Type submit button clicked");
+                  handleAddType();
+                }}
+                className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700"
+              >
+                Add Type
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
