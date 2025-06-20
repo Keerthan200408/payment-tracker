@@ -1343,7 +1343,7 @@ app.post("/api/add-new-year", authenticateToken, async (req, res) => {
 app.post('/api/import-csv', authenticateToken, async (req, res) => {
   const csvData = req.body;
   const year = req.query.year || new Date().getFullYear().toString();
-  console.log(`Importing CSV for user: ${req.user.username}, year: year}, records: ${csvData?.length || 0}`);
+  console.log(`Importing CSV for user: ${req.user.username}, year: ${year}, records: ${csvData?.length || 0}`);
   
   if (!Array.isArray(csvData) || csvData.length === 0) {
     console.error('CSV import error: Invalid CSV data: not an array or empty');
@@ -1353,7 +1353,7 @@ app.post('/api/import-csv', authenticateToken, async (req, res) => {
   try {
     await ensureTypesSheet();
     const validTypes = await readSheet("Types", "A2:A");
-    const typesList = validTypes.map(row => row[0]);
+    const typesList = validTypes.map(row => row[0].toUpperCase()); // Capitalize types
 
     // Validate all records
     for (let i = 0; i < csvData.length; i++) {
@@ -1364,7 +1364,7 @@ app.post('/api/import-csv', authenticateToken, async (req, res) => {
       }
       if (typeof record.Client_Name !== 'string' || record.Client_Name.length > 100) {
         console.error(`Invalid Client_Name at index ${i}:`, record.Client_Name);
-        return res.status(400).json({ error: `Client_Name at index ${i} must be a valid string with up to 100 characters or less` });
+        return res.status(400).json({ error: `Client_Name at index ${i} must be a valid string with up to 100 characters` });
       }
       if (typeof record.Type !== 'string' || !typesList.includes(record.Type)) {
         console.error(`Invalid Type at index ${i}:`, record.Type);
@@ -1409,21 +1409,17 @@ app.post('/api/import-csv', authenticateToken, async (req, res) => {
       Amount_To_Be_Paid = parseFloat(Amount_To_Be_Paid);
       console.log(`Writing Amount_To_Be_Paid for record ${i}:`, Amount_To_Be_Paid);
 
-      const clientExists = clients.some(client => client && client[0] === req.user.username && client[1] === Client_Name && client[3] === Type);
-      if (!clientExists) {
-        const clientRow = [req.user.username, Client_Name, Email, Type, Amount_To_Be_Paid, Phone_Number];
-        clientsBatch.push(clientRow);
-        clients.push(clientRow);
-        console.log(`Appending client row ${i}:`, clientRow);
-      }
+      // Always append to Clients sheet for new or updated records
+      const clientRow = [req.user.username, Client_Name, Email, Type, Amount_To_Be_Paid, Phone_Number];
+      clientsBatch.push(clientRow);
+      clients.push(clientRow);
+      console.log(`Appending client row ${i}:`, clientRow);
 
-      const paymentExists = payments.some(payment => payment && payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type);
-      if (!paymentExists) {
-        const paymentRow = [req.user.username, Client_Name, Type, Amount_To_Be_Paid, '', '', '', '', '', '', '', '', '', '', '', '', Amount_To_Be_Paid.toFixed(2)];
-        paymentsBatch.push(paymentRow);
-        payments.push(paymentRow);
-        console.log(`Appending payment row ${i}:`, paymentRow);
-      }
+      // Always append to Payments sheet for new or updated records
+      const paymentRow = [req.user.username, Client_Name, Type, Amount_To_Be_Paid, '', '', '', '', '', '', '', '', '', '', '', '', Amount_To_Be_Paid.toFixed(2)];
+      paymentsBatch.push(paymentRow);
+      payments.push(paymentRow);
+      console.log(`Appending payment row ${i}:`, paymentRow);
     }
 
     if (clientsBatch.length > 0) {

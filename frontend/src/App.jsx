@@ -302,6 +302,8 @@ const importCsv = async (e) => {
     if (rows.length === 0) {
       throw new Error('CSV file is empty.');
     }
+    // Capitalize types list for case-sensitive comparison
+    const capitalizedTypes = types.map(type => type.toUpperCase());
     const records = [];
     const errors = [];
     rows.forEach((row, index) => {
@@ -311,8 +313,8 @@ const importCsv = async (e) => {
           email = cell;
         } else if (/^\+?[\d\s-]{10,15}$/.test(cell)) {
           phone = cell;
-        } else if (types.includes(cell.trim())) {
-          type = cell.trim();
+        } else if (capitalizedTypes.includes(cell.trim().toUpperCase())) {
+          type = cell.trim().toUpperCase(); // Capitalize CSV type
         } else if (!isNaN(parseFloat(cell)) && parseFloat(cell) > 0) {
           amount = parseFloat(cell);
         } else if (cell.trim()) {
@@ -321,14 +323,14 @@ const importCsv = async (e) => {
       });
       if (!clientName || !type || !amount) {
         console.warn(`Skipping invalid row at index ${index + 1}:`, row);
-        errors.push(`Row ${index + 1}: Missing or invalid required fields (Client Name, Type must be one of: ${types.join(", ")}, or Monthly Payment)`);
+        errors.push(`Row ${index + 1}: Missing or invalid required fields (Client Name, Type must be one of: ${capitalizedTypes.join(", ")}, or Monthly Payment)`);
         return;
       }
       console.log(`Parsed row ${index + 1} Monthly Payment:`, amount);
       records.push({ Client_Name: clientName, Type: type, monthly_payment: amount, Email: email, Phone_Number: phone });
     });
     if (records.length === 0) {
-      throw new Error(`No valid rows found in CSV. All rows are missing required fields or contain invalid Type values. Valid types are: ${types.join(", ")}.`);
+      throw new Error(`No valid rows found in CSV. All rows are missing required fields or contain invalid Type values. Valid types are: ${capitalizedTypes.join(", ")}.`);
     }
     const batchSize = 50;
     console.log(`Importing ${records.length} valid records...`);
@@ -336,7 +338,7 @@ const importCsv = async (e) => {
       const batch = records.slice(i, i + batchSize).map(record => ({
         Client_Name: record.Client_Name,
         Type: record.Type,
-        Amount_To_Be_Paid: record.monthly_payment, // Map to backend field name
+        Amount_To_Be_Paid: record.monthly_payment,
         Email: record.Email,
         Phone_Number: record.Phone_Number
       }));
@@ -350,7 +352,7 @@ const importCsv = async (e) => {
       await new Promise(resolve => setTimeout(resolve, 500));
     }
     const cacheKeyPayments = `payments_${currentYear}_${sessionToken}`;
-    const cacheKeyClients = `clients_${currentYear}_${sessionToken}`; // Updated cache key for consistency
+    const cacheKeyClients = `clients_${currentYear}_${sessionToken}`;
     delete apiCacheRef.current[cacheKeyPayments];
     delete apiCacheRef.current[cacheKeyClients];
     const message = errors.length > 0 
@@ -364,9 +366,9 @@ const importCsv = async (e) => {
     console.error('CSV import error:', {
       message: err.message,
       response: err.response?.data,
-      status: err.response?.response?.status,
+      status: err.response?.status,
     });
-    const errorMessage = err.response?.data?.error || err.message || `Failed to import CSV. Ensure Type is one of: ${types.join(", ")} and Monthly Payment is a valid number.`;
+    const errorMessage = err.response?.data?.error || err.message || `Failed to import CSV. Ensure Type is one of: ${capitalizedTypes.join(", ")} and Monthly Payment is a valid number.`;
     setErrorMessage(errorMessage);
   } finally {
     setIsImporting(false);
