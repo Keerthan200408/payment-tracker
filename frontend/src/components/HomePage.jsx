@@ -571,7 +571,7 @@ const handleAddType = async () => {
     const cacheKey = `types_${sessionToken}`;
     delete apiCacheRef.current[cacheKey];
     console.log("HomePage.jsx: Types cache cleared, key:", cacheKey);
-    await fetchTypes(); // Call fetchTypes to update App.jsx types state
+    await fetchTypes(); // Call fetchTypes prop to update types state in App.jsx
     console.log("HomePage.jsx: Types state updated via fetchTypes");
     alert(`Type ${capitalizedType} added successfully.`);
   } catch (error) {
