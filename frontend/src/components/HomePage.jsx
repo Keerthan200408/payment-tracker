@@ -571,13 +571,9 @@ const handleAddType = async () => {
     const cacheKey = `types_${sessionToken}`;
     delete apiCacheRef.current[cacheKey];
     console.log("HomePage.jsx: Types cache cleared, key:", cacheKey);
-    const typesResponse = await axios.get(`${BASE_URL}/get-types`, {
-      headers: { Authorization: `Bearer ${sessionToken}` },
-      timeout: 10000,
-    });
-    setCachedData(cacheKey, typesResponse.data);
-    console.log("HomePage.jsx: Types cache updated with:", typesResponse.data);
-    alert("Type added successfully.");
+    await fetchTypes(); // Call fetchTypes to update App.jsx types state
+    console.log("HomePage.jsx: Types state updated via fetchTypes");
+    alert(`Type ${capitalizedType} added successfully.`);
   } catch (error) {
     console.error("HomePage.jsx: Error adding type:", error);
     const errorMsg = error.response?.data?.error || error.message;

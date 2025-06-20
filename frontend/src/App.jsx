@@ -673,6 +673,7 @@ const updatePayment = async (rowIndex, month, value, year = currentYear) => {
                   onMount={() =>
                     console.log("App.jsx: HomePage mounted with sessionToken:", sessionToken?.substring(0, 10) + "...")
                   }
+                  fetchTypes={fetchTypes}
                 />
               )}
               {page === "addClient" && (
