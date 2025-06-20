@@ -1568,13 +1568,14 @@ app.post('/api/add-type', authenticateToken, async (req, res) => {
     }
     await appendSheet('Types', [[type]]);
     console.log(`Type ${type} added successfully`);
-    res.status(201).json({ message: 'Type added successfully' });
+    return res.status(201).json({ message: 'Type added successfully' });
   } catch (error) {
     console.error('Add type error:', {
       message: error.message,
       stack: error.stack,
+      inputType: type,
     });
-    res.status(500).json({ error: `Failed to add type: ${error.message}` });
+    return res.status(500).json({ error: `Failed to add type: ${error.message}` });
   }
 });
 
