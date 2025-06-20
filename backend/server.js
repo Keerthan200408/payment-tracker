@@ -1343,16 +1343,18 @@ app.post("/api/add-new-year", authenticateToken, async (req, res) => {
 app.post('/api/import-csv', authenticateToken, async (req, res) => {
   const csvData = req.body;
   const year = req.query.year || new Date().getFullYear().toString();
-  console.log(`Importing CSV for user: ${req.user.username}, year: ${year}, records: ${csvData?.length || 0}`);
+  console.log(`Importing CSV for user: ${req.user.username}, year: year}, records: ${csvData?.length || 0}`);
   
   if (!Array.isArray(csvData) || csvData.length === 0) {
-    console.error('Invalid CSV data: not an array or empty');
-    return res.status(400).json({ error: 'CSV data must be a non-empty array' });
+    console.error('CSV import error: Invalid CSV data: not an array or empty');
+    return res.status(400).json({ error: 'CSV data must be a non-empty array of records' });
   }
 
   try {
     await ensureTypesSheet();
     const validTypes = await readSheet("Types", "A2:A");
+    const typesList = validTypes.map(row => row[0]);
+
     // Validate all records
     for (let i = 0; i < csvData.length; i++) {
       const record = csvData[i];
@@ -1362,11 +1364,11 @@ app.post('/api/import-csv', authenticateToken, async (req, res) => {
       }
       if (typeof record.Client_Name !== 'string' || record.Client_Name.length > 100) {
         console.error(`Invalid Client_Name at index ${i}:`, record.Client_Name);
-        return res.status(400).json({ error: `Client_Name at index ${i} must be a string with 100 characters or less` });
+        return res.status(400).json({ error: `Client_Name at index ${i} must be a valid string with up to 100 characters or less` });
       }
-      if (typeof record.Type !== 'string' || !validTypes.some((t) => t[0] === record.Type)) {
+      if (typeof record.Type !== 'string' || !typesList.includes(record.Type)) {
         console.error(`Invalid Type at index ${i}:`, record.Type);
-        return res.status(400).json({ error: `Type at index ${i} must be one of: ${validTypes.map((t) => t[0]).join(", ")}` });
+        return res.status(400).json({ error: `Type at index ${i} must be one of: ${typesList.join(", ")}` });
       }
       const amount = parseFloat(record.Amount_To_Be_Paid);
       console.log(`Parsed Amount_To_Be_Paid at index ${i}:`, amount);
@@ -1385,7 +1387,7 @@ app.post('/api/import-csv', authenticateToken, async (req, res) => {
     }
 
     console.log('Ensuring sheets...');
-    await retryWithBackoff(() => ensureSheet('Clients', ['User', 'Client_Name', 'Email', 'Type', 'Monthly_Payment', 'Phone_Number']));
+    await retryWithBackoff(() => ensureSheet('Clients', ['User', 'Client_Name', 'Email', 'Type', 'monthly_payment', 'Phone_Number']));
     await retryWithBackoff(() => ensureSheet('Payments', ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment'], year));
     
     console.log('Reading existing data...');
