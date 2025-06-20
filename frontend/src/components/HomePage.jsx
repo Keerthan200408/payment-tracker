@@ -544,51 +544,49 @@ const HomePage = ({
     };
   }, []);
 
-  const handleAddType = async () => {
-    console.log("HomePage.jsx: handleAddType called with type:", newType);
-    if (!newType.trim()) {
-      setLocalErrorMessage("Type name cannot be empty.");
-      return;
-    }
-    if (newType.trim().length > 50) {
-      setLocalErrorMessage("Type name must be 50 characters or less.");
-      return;
-    }
-    try {
-      console.log("HomePage.jsx: Sending POST to /api/add-type");
-      await axios.post(
-        `${BASE_URL}/add-type`,
-        { type: newType.trim() },
-        {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-          timeout: 10000,
-        }
-      );
-      setNewType("");
-      setIsTypeModalOpen(false);
-      setLocalErrorMessage("");
-      const cacheKey = `types_${sessionToken}`;
-      delete apiCacheRef.current[cacheKey];
-      console.log("HomePage.jsx: Types cache cleared, key:", cacheKey);
-      const typesResponse = await axios.get(`${BASE_URL}/get-types`, {
+const handleAddType = async () => {
+  console.log("HomePage.jsx: handleAddType called with type:", newType);
+  if (!newType.trim()) {
+    setLocalErrorMessage("Type name cannot be empty.");
+    return;
+  }
+  if (newType.trim().length > 50) {
+    setLocalErrorMessage("Type name must be 50 characters or less.");
+    return;
+  }
+  const capitalizedType = newType.trim().toUpperCase();
+  try {
+    console.log("HomePage.jsx: Sending POST to /api/add-type with type:", capitalizedType);
+    await axios.post(
+      `${BASE_URL}/add-type`,
+      { type: capitalizedType },
+      {
         headers: { Authorization: `Bearer ${sessionToken}` },
         timeout: 10000,
-      });
-      setCachedData(cacheKey, typesResponse.data);
-      console.log(
-        "HomePage.jsx: Types cache updated with:",
-        typesResponse.data
-      );
-      alert("Type added successfully.");
-    } catch (error) {
-      console.error("HomePage.jsx: Error adding type:", error);
-      const errorMsg = error.response?.data?.error || error.message;
-      setLocalErrorMessage(`Failed to add type: ${errorMsg}`);
-      if (error.response?.status === 401 || error.response?.status === 403) {
-        setPage("login");
       }
+    );
+    setNewType("");
+    setIsTypeModalOpen(false);
+    setLocalErrorMessage("");
+    const cacheKey = `types_${sessionToken}`;
+    delete apiCacheRef.current[cacheKey];
+    console.log("HomePage.jsx: Types cache cleared, key:", cacheKey);
+    const typesResponse = await axios.get(`${BASE_URL}/get-types`, {
+      headers: { Authorization: `Bearer ${sessionToken}` },
+      timeout: 10000,
+    });
+    setCachedData(cacheKey, typesResponse.data);
+    console.log("HomePage.jsx: Types cache updated with:", typesResponse.data);
+    alert("Type added successfully.");
+  } catch (error) {
+    console.error("HomePage.jsx: Error adding type:", error);
+    const errorMsg = error.response?.data?.error || error.message;
+    setLocalErrorMessage(errorMsg === "Type already exists" ? "Type already exists." : `Failed to add type: ${errorMsg}`);
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      setPage("login");
     }
-  };
+  }
+};
 
   // Updated useEffect for fetching years
   useEffect(() => {

@@ -1548,26 +1548,33 @@ app.get("/api/debug-routes", (req, res) => {
   });
 });
 
-app.post("/api/add-type", authenticateToken, async (req, res) => {
+app.post('/api/add-type', authenticateToken, async (req, res) => {
   let { type } = req.body;
   if (!type) {
-    return res.status(400).json({ error: "Type is required" });
+    console.error('No type provided');
+    return res.status(400).json({ error: 'Type is required' });
   }
-  type = sanitizeInput(type.trim());
+  type = sanitizeInput(type.trim().toUpperCase()); // Capitalize type
   if (type.length < 1 || type.length > 50) {
-    return res.status(400).json({ error: "Type must be between 1 and 50 characters" });
+    console.error('Invalid type length:', type.length);
+    return res.status(400).json({ error: 'Type must be between 1 and 50 characters' });
   }
   try {
     await ensureTypesSheet();
-    const existingTypes = await readSheet("Types", "A2:A");
-    if (existingTypes.some((t) => t[0] === type)) {
-      return res.status(400).json({ error: "Type already exists" });
+    const existingTypes = await readSheet('Types', 'A2:A');
+    if (existingTypes.some(t => t[0] === type)) {
+      console.warn(`Type already exists: ${type}`);
+      return res.status(400).json({ error: 'Type already exists' });
     }
-    await appendSheet("Types", [[type]]);
-    res.status(201).json({ message: "Type added successfully" });
+    await appendSheet('Types', [[type]]);
+    console.log(`Type ${type} added successfully`);
+    res.status(201).json({ message: 'Type added successfully' });
   } catch (error) {
-    console.error("Add type error:", error.message);
-    res.status(500).json({ error: "Failed to add type" });
+    console.error('Add type error:', {
+      message: error.message,
+      stack: error.stack,
+    });
+    res.status(500).json({ error: `Failed to add type: ${error.message}` });
   }
 });
 
