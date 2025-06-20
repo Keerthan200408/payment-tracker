@@ -280,7 +280,7 @@ const importCsv = async (e) => {
           email = cell;
         } else if (/^\+?[\d\s-]{10,15}$/.test(cell)) {
           phoneNumber = cell;
-        } else if (cell.toUpperCase() === 'GST' || cell.toUpperCase().replace(/\s/g, '') === 'ITRETURN') {
+        } else if (cell === 'GST' || cell === 'IT Return') {
           type = cell;
         } else if (!isNaN(parseFloat(cell)) && parseFloat(cell) > 0) {
           amount = parseFloat(cell);
@@ -290,24 +290,26 @@ const importCsv = async (e) => {
       });
       if (!clientName || !type || !amount) {
         console.warn(`Skipping invalid row at index ${index + 1}:`, row);
-        errors.push(`Row ${index + 1}: Missing required fields (Client Name, Type, or Amount)`);
+        errors.push(`Row ${index + 1}: Missing or invalid required fields (Client Name, Type must be 'GST' or 'IT Return' (case-sensitive), or Amount)`);
         return;
       }
+      console.log(`Parsed row ${index + 1} Amount_To_Be_Paid:`, amount);
       records.push({ Client_Name: clientName, Type: type, Amount_To_Be_Paid: amount, Email: email, Phone_Number: phoneNumber });
     });
     if (records.length === 0) {
-      throw new Error('No valid rows found in CSV. All rows are missing required fields.');
+      throw new Error('No valid rows found in CSV. All rows are missing required fields or contain invalid Type values.');
     }
     const batchSize = 50;
     console.log(`Importing ${records.length} valid records...`);
     for (let i = 0; i < records.length; i += batchSize) {
       const batch = records.slice(i, i + batchSize);
       console.log(`Sending batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(records.length / batchSize)}...`);
-      await axios.post(`${BASE_URL}/import-csv`, batch, {
+      const response = await axios.post(`${BASE_URL}/import-csv`, batch, {
         headers: { Authorization: `Bearer ${sessionToken}` },
         params: { year: currentYear },
-        timeout: 45000, // Increased from 30000
+        timeout: 45000,
       });
+      console.log(`Batch response:`, response.data);
       await new Promise(resolve => setTimeout(resolve, 500));
     }
     // Clear both payments and clients cache
@@ -319,12 +321,17 @@ const importCsv = async (e) => {
       ? `CSV imported successfully! ${records.length} valid records imported. ${errors.length} row(s) skipped due to errors:\n${errors.join('\n')}`
       : `CSV imported successfully! ${records.length} records imported.`;
     alert(message);
-    setErrorMessage(errors.length > 0 ? errors.join('\n') : '');
+    setErrorMessage(errors.length > 0 ? `Imported ${records.length} records with ${errors.length} errors:\n${errors.join('\n')}` : '');
     await new Promise(resolve => setTimeout(resolve, 2000));
     window.location.reload();
   } catch (err) {
-    console.error('Import CSV error:', err);
-    setErrorMessage(err.response?.data?.error || err.message || 'Failed to import CSV');
+    console.error('Import CSV error:', {
+      message: err.message,
+      response: err.response?.data,
+      status: err.response?.status,
+    });
+    const errorMessage = err.response?.data?.error || err.message || 'Failed to import CSV. Ensure Type is exactly "GST" or "IT Return" (case-sensitive).';
+    setErrorMessage(errorMessage);
   } finally {
     setIsImporting(false);
     csvFileInputRef.current.value = null;

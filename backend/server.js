@@ -1324,20 +1324,21 @@ app.post('/api/import-csv', authenticateToken, async (req, res) => {
     const record = csvData[i];
     if (!record.Client_Name || !record.Type || record.Amount_To_Be_Paid == null) {
       console.error(`Invalid record at index ${i}: missing required fields`, record);
-      return res.status(400).json({ error: `Missing required fields in record at index ${i}` });
+      return res.status(400).json({ error: `Missing required fields (Client_Name, Type, or Amount_To_Be_Paid) in record at index ${i}` });
     }
     if (typeof record.Client_Name !== 'string' || record.Client_Name.length > 100) {
       console.error(`Invalid Client_Name at index ${i}:`, record.Client_Name);
-      return res.status(400).json({ error: `Invalid Client_Name at index ${i}` });
+      return res.status(400).json({ error: `Client_Name at index ${i} must be a string with 100 characters or less` });
     }
     if (typeof record.Type !== 'string' || !['GST', 'IT Return'].includes(record.Type)) {
       console.error(`Invalid Type at index ${i}:`, record.Type);
-      return res.status(400).json({ error: `Invalid Type at index ${i}` });
+      return res.status(400).json({ error: `Type at index ${i} must be exactly 'GST' or 'IT Return' (case-sensitive, found: '${record.Type}')` });
     }
     const amount = parseFloat(record.Amount_To_Be_Paid);
+    console.log(`Parsed Amount_To_Be_Paid at index ${i}:`, amount);
     if (isNaN(amount) || amount <= 0 || amount > 1e6) {
       console.error(`Invalid Amount_To_Be_Paid at index ${i}:`, record.Amount_To_Be_Paid);
-      return res.status(400).json({ error: `Invalid Amount_To_Be_Paid at index ${i}` });
+      return res.status(400).json({ error: `Amount_To_Be_Paid at index ${i} must be a positive number up to 1,000,000` });
     }
     if (record.Email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(record.Email)) {
       console.warn(`Invalid Email at index ${i}, setting to empty:`, record.Email);
@@ -1371,37 +1372,44 @@ app.post('/api/import-csv', authenticateToken, async (req, res) => {
       Email = Email ? sanitizeInput(Email) : '';
       Phone_Number = Phone_Number ? sanitizeInput(Phone_Number) : '';
       Amount_To_Be_Paid = parseFloat(Amount_To_Be_Paid);
+      console.log(`Writing Amount_To_Be_Paid for record ${i}:`, Amount_To_Be_Paid);
 
       const clientExists = clients.some(client => client && client[0] === req.user.username && client[1] === Client_Name && client[3] === Type);
       if (!clientExists) {
-        clientsBatch.push([req.user.username, Client_Name, Email, Type, Amount_To_Be_Paid, Phone_Number]);
-        clients.push([req.user.username, Client_Name, Email, Type, Amount_To_Be_Paid, Phone_Number]);
+        const clientRow = [req.user.username, Client_Name, Email, Type, Amount_To_Be_Paid, Phone_Number];
+        clientsBatch.push(clientRow);
+        clients.push(clientRow);
+        console.log(`Appending client row ${i}:`, clientRow);
       }
 
       const paymentExists = payments.some(payment => payment && payment[0] === req.user.username && payment[1] === Client_Name && payment[2] === Type);
       if (!paymentExists) {
-        paymentsBatch.push([req.user.username, Client_Name, Type, Amount_To_Be_Paid, '', '', '', '', '', '', '', '', '', '', '', '', Amount_To_Be_Paid]);
-        payments.push([req.user.username, Client_Name, Type, Amount_To_Be_Paid, '', '', '', '', '', '', '', '', '', '', '', '', Amount_To_Be_Paid]);
+        const paymentRow = [req.user.username, Client_Name, Type, Amount_To_Be_Paid, '', '', '', '', '', '', '', '', '', '', '', '', Amount_To_Be_Paid.toFixed(2)];
+        paymentsBatch.push(paymentRow);
+        payments.push(paymentRow);
+        console.log(`Appending payment row ${i}:`, paymentRow);
       }
     }
 
     if (clientsBatch.length > 0) {
-      console.log(`Appending ${clientsBatch.length} clients...`);
+      console.log(`Appending ${clientsBatch.length} clients to Clients sheet...`);
       await retryWithBackoff(() => appendSheet('Clients', clientsBatch));
     }
     if (paymentsBatch.length > 0) {
-      console.log(`Appending ${paymentsBatch.length} payments...`);
+      console.log(`Appending ${paymentsBatch.length} payments to Payments_${year} sheet...`);
       await retryWithBackoff(() => appendSheet(getPaymentSheetName(year), paymentsBatch));
     }
 
     console.log('CSV import completed successfully');
-    res.status(200).json({ message: 'CSV data imported successfully', imported: csvData.length });
+    res.status(200).json({ message: 'Clients and payments imported successfully', imported: csvData.length });
   } catch (error) {
     console.error('Import CSV error:', {
       message: error.message,
       stack: error.stack,
       code: error.code,
       response: error.response?.data,
+      user: req.user.username,
+      year,
     });
     res.status(500).json({ error: `Failed to import CSV: ${error.message}` });
   }
