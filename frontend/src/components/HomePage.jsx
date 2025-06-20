@@ -583,15 +583,21 @@ const handleAddType = async () => {
     className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
     onClick={() => console.log('HomePage.jsx: Modal background rendered')}
   >
-    <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+    <div
+      className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md"
+      onClick={(e) => e.stopPropagation()}
+    >
       <h2 className="text-lg font-semibold mb-4">Add New Type</h2>
-      {localErrorMessage && (
-        <p className="text-red-500 mb-4 text-sm">{localErrorMessage}</p>
+      {errorMessage && (
+        <p className="text-red-500 mb-4 text-sm">{errorMessage}</p>
       )}
       <input
         type="text"
         value={newType}
-        onChange={(e) => setNewType(e.target.value)}
+        onChange={(e) => {
+          console.log('HomePage.jsx: Typing in newType input:', e.target.value);
+          setNewType(e.target.value);
+        }}
         placeholder="Enter new type"
         className="w-full p-2 border border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
       />
