@@ -100,9 +100,14 @@ const AddClientPage = ({
           headers: { Authorization: `Bearer ${sessionToken}` },
         });
       }
-      setSuccess(`${editClient ? 'Client updated' : 'Client added'} successfully! Reloading page...`);
+      setSuccess(`${editClient ? 'Client updated' : 'Client added'} successfully! Redirecting to clients page...`);
       await new Promise((resolve) => setTimeout(resolve, 2000));
-      window.location.reload();
+      await Promise.all([
+        fetchClients(sessionToken),
+        fetchPayments(sessionToken, new Date().getFullYear())
+      ]);
+      setEditClient(null);
+      setPage('clients');
     } catch (err) {
       console.error('Add/Edit client error:', {
         status: err.response?.status,
