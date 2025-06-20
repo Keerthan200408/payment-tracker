@@ -149,6 +149,33 @@ async function ensureSheet(sheetName, headers, year = null) {
   }
 }
 
+async function ensureTypesSheet() {
+  const sheets = google.sheets({ version: "v4", auth });
+  try {
+    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
+    const sheetExists = spreadsheet.data.sheets.some(
+      (sheet) => sheet.properties.title === "Types"
+    );
+    if (!sheetExists) {
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          requests: [{ addSheet: { properties: { title: "Types" } } }],
+        },
+      });
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: "Types!A1",
+        valueInputOption: "RAW",
+        resource: { values: [["Type"]] },
+      });
+    }
+  } catch (error) {
+    console.error("Error ensuring Types sheet:", error.message);
+    throw error;
+  }
+}
+
 // Helper: Read data from sheet
 async function readSheet(sheetNames, range) {
   const sheets = google.sheets({ version: "v4", auth });
@@ -608,10 +635,12 @@ app.post("/api/add-client", authenticateToken, async (req, res) => {
   if (phoneNumber && !/^\+?[\d\s-]{10,15}$/.test(phoneNumber)) {
     return res.status(400).json({ error: "Invalid phone number format" });
   }
-  if (!["GST", "IT Return"].includes(type)) {
-    return res.status(400).json({ error: 'Type must be either "GST" or "IT Return"' });
-  }
   try {
+    await ensureTypesSheet();
+    const validTypes = await readSheet("Types", "A2:A");
+    if (!validTypes.some((t) => t[0] === type)) {
+      return res.status(400).json({ error: `Type must be one of: ${validTypes.map((t) => t[0]).join(", ")}` });
+    }
     await ensureSheet("Clients", ["User", "Client_Name", "Email", "Type", "Monthly_Payment", "Phone_Number"]);
     await ensureSheet(
       "Payments",
@@ -672,10 +701,12 @@ app.put('/api/update-client', authenticateToken, async (req, res) => {
   if (Client_Name.length > 100 || Type.length > 50) {
     return res.status(400).json({ error: 'Client name or type too long' });
   }
-  if (!['GST', 'IT Return'].includes(Type)) {
-    return res.status(400).json({ error: 'Type must be either "GST" or "IT Return"' });
-  }
   try {
+    await ensureTypesSheet();
+    const validTypes = await readSheet("Types", "A2:A");
+    if (!validTypes.some((t) => t[0] === Type)) {
+      return res.status(400).json({ error: `Type must be one of: ${validTypes.map((t) => t[0]).join(", ")}` });
+    }
     await retryWithBackoff(() => ensureSheet('Clients', ['User', 'Client_Name', 'Email', 'Type', 'Monthly_Payment', 'Phone_Number']));
     let clients = await retryWithBackoff(() => readSheet('Clients', 'A2:F'));
     if (!Array.isArray(clients)) {
@@ -713,7 +744,7 @@ app.put('/api/update-client', authenticateToken, async (req, res) => {
           const prevYear = (parseInt(sheetYear) - 1).toString();
           try {
             const prevPayments = await readSheet(getPaymentSheetName(prevYear), 'A2:R');
-            const prevPayment = prevPayments.find(p => p && Array.isArray(p) && p[0] === req.user.username && p[1] === oldClientName && p[2] === oldType);
+            const prevPayment = prevPayments.find(p => p && Array.isArray(p) && p[0] === req.user.username && p[1] == oldClientName && p[2] === oldType);
             prevYearCumulativeDue = prevPayment && prevPayment[16] ? parseFloat(prevPayment[16]) || 0 : 0;
           } catch (error) {
             console.warn(`No data found for previous year ${prevYear}:`, error.message);
@@ -1319,38 +1350,40 @@ app.post('/api/import-csv', authenticateToken, async (req, res) => {
     return res.status(400).json({ error: 'CSV data must be a non-empty array' });
   }
 
-  // Validate all records
-  for (let i = 0; i < csvData.length; i++) {
-    const record = csvData[i];
-    if (!record.Client_Name || !record.Type || record.Amount_To_Be_Paid == null) {
-      console.error(`Invalid record at index ${i}: missing required fields`, record);
-      return res.status(400).json({ error: `Missing required fields (Client_Name, Type, or Amount_To_Be_Paid) in record at index ${i}` });
-    }
-    if (typeof record.Client_Name !== 'string' || record.Client_Name.length > 100) {
-      console.error(`Invalid Client_Name at index ${i}:`, record.Client_Name);
-      return res.status(400).json({ error: `Client_Name at index ${i} must be a string with 100 characters or less` });
-    }
-    if (typeof record.Type !== 'string' || !['GST', 'IT Return'].includes(record.Type)) {
-      console.error(`Invalid Type at index ${i}:`, record.Type);
-      return res.status(400).json({ error: `Type at index ${i} must be exactly 'GST' or 'IT Return' (case-sensitive, found: '${record.Type}')` });
-    }
-    const amount = parseFloat(record.Amount_To_Be_Paid);
-    console.log(`Parsed Amount_To_Be_Paid at index ${i}:`, amount);
-    if (isNaN(amount) || amount <= 0 || amount > 1e6) {
-      console.error(`Invalid Amount_To_Be_Paid at index ${i}:`, record.Amount_To_Be_Paid);
-      return res.status(400).json({ error: `Amount_To_Be_Paid at index ${i} must be a positive number up to 1,000,000` });
-    }
-    if (record.Email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(record.Email)) {
-      console.warn(`Invalid Email at index ${i}, setting to empty:`, record.Email);
-      record.Email = '';
-    }
-    if (record.Phone_Number && !/^\+?[\d\s-]{10,15}$/.test(record.Phone_Number)) {
-      console.warn(`Invalid Phone_Number at index ${i}, setting to empty:`, record.Phone_Number);
-      record.Phone_Number = '';
-    }
-  }
-
   try {
+    await ensureTypesSheet();
+    const validTypes = await readSheet("Types", "A2:A");
+    // Validate all records
+    for (let i = 0; i < csvData.length; i++) {
+      const record = csvData[i];
+      if (!record.Client_Name || !record.Type || record.Amount_To_Be_Paid == null) {
+        console.error(`Invalid record at index ${i}: missing required fields`, record);
+        return res.status(400).json({ error: `Missing required fields (Client_Name, Type, or Amount_To_Be_Paid) in record at index ${i}` });
+      }
+      if (typeof record.Client_Name !== 'string' || record.Client_Name.length > 100) {
+        console.error(`Invalid Client_Name at index ${i}:`, record.Client_Name);
+        return res.status(400).json({ error: `Client_Name at index ${i} must be a string with 100 characters or less` });
+      }
+      if (typeof record.Type !== 'string' || !validTypes.some((t) => t[0] === record.Type)) {
+        console.error(`Invalid Type at index ${i}:`, record.Type);
+        return res.status(400).json({ error: `Type at index ${i} must be one of: ${validTypes.map((t) => t[0]).join(", ")}` });
+      }
+      const amount = parseFloat(record.Amount_To_Be_Paid);
+      console.log(`Parsed Amount_To_Be_Paid at index ${i}:`, amount);
+      if (isNaN(amount) || amount <= 0 || amount > 1e6) {
+        console.error(`Invalid Amount_To_Be_Paid at index ${i}:`, record.Amount_To_Be_Paid);
+        return res.status(400).json({ error: `Amount_To_Be_Paid at index ${i} must be a positive number up to 1,000,000` });
+      }
+      if (record.Email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(record.Email)) {
+        console.warn(`Invalid Email at index ${i}, setting to empty:`, record.Email);
+        record.Email = '';
+      }
+      if (record.Phone_Number && !/^\+?[\d\s-]{10,15}$/.test(record.Phone_Number)) {
+        console.warn(`Invalid Phone_Number at index ${i}, setting to empty:`, record.Phone_Number);
+        record.Phone_Number = '';
+      }
+    }
+
     console.log('Ensuring sheets...');
     await retryWithBackoff(() => ensureSheet('Clients', ['User', 'Client_Name', 'Email', 'Type', 'Monthly_Payment', 'Phone_Number']));
     await retryWithBackoff(() => ensureSheet('Payments', ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment'], year));
@@ -1515,6 +1548,41 @@ app.get("/api/debug-routes", (req, res) => {
     routes: routes.filter((r) => r.path.startsWith("/api")),
     timestamp: new Date().toISOString(),
   });
+});
+
+app.post("/api/add-type", authenticateToken, async (req, res) => {
+  let { type } = req.body;
+  if (!type) {
+    return res.status(400).json({ error: "Type is required" });
+  }
+  type = sanitizeInput(type.trim());
+  if (type.length < 1 || type.length > 50) {
+    return res.status(400).json({ error: "Type must be between 1 and 50 characters" });
+  }
+  try {
+    await ensureTypesSheet();
+    const existingTypes = await readSheet("Types", "A2:A");
+    if (existingTypes.some((t) => t[0] === type)) {
+      return res.status(400).json({ error: "Type already exists" });
+    }
+    await appendSheet("Types", [[type]]);
+    res.status(201).json({ message: "Type added successfully" });
+  } catch (error) {
+    console.error("Add type error:", error.message);
+    res.status(500).json({ error: "Failed to add type" });
+  }
+});
+
+app.get("/api/get-types", authenticateToken, async (req, res) => {
+  try {
+    await ensureTypesSheet();
+    const types = await readSheet("Types", "A2:A");
+    const processedTypes = types.map((t) => t[0]).filter(Boolean);
+    res.json(processedTypes);
+  } catch (error) {
+    console.error("Get types error:", error.message);
+    res.status(500).json({ error: "Failed to fetch types" });
+  }
 });
 
 const PORT = process.env.PORT || 5000;

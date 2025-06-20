@@ -29,6 +29,37 @@ const App = () => {
   const profileMenuRef = useRef(null);
   const saveTimeouts = useRef({});
   const apiCacheRef = useRef({});
+  const [types, setTypes] = useState([]);
+
+const fetchTypes = async (token) => {
+  const cacheKey = `types_${token}`;
+  if (apiCacheRef.current[cacheKey] && Date.now() - apiCacheRef.current[cacheKey].timestamp < CACHE_DURATION) {
+    console.log("App.jsx: Using cached types");
+    setTypes(apiCacheRef.current[cacheKey].data);
+    return;
+  }
+  try {
+    console.log("Fetching types with token:", token?.substring(0, 10) + "...");
+    const response = await axios.get(`${BASE_URL}/get-types`, {
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 10000,
+    });
+    const typesData = Array.isArray(response.data) ? response.data : [];
+    console.log("Types fetched:", typesData);
+    setTypes(typesData);
+    apiCacheRef.current[cacheKey] = { data: typesData, timestamp: Date.now() };
+  } catch (error) {
+    console.error("Fetch types error:", error.response?.data?.error || error.message);
+    setTypes([]);
+    handleSessionError(error);
+  }
+};
+
+useEffect(() => {
+  if (sessionToken) {
+    fetchTypes(sessionToken);
+  }
+}, [sessionToken]);
 
   // Set axios defaults
   useEffect(() => {
@@ -275,24 +306,21 @@ const importCsv = async (e) => {
     const errors = [];
     rows.forEach((row, index) => {
       let clientName = '', type = '', amount = 0, email = '', phoneNumber = '';
-      row.forEach(cell => {
-        if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cell)) {
-          email = cell;
-        } else if (/^\+?[\d\s-]{10,15}$/.test(cell)) {
-          phoneNumber = cell;
-        } else if (cell.toUpperCase() === 'GST') {
-          type = 'GST';
-        } else if (cell.toUpperCase().replace(/\s/g, '') === 'ITRETURN') {
-          type = 'IT Return';
-        } else if (!isNaN(parseFloat(cell)) && parseFloat(cell) > 0) {
-          amount = parseFloat(cell);
-        } else if (cell) {
-          clientName = cell;
-        }
-      });
+      // Assume CSV format: Client_Name, Type, Amount, Email, Phone_Number
+      if (row.length >= 1) clientName = row[0];
+      if (row.length >= 2) type = row[1];
+      if (row.length >= 3 && !isNaN(parseFloat(row[2])) && parseFloat(row[2]) > 0) amount = parseFloat(row[2]);
+      if (row.length >= 4 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row[3])) email = row[3];
+      if (row.length >= 5 && /^\+?[\d\s-]{10,15}$/.test(row[4])) phoneNumber = row[4];
+
+      if (!types.includes(type)) {
+        console.warn(`Skipping row at index ${index + 1}: Invalid type "${type}"`);
+        errors.push(`Row ${index + 1}: Invalid type "${type}". Type must be one of: ${types.join(", ")}`);
+        return;
+      }
       if (!clientName || !type || !amount) {
         console.warn(`Skipping invalid row at index ${index + 1}:`, row);
-        errors.push(`Row ${index + 1}: Missing or invalid required fields (Client Name, Type must be 'GST' or 'IT Return' (case-sensitive), or Amount)`);
+        errors.push(`Row ${index + 1}: Missing or invalid required fields (Client Name, Type, Amount)`);
         return;
       }
       console.log(`Parsed row ${index + 1} Amount_To_Be_Paid:`, amount);
@@ -314,7 +342,6 @@ const importCsv = async (e) => {
       console.log(`Batch response:`, response.data);
       await new Promise(resolve => setTimeout(resolve, 500));
     }
-    // Clear both payments and clients cache
     const cacheKeyPayments = `payments_${currentYear}_${sessionToken}`;
     const cacheKeyClients = `clients_${sessionToken}`;
     delete apiCacheRef.current[cacheKeyPayments];
@@ -332,7 +359,7 @@ const importCsv = async (e) => {
       response: err.response?.data,
       status: err.response?.status,
     });
-    const errorMessage = err.response?.data?.error || err.message || 'Failed to import CSV. Ensure Type is exactly "GST" or "IT Return" (case-sensitive).';
+    const errorMessage = err.response?.data?.error || err.message || 'Failed to import CSV.';
     setErrorMessage(errorMessage);
   } finally {
     setIsImporting(false);
@@ -648,6 +675,7 @@ const updatePayment = async (rowIndex, month, value, year = currentYear) => {
                   currentUser={currentUser}
                   editClient={editClient}
                   setEditClient={setEditClient}
+                  types={types}
                 />
               )}
               {page === "clients" && (

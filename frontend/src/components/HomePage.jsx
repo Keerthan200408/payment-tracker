@@ -47,6 +47,8 @@ const HomePage = ({
   const activeRequestsRef = useRef(new Set());
   const tableRef = useRef(null);
   const [errorMessage, setLocalErrorMessage] = useState("");
+  const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
+const [newType, setNewType] = useState("");
   const mountedRef = useRef(true);
 
   const MONTHS = [
@@ -510,6 +512,32 @@ const HomePage = ({
     };
   }, []);
 
+  const handleAddType = async () => {
+  if (!newType.trim()) {
+    setLocalErrorMessage("Type name cannot be empty.");
+    return;
+  }
+  try {
+    console.log("HomePage.jsx: Adding new type:", newType);
+    await axios.post(
+      `${BASE_URL}/add-type`,
+      { type: newType.trim() },
+      {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+        timeout: 10000,
+      }
+    );
+    setNewType("");
+    setIsTypeModalOpen(false);
+    alert("Type added successfully.");
+    const cacheKey = `types_${sessionToken}`;
+    delete apiCacheRef.current[cacheKey];
+  } catch (error) {
+    console.error("HomePage.jsx: Error adding type:", error);
+    setLocalErrorMessage(`Failed to add type: ${error.response?.data?.error || error.message}`);
+  }
+};
+
   // Updated useEffect for fetching years
   useEffect(() => {
     const controller = new AbortController();
@@ -532,6 +560,35 @@ const HomePage = ({
     document.addEventListener("click", handleClickOutside);
     return () => document.removeEventListener("click", handleClickOutside);
   }, [hideContextMenu]);
+
+  {isTypeModalOpen && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
+      <h2 className="text-lg font-semibold mb-4">Add New Type</h2>
+      <input
+        type="text"
+        value={newType}
+        onChange={(e) => setNewType(e.target.value)}
+        placeholder="Enter new type"
+        className="w-full p-2 border border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
+      />
+      <div className="flex justify-end gap-2">
+        <button
+          onClick={() => setIsTypeModalOpen(false)}
+          className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleAddType}
+          className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700"
+        >
+          Add Type
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
   const renderDashboard = () => (
     <>
@@ -631,8 +688,15 @@ const HomePage = ({
                   Client Name
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-                  Type
-                </th>
+  Type
+  <button
+    onClick={() => setIsTypeModalOpen(true)}
+    className="ml-2 text-blue-600 hover:text-blue-800 text-xs"
+    title="Add New Type"
+  >
+    <i className="fas fa-plus-circle"></i>
+  </button>
+</th>
                 <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
                   Amount To Be Paid
                 </th>
@@ -762,6 +826,7 @@ const HomePage = ({
       currentPage * entriesPerPage
     );
 
+    
     return (
       <>
         <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 mb-6">

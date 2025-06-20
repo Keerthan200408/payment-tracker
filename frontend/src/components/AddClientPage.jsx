@@ -11,6 +11,7 @@ const AddClientPage = ({
   currentUser,
   editClient,
   setEditClient,
+  types,
 }) => {
   const [clientName, setClientName] = useState('');
   const [email, setEmail] = useState('');
@@ -32,92 +33,86 @@ const AddClientPage = ({
   }, [editClient]);
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
+  e.preventDefault();
+  setError('');
+  setSuccess('');
 
-    // Validate required fields
-    if (!clientName || !type || !monthlyPayment) {
-      setError('Client name, type, and monthly payment are required.');
-      return;
-    }
-    if (clientName.length > 100) {
-      setError('Client name must be 100 characters or less.');
-      return;
-    }
-    if (type.length > 50) {
-      setError('Type must be 50 characters or less.');
-      return;
-    }
-    if (!['GST', 'IT Return'].includes(type)) {
-      setError('Type must be either "GST" or "IT Return".');
-      return;
-    }
-    const paymentValue = parseFloat(monthlyPayment);
-    if (isNaN(paymentValue) || paymentValue <= 0) {
-      setError('Monthly payment must be a positive number.');
-      return;
-    }
-    if (paymentValue > 1000000) {
-      setError('Monthly payment exceeds maximum limit of 1,000,000.');
-      return;
-    }
-    // Validate optional email
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError('Please enter a valid email address.');
-      return;
-    }
-    // Validate optional phone number
-    if (phoneNumber && !/^\+?[\d\s-]{10,15}$/.test(phoneNumber)) {
-      setError('Please enter a valid phone number (10-15 digits, optional + or -).');
-      return;
-    }
+  // Validate required fields
+  if (!clientName || !type || !monthlyPayment) {
+    setError('Client name, type, and monthly payment are required.');
+    return;
+  }
+  if (clientName.length > 100) {
+    setError('Client name must be 100 characters or less.');
+    return;
+  }
+  if (!types.includes(type)) {
+    setError(`Type must be one of: ${types.join(", ")}`);
+    return;
+  }
+  const paymentValue = parseFloat(monthlyPayment);
+  if (isNaN(paymentValue) || paymentValue <= 0) {
+    setError('Monthly payment must be a positive number.');
+    return;
+  }
+  if (paymentValue > 1000000) {
+    setError('Monthly payment exceeds maximum limit of 1,000,000.');
+    return;
+  }
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    setError('Please enter a valid email address.');
+    return;
+  }
+  if (phoneNumber && !/^\+?[\d\s-]{10,15}$/.test(phoneNumber)) {
+    setError('Please enter a valid phone number (10-15 digits, optional + or -).');
+    return;
+  }
 
-    try {
-      if (editClient) {
-        const payload = {
-          oldClient: { Client_Name: editClient.Client_Name, Type: editClient.Type },
-          newClient: {
-            Client_Name: clientName,
-            Type: type,
-            Amount_To_Be_Paid: paymentValue,
-            Email: email || '',
-            Phone_Number: phoneNumber || '',
-          },
-        };
-        console.log('Update client payload:', payload);
-        await axios.put(`${BASE_URL}/update-client`, payload, {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        });
-      } else {
-        await axios.post(`${BASE_URL}/add-client`, {
-          clientName,
-          email: email || '',
-          type,
-          monthlyPayment: paymentValue,
-          phoneNumber: phoneNumber || '',
-        }, {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        });
-      }
-      setSuccess(`${editClient ? 'Client updated' : 'Client added'} successfully! Redirecting to clients page...`);
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      await Promise.all([
-        fetchClients(sessionToken),
-        fetchPayments(sessionToken, new Date().getFullYear())
-      ]);
-      setEditClient(null);
-      setPage('clients');
-    } catch (err) {
-      console.error('Add/Edit client error:', {
-        status: err.response?.status,
-        data: err.response?.data,
-        message: err.message,
-        fullError: err,
+  try {
+    if (editClient) {
+      const payload = {
+        oldClient: { Client_Name: editClient.Client_Name, Type: editClient.Type },
+        newClient: {
+          Client_Name: clientName,
+          Type: type,
+          Amount_To_Be_Paid: paymentValue,
+          Email: email || '',
+          Phone_Number: phoneNumber || '',
+        },
+      };
+      console.log('Update client payload:', payload);
+      await axios.put(`${BASE_URL}/update-client`, payload, {
+        headers: { Authorization: `Bearer ${sessionToken}` },
       });
-      setError(err.response?.data?.error || err.message || 'Failed to save client.');
+    } else {
+      await axios.post(`${BASE_URL}/add-client`, {
+        clientName,
+        email: email || '',
+        type,
+        monthlyPayment: paymentValue,
+        phoneNumber: phoneNumber || '',
+      }, {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      });
     }
-  };
+    setSuccess(`${editClient ? 'Client updated' : 'Client added'} successfully! Redirecting to clients page...`);
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    await Promise.all([
+      fetchClients(sessionToken),
+      fetchPayments(sessionToken, new Date().getFullYear())
+    ]);
+    setEditClient(null);
+    setPage('clients');
+  } catch (err) {
+    console.error('Add/Edit client error:', {
+      status: err.response?.status,
+      data: err.response?.data,
+      message: err.message,
+      fullError: err,
+    });
+    setError(err.response?.data?.error || err.message || 'Failed to save client.');
+  }
+};
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen flex justify-center items-center">
@@ -161,14 +156,17 @@ const AddClientPage = ({
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-medium mb-2">Type</label>
             <select
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base"
-            >
-              <option value="">Select Type</option>
-              <option value="GST">GST</option>
-              <option value="IT Return">IT Return</option>
-            </select>
+  value={type}
+  onChange={(e) => setType(e.target.value)}
+  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base"
+>
+  <option value="">Select Type</option>
+  {types.map((typeOption) => (
+    <option key={typeOption} value={typeOption}>
+      {typeOption}
+    </option>
+  ))}
+</select>
           </div>
           <div className="mb-6">
             <label className="block text-gray-700 text-sm font-medium mb-2">Monthly Payment</label>
