@@ -708,6 +708,7 @@ const updatePayment = async (rowIndex, month, value, year = currentYear) => {
                   setEditClient={setEditClient}
                   types={types}
                   apiCacheRef={apiCacheRef}
+                  fetchTypes={fetchTypes}
                 />
               )}
               {page === "clients" && (

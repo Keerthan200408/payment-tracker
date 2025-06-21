@@ -13,6 +13,7 @@ const AddClientPage = ({
   setEditClient,
   types,
   apiCacheRef,
+  fetchTypes,
 }) => {
   const [clientName, setClientName] = useState('');
   const [email, setEmail] = useState('');
