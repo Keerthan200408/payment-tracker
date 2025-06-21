@@ -27,10 +27,12 @@ const PaymentsPage = ({
   apiCacheRef = { current: {} },
   currentUser = null,
   onMount = () => {},
+  fetchPayments = () => {}, // New prop for fetching payments
 }) => {
   // State and Refs
   const [availableYears, setAvailableYears] = useState(["2025"]);
   const [isLoadingYears, setIsLoadingYears] = useState(false);
+  const [isLoadingPayments, setIsLoadingPayments] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const tableRef = useRef(null);
   const mountedRef = useRef(true);
@@ -99,6 +101,18 @@ const PaymentsPage = ({
         console.log("PaymentsPage.jsx: No sessionToken");
         return;
       }
+      if (!isOnline) {
+        console.log("PaymentsPage.jsx: Offline, using cached years if available");
+        const cacheKey = getCacheKey("/get-user-years", { sessionToken });
+        const cachedYears = getCachedData(cacheKey);
+        if (cachedYears) {
+          setAvailableYears(cachedYears);
+        } else {
+          setErrorMessage("Offline and no cached years available. Showing default year.");
+          setAvailableYears(["2025"]);
+        }
+        return;
+      }
       const cacheKey = getCacheKey("/get-user-years", { sessionToken });
       const cachedYears = getCachedData(cacheKey);
       if (cachedYears) {
@@ -125,7 +139,11 @@ const PaymentsPage = ({
             console.log("PaymentsPage.jsx: Year fetch aborted");
             return;
           }
-          console.error("PaymentsPage.jsx: Error fetching user years:", error);
+          console.error("PaymentsPage.jsx: Error fetching user years:", {
+            message: error.message,
+            status: error.response?.status,
+            data: error.response?.data,
+          });
           setErrorMessage("Failed to fetch available years. Showing default year.");
           setAvailableYears(["2025"]);
         } finally {
@@ -135,7 +153,7 @@ const PaymentsPage = ({
         }
       });
     },
-    [sessionToken, getCacheKey, getCachedData, setCachedData, createDedupedRequest, setErrorMessage]
+    [sessionToken, isOnline, getCacheKey, getCachedData, setCachedData, createDedupedRequest, setErrorMessage]
   );
 
   const debouncedSearchUserYears = useCallback(
@@ -143,15 +161,79 @@ const PaymentsPage = ({
     [searchUserYears]
   );
 
+  // Fetch payments for the selected year
+  const fetchPaymentsForYear = useCallback(
+    async (year, abortSignal) => {
+      if (!sessionToken) {
+        console.log("PaymentsPage.jsx: No sessionToken for fetching payments");
+        return;
+      }
+      if (!isOnline) {
+        console.log("PaymentsPage.jsx: Offline, using cached payments if available");
+        const cacheKey = getCacheKey("/get-payments", { sessionToken, year });
+        const cachedPayments = getCachedData(cacheKey);
+        if (cachedPayments) {
+          setPaymentsData(cachedPayments);
+        } else {
+          setErrorMessage("Offline and no cached payments available.");
+        }
+        return;
+      }
+      const cacheKey = getCacheKey("/get-payments", { sessionToken, year });
+      const cachedPayments = getCachedData(cacheKey);
+      if (cachedPayments) {
+        console.log("PaymentsPage.jsx: Using cached payments data for year", year);
+        setPaymentsData(cachedPayments);
+        return;
+      }
+      const requestKey = `payments_${sessionToken}_${year}`;
+      return createDedupedRequest(requestKey, async () => {
+        setIsLoadingPayments(true);
+        console.log("PaymentsPage.jsx: Fetching payments for year", year);
+        try {
+          const response = await axios.get(`${BASE_URL}/get-payments`, {
+            headers: { Authorization: `Bearer ${sessionToken}` },
+            params: { year },
+            timeout: 10000,
+            signal: abortSignal,
+          });
+          const payments = Array.isArray(response.data) ? response.data : [];
+          setPaymentsData(payments);
+          setCachedData(cacheKey, payments);
+          console.log("PaymentsPage.jsx: Fetched payments for", year, ":", payments.length);
+        } catch (error) {
+          if (error.name === "AbortError") {
+            console.log("PaymentsPage.jsx: Payments fetch aborted");
+            return;
+          }
+          console.error("PaymentsPage.jsx: Error fetching payments:", {
+            message: error.message,
+            status: error.response?.status,
+            data: error.response?.data,
+          });
+          setErrorMessage("Failed to fetch payments for the selected year.");
+          setPaymentsData([]);
+        } finally {
+          if (mountedRef.current) {
+            setIsLoadingPayments(false);
+          }
+        }
+      });
+    },
+    [sessionToken, isOnline, getCacheKey, getCachedData, setCachedData, createDedupedRequest, setPaymentsData, setErrorMessage]
+  );
+
   // Handle year change
   const handleYearChangeDebounced = useCallback(
-    (year) => {
+    debounce((year) => {
       console.log("PaymentsPage.jsx: Year change requested to:", year);
       localStorage.setItem("currentYear", year);
       setCurrentYear(year);
-      window.location.reload();
-    },
-    [setCurrentYear]
+      const controller = new AbortController();
+      fetchPaymentsForYear(year, controller.signal);
+      return () => controller.abort();
+    }, 300),
+    [setCurrentYear, fetchPaymentsForYear]
   );
 
   // Initialize and cleanup
@@ -161,13 +243,15 @@ const PaymentsPage = ({
     if (sessionToken) {
       console.log("PaymentsPage.jsx: SessionToken available, fetching years");
       debouncedSearchUserYears(controller.signal);
+      fetchPaymentsForYear(currentYear, controller.signal);
     }
     return () => {
       controller.abort();
       debouncedSearchUserYears.cancel();
       mountedRef.current = false;
+      activeRequestsRef.current.clear();
     };
-  }, [sessionToken, debouncedSearchUserYears, onMount]);
+  }, [sessionToken, currentYear, debouncedSearchUserYears, fetchPaymentsForYear, onMount]);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -201,7 +285,7 @@ const PaymentsPage = ({
           value={currentYear}
           onChange={(e) => handleYearChangeDebounced(e.target.value)}
           className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
-          disabled={isLoadingYears}
+          disabled={isLoadingYears || isLoadingPayments}
         >
           {availableYears.map((year) => (
             <option key={year} value={year}>
@@ -249,73 +333,79 @@ const PaymentsPage = ({
 
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
         <div className="overflow-x-auto max-h-96 overflow-y-auto">
-          <table className="w-full" ref={tableRef}>
-            <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
-              <tr>
-                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-                  Client Name
-                </th>
-                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-                  Type
-                </th>
-                <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-                  Amount To Be Paid
-                </th>
-                {months.map((month, index) => (
-                  <th
-                    key={index}
-                    className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50"
-                  >
-                    {month.charAt(0).toUpperCase() + month.slice(1)}
-                  </th>
-                ))}
-                <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-                  Due Payment
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {paymentsData.length === 0 ? (
+          {isLoadingPayments ? (
+            <div className="p-4 text-center text-gray-500">
+              Loading payments...
+            </div>
+          ) : (
+            <table className="w-full" ref={tableRef}>
+              <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
                 <tr>
-                  <td
-                    colSpan={15}
-                    className="px-6 py-12 text-center text-gray-500"
-                  >
-                    No payments found.
-                  </td>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                    Client Name
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                    Type
+                  </th>
+                  <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                    Amount To Be Paid
+                  </th>
+                  {months.map((month, index) => (
+                    <th
+                      key={index}
+                      className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50"
+                    >
+                      {month.charAt(0).toUpperCase() + month.slice(1)}
+                    </th>
+                  ))}
+                  <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                    Due Payment
+                  </th>
                 </tr>
-              ) : (
-                paymentsData.map((row, rowIndex) => (
-                  <tr
-                    key={`${row?.Client_Name || "unknown"}-${rowIndex}`}
-                    onContextMenu={(e) => handleContextMenu(e, rowIndex)}
-                    className="hover:bg-gray-50"
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {row?.Client_Name || "N/A"}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {row?.Type || "N/A"}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      {parseFloat(row?.Amount_To_Be_Paid || 0).toFixed(2)}
-                    </td>
-                    {months.map((month, colIndex) => (
-                      <td
-                        key={colIndex}
-                        className="px-6 py-4 whitespace-nowrap text-right"
-                      >
-                        {parseFloat(row?.[month] || 0).toFixed(2)}
-                      </td>
-                    ))}
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      {parseFloat(row?.Due_Payment || 0).toFixed(2)}
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {paymentsData.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={15}
+                      className="px-6 py-12 text-center text-gray-500"
+                    >
+                      No payments found.
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  paymentsData.map((row, rowIndex) => (
+                    <tr
+                      key={`${row?.Client_Name || "unknown"}-${rowIndex}`}
+                      onContextMenu={(e) => handleContextMenu(e, rowIndex)}
+                      className="hover:bg-gray-50"
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {row?.Client_Name || "N/A"}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {row?.Type || "N/A"}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        {parseFloat(row?.Amount_To_Be_Paid || 0).toFixed(2)}
+                      </td>
+                      {months.map((month, colIndex) => (
+                        <td
+                          key={colIndex}
+                          className="px-6 py-4 whitespace-nowrap text-right"
+                        >
+                          {parseFloat(row?.[month] || 0).toFixed(2)}
+                        </td>
+                      ))}
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        {parseFloat(row?.Due_Payment || 0).toFixed(2)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 
