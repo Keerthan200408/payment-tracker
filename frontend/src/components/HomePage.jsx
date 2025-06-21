@@ -14,7 +14,7 @@ const BATCH_SIZE = 5;
 const CACHE_DURATION = 5 * 60 * 1000;
 
 const HomePage = ({
-  paymentsData = [], // Default to empty array
+  paymentsData = [],
   setPaymentsData = () => {},
   searchQuery = "",
   setSearchQuery = () => {},
@@ -28,8 +28,7 @@ const HomePage = ({
   hideContextMenu = () => {},
   deleteRow = () => {},
   setPage = () => {},
-  csvFileInputRef = { current: null },
-  importCsv = () => {},
+  importCsv = () => {}, // Keep importCsv
   isReportsPage = false,
   isImporting = false,
   sessionToken = "",
@@ -37,7 +36,7 @@ const HomePage = ({
   setCurrentYear = () => {},
   handleYearChange = () => {},
   setErrorMessage = () => {},
-  apiCacheRef = useRef({}), // Default to new ref if not provided
+  apiCacheRef = { current: {} }, // Default to empty ref object
   currentUser = null,
   onMount = () => {},
   fetchTypes = () => {},

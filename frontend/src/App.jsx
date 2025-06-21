@@ -845,6 +845,7 @@ const importCsv = async (e) => {
                     )
                   }
                   fetchTypes={fetchTypes}
+                  csvFileInputRef={csvFileInputRef}
                 />
               )}
               {page === "addClient" && (
@@ -913,6 +914,7 @@ const importCsv = async (e) => {
                   handleYearChange={handleYearChange}
                   setErrorMessage={setErrorMessage}
                   apiCacheRef={apiCacheRef}
+                  csvFileInputRef={csvFileInputRef}
                 />
               )}
             </main>

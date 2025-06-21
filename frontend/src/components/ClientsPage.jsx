@@ -50,7 +50,11 @@ const ClientsPage = ({
 
   useEffect(() => {
   console.log('ClientsPage.jsx: importCsv prop:', importCsv);
-}, [importCsv]);
+  if (!importCsv) {
+    console.error('ClientsPage.jsx: importCsv prop is undefined on mount');
+    setErrorMessage('Bulk import functionality is unavailable.');
+  }
+}, [importCsv, setErrorMessage]);
 
   // Modified importCsv to handle UI feedback
   const handleImportCsv = async (e) => {
