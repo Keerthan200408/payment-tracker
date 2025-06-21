@@ -13,6 +13,7 @@ const ClientsPage = ({
   sessionToken,
   currentYear = new Date().getFullYear(),
   isImporting,
+  importCsv,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
