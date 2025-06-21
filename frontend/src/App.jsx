@@ -872,6 +872,7 @@ const App = () => {
                   sessionToken={sessionToken}
                   currentYear={currentYear}
                   isImporting={isImporting}
+                  importCsv={importCsv}
                 />
               )}
               {page === "payments" && (
