@@ -53,6 +53,7 @@ const HomePage = ({
   const batchTimerRef = useRef(null);
   const activeRequestsRef = useRef(new Set());
   const tableRef = useRef(null);
+  const csvFileInputRef = useRef(null);
   const [errorMessage, setLocalErrorMessage] = useState("");
   const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
   const [newType, setNewType] = useState("");
