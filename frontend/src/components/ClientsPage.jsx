@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import { useState, useEffect, useRef } from "react";
+import axios from "axios";
 
-const BASE_URL = 'https://payment-tracker-aswa.onrender.com/api';
+const BASE_URL = "https://payment-tracker-aswa.onrender.com/api";
 
 const ClientsPage = ({
   clientsData,
@@ -12,8 +12,6 @@ const ClientsPage = ({
   fetchPayments,
   sessionToken,
   currentYear = new Date().getFullYear(),
-  csvFileInputRef,
-  importCsv,
   isImporting,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -21,37 +19,61 @@ const ClientsPage = ({
   const [error, setError] = useState(null);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [errorMessage, setErrorMessage] = useState(""); // Add error message state
+  const [successMessage, setSuccessMessage] = useState(""); // Add success message state
   const hasFetched = useRef(false);
+  const clientsCsvFileInputRef = useRef(null); // Dedicated ref for ClientsPage
   const entriesPerPage = 10;
   const totalEntries = clientsData?.length || 0;
   const totalPages = Math.ceil(totalEntries / entriesPerPage);
 
   useEffect(() => {
-  const loadClientsData = async () => {
-    if (hasFetched.current || clientsData?.length > 0) return;
-    setIsLoading(true);
-    setError(null);
+    const loadClientsData = async () => {
+      if (hasFetched.current || clientsData?.length > 0) return;
+      setIsLoading(true);
+      setError(null);
+      try {
+        console.log("Fetching clients data...");
+        await fetchClients(sessionToken);
+        hasFetched.current = true;
+      } catch (err) {
+        console.error("Error fetching clients:", err);
+        setError(err.response?.data?.error || "Failed to load clients data");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    if (sessionToken) {
+      loadClientsData();
+    }
+  }, [sessionToken, fetchClients]);
+
+  // Modified importCsv to handle UI feedback
+  const handleImportCsv = async (e) => {
     try {
-      console.log('Fetching clients data...');
-      await fetchClients(sessionToken);
-      hasFetched.current = true;
+      await importCsv(e); // Call the App.jsx importCsv
+      setSuccessMessage("CSV imported successfully!");
+      setErrorMessage("");
+      // Clear input
+      if (clientsCsvFileInputRef.current) {
+        clientsCsvFileInputRef.current.value = null;
+      }
     } catch (err) {
-      console.error('Error fetching clients:', err);
-      setError(err.response?.data?.error || 'Failed to load clients data');
-    } finally {
-      setIsLoading(false);
+      console.error("ClientsPage.jsx: CSV import error:", err);
+      setErrorMessage(err.message || "Failed to import CSV.");
+      setSuccessMessage("");
+      if (clientsCsvFileInputRef.current) {
+        clientsCsvFileInputRef.current.value = null;
+      }
     }
   };
-  if (sessionToken) {
-    loadClientsData();
-  }
-}, [sessionToken, fetchClients]);
 
-  const filteredClients = clientsData?.filter(
-    (client) =>
-      !searchQuery ||
-      client.Client_Name?.toLowerCase().includes(searchQuery.toLowerCase())
-  ) || [];
+  const filteredClients =
+    clientsData?.filter(
+      (client) =>
+        !searchQuery ||
+        client.Client_Name?.toLowerCase().includes(searchQuery.toLowerCase())
+    ) || [];
 
   const paginatedClients = filteredClients.slice(
     (currentPage - 1) * entriesPerPage,
@@ -59,14 +81,10 @@ const ClientsPage = ({
   );
 
   const handleDelete = async (client) => {
-    if (
-      !confirm(
-        `Are you sure you want to delete ${client.Client_Name}?`
-      )
-    ) {
+    if (!confirm(`Are you sure you want to delete ${client.Client_Name}?`)) {
       return;
     }
-    
+
     setDeleteInProgress(true);
     try {
       console.log("Deleting client:", client.Client_Name);
@@ -88,13 +106,13 @@ const ClientsPage = ({
       }
 
       const refreshPromises = [fetchClients(sessionToken)];
-      
+
       if (fetchPayments.length >= 2) {
         refreshPromises.push(fetchPayments(sessionToken, currentYear));
       } else {
         refreshPromises.push(fetchPayments(sessionToken));
       }
-      
+
       await Promise.all(refreshPromises);
     } catch (error) {
       console.error(
@@ -106,7 +124,7 @@ const ClientsPage = ({
           error.response?.data?.error || error.message
         }`
       );
-      
+
       await fetchClients(sessionToken);
     } finally {
       setDeleteInProgress(false);
@@ -147,6 +165,31 @@ const ClientsPage = ({
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
+      {/* Add success/error message displays */}
+      {successMessage && (
+        <div className="mb-4 p-4 bg-green-50 text-green-800 rounded-lg text-center border border-green-200">
+          <i className="fas fa-check-circle mr-2"></i>
+          {successMessage}
+          <button
+            onClick={() => setSuccessMessage("")}
+            className="ml-2 text-green-600 hover:text-green-800"
+          >
+            <i className="fas fa-times"></i>
+          </button>
+        </div>
+      )}
+      {errorMessage && (
+        <div className="mb-4 p-4 bg-red-50 text-red-800 rounded-lg text-center border border-red-200">
+          <i className="fas fa-exclamation-circle mr-2"></i>
+          {errorMessage}
+          <button
+            onClick={() => setErrorMessage("")}
+            className="ml-2 text-red-600 hover:text-red-800"
+          >
+            <i className="fas fa-times"></i>
+          </button>
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
         <div className="flex gap-3 mb-4 sm:mb-0">
           <button
@@ -159,8 +202,8 @@ const ClientsPage = ({
           <input
             type="file"
             accept=".csv"
-            ref={csvFileInputRef}
-            onChange={importCsv}
+            ref={clientsCsvFileInputRef} // Use dedicated ref
+            onChange={handleImportCsv} // Use wrapped handler
             className="hidden"
             id="csv-import-clients"
             disabled={isImporting}
@@ -178,7 +221,7 @@ const ClientsPage = ({
             {isImporting ? "Importing..." : "Bulk Import"}
           </label>
         </div>
-        
+
         <div className="flex gap-3 w-full sm:w-auto">
           <div className="flex-1 sm:w-64">
             <div className="relative">
@@ -243,31 +286,37 @@ const ClientsPage = ({
                     <div className="flex flex-col items-center">
                       <i className="fas fa-users text-4xl text-gray-300 mb-3"></i>
                       <p className="text-lg font-medium text-gray-600">
-                        {searchQuery ? "No clients found matching your search." : "No clients found."}
+                        {searchQuery
+                          ? "No clients found matching your search."
+                          : "No clients found."}
                       </p>
                       <p className="text-sm text-gray-400 mt-1">
-                        {!searchQuery && "Get started by adding your first client."}
+                        {!searchQuery &&
+                          "Get started by adding your first client."}
                       </p>
                     </div>
                   </td>
                 </tr>
               ) : (
                 paginatedClients.map((client, index) => (
-                  <tr key={`${client.Client_Name}-${client.Type}-${index}`} className="hover:bg-gray-50">
+                  <tr
+                    key={`${client.Client_Name}-${client.Type}-${index}`}
+                    className="hover:bg-gray-50"
+                  >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center mr-3">
                           <i className="fas fa-user text-gray-600"></i>
                         </div>
                         <div>
-                          <div className="text-sm font-medium text-gray-900">{client.Client_Name}</div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {client.Client_Name}
+                          </div>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {client.Type}
-                      </div>
+                      <div className="text-sm text-gray-900">{client.Type}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
@@ -323,9 +372,9 @@ const ClientsPage = ({
       {filteredClients.length > 0 && (
         <div className="flex flex-col sm:flex-row justify-between items-center mt-6 space-y-3 sm:space-y-0">
           <p className="text-sm sm:text-base text-gray-700">
-            Showing {(currentPage - 1) * entriesPerPage + 1} to{' '}
-            {Math.min(currentPage * entriesPerPage, filteredClients.length)} of {filteredClients.length}{' '}
-            entries
+            Showing {(currentPage - 1) * entriesPerPage + 1} to{" "}
+            {Math.min(currentPage * entriesPerPage, filteredClients.length)} of{" "}
+            {filteredClients.length} entries
           </p>
           <div className="flex flex-wrap justify-center gap-2 max-w-md">
             <button
@@ -341,7 +390,9 @@ const ClientsPage = ({
                   key={i}
                   onClick={() => setCurrentPage(i + 1)}
                   className={`px-4 py-2 border border-gray-300 rounded-md text-sm sm:text-base ${
-                    currentPage === i + 1 ? 'bg-gray-800 text-white' : 'text-gray-700 hover:bg-gray-50'
+                    currentPage === i + 1
+                      ? "bg-gray-800 text-white"
+                      : "text-gray-700 hover:bg-gray-50"
                   } transition duration-200`}
                 >
                   {i + 1}
@@ -363,14 +414,17 @@ const ClientsPage = ({
                   </>
                 )}
                 {[...Array(5)].map((_, i) => {
-                  const pageNum = currentPage <= 3 ? i + 1 : currentPage - 2 + i;
+                  const pageNum =
+                    currentPage <= 3 ? i + 1 : currentPage - 2 + i;
                   if (pageNum <= totalPages && pageNum > 0) {
                     return (
                       <button
                         key={pageNum}
                         onClick={() => setCurrentPage(pageNum)}
                         className={`px-4 py-2 border border-gray-300 rounded-md text-sm sm:text-base ${
-                          currentPage === pageNum ? 'bg-gray-800 text-white' : 'text-gray-700 hover:bg-gray-50'
+                          currentPage === pageNum
+                            ? "bg-gray-800 text-white"
+                            : "text-gray-700 hover:bg-gray-50"
                         } transition duration-200`}
                       >
                         {pageNum}
@@ -395,7 +449,9 @@ const ClientsPage = ({
               </>
             )}
             <button
-              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+              onClick={() =>
+                setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+              }
               disabled={currentPage === totalPages}
               className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base disabled:opacity-50 hover:bg-gray-50 transition duration-200"
             >
