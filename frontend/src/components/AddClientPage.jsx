@@ -12,6 +12,7 @@ const AddClientPage = ({
   editClient,
   setEditClient,
   types,
+  apiCacheRef,
 }) => {
   const [clientName, setClientName] = useState('');
   const [email, setEmail] = useState('');
@@ -20,6 +21,15 @@ const AddClientPage = ({
   const [monthlyPayment, setMonthlyPayment] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  useEffect(() => {
+  if (sessionToken && currentUser) {
+    console.log(`AddClientPage.jsx: Fetching types on mount for ${currentUser}`);
+    const cacheKey = `types_${currentUser}_${sessionToken}`;
+    delete apiCacheRef.current[cacheKey]; // Clear cache to force fresh fetch
+    fetchTypes(sessionToken);
+  }
+}, [sessionToken, currentUser, fetchTypes, apiCacheRef]);
 
   useEffect(() => {
     if (editClient) {
@@ -31,6 +41,8 @@ const AddClientPage = ({
       setMonthlyPayment(editClient.Amount_To_Be_Paid?.toString() || '');
     }
   }, [editClient]);
+
+  
 
   const handleSubmit = async (e) => {
   e.preventDefault();
