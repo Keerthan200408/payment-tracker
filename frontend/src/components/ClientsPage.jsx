@@ -48,25 +48,33 @@ const ClientsPage = ({
     }
   }, [sessionToken, fetchClients]);
 
+  useEffect(() => {
+  console.log('ClientsPage.jsx: importCsv prop:', importCsv);
+}, [importCsv]);
+
   // Modified importCsv to handle UI feedback
   const handleImportCsv = async (e) => {
-    try {
-      await importCsv(e); // Call the App.jsx importCsv
-      setSuccessMessage("CSV imported successfully!");
-      setErrorMessage("");
-      // Clear input
-      if (clientsCsvFileInputRef.current) {
-        clientsCsvFileInputRef.current.value = null;
-      }
-    } catch (err) {
-      console.error("ClientsPage.jsx: CSV import error:", err);
-      setErrorMessage(err.message || "Failed to import CSV.");
-      setSuccessMessage("");
-      if (clientsCsvFileInputRef.current) {
-        clientsCsvFileInputRef.current.value = null;
-      }
+  if (!importCsv) {
+    console.error('ClientsPage.jsx: importCsv prop is undefined');
+    setErrorMessage('Bulk import functionality is unavailable.');
+    return;
+  }
+  try {
+    await importCsv(e);
+    setSuccessMessage("CSV imported successfully!");
+    setErrorMessage("");
+    if (clientsCsvFileInputRef.current) {
+      clientsCsvFileInputRef.current.value = null;
     }
-  };
+  } catch (err) {
+    console.error("ClientsPage.jsx: CSV import error:", err);
+    setErrorMessage(err.message || "Failed to import CSV.");
+    setSuccessMessage("");
+    if (clientsCsvFileInputRef.current) {
+      clientsCsvFileInputRef.current.value = null;
+    }
+  }
+};
 
   const filteredClients =
     clientsData?.filter(
