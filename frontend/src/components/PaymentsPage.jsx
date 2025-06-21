@@ -27,7 +27,6 @@ const PaymentsPage = ({
   apiCacheRef = { current: {} },
   currentUser = null,
   onMount = () => {},
-  fetchPayments = () => {}, // New prop for fetching payments
 }) => {
   // State and Refs
   const [availableYears, setAvailableYears] = useState(["2025"]);
@@ -37,6 +36,8 @@ const PaymentsPage = ({
   const tableRef = useRef(null);
   const mountedRef = useRef(true);
   const activeRequestsRef = useRef(new Set());
+  const abortControllerRef = useRef(null);
+  const debouncedFetchPaymentsRef = useRef(null);
 
   const MONTHS = [
     "january",
@@ -101,18 +102,6 @@ const PaymentsPage = ({
         console.log("PaymentsPage.jsx: No sessionToken");
         return;
       }
-      if (!isOnline) {
-        console.log("PaymentsPage.jsx: Offline, using cached years if available");
-        const cacheKey = getCacheKey("/get-user-years", { sessionToken });
-        const cachedYears = getCachedData(cacheKey);
-        if (cachedYears) {
-          setAvailableYears(cachedYears);
-        } else {
-          setErrorMessage("Offline and no cached years available. Showing default year.");
-          setAvailableYears(["2025"]);
-        }
-        return;
-      }
       const cacheKey = getCacheKey("/get-user-years", { sessionToken });
       const cachedYears = getCachedData(cacheKey);
       if (cachedYears) {
@@ -153,33 +142,30 @@ const PaymentsPage = ({
         }
       });
     },
-    [sessionToken, isOnline, getCacheKey, getCachedData, setCachedData, createDedupedRequest, setErrorMessage]
-  );
-
-  const debouncedSearchUserYears = useCallback(
-    debounce((signal) => searchUserYears(signal), 300),
-    [searchUserYears]
+    [sessionToken, getCacheKey, getCachedData, setCachedData, createDedupedRequest, setErrorMessage]
   );
 
   // Fetch payments for the selected year
-  const fetchPaymentsForYear = useCallback(
+  const fetchPayments = useCallback(
     async (year, abortSignal) => {
       if (!sessionToken) {
         console.log("PaymentsPage.jsx: No sessionToken for fetching payments");
         return;
       }
       if (!isOnline) {
-        console.log("PaymentsPage.jsx: Offline, using cached payments if available");
-        const cacheKey = getCacheKey("/get-payments", { sessionToken, year });
+        console.log("PaymentsPage.jsx: Offline, skipping payment fetch");
+        const cacheKey = getCacheKey("/payments", { sessionToken, year });
         const cachedPayments = getCachedData(cacheKey);
         if (cachedPayments) {
+          console.log("PaymentsPage.jsx: Using cached payments data for year", year);
           setPaymentsData(cachedPayments);
         } else {
           setErrorMessage("Offline and no cached payments available.");
+          setPaymentsData([]);
         }
         return;
       }
-      const cacheKey = getCacheKey("/get-payments", { sessionToken, year });
+      const cacheKey = getCacheKey("/payments", { sessionToken, year });
       const cachedPayments = getCachedData(cacheKey);
       if (cachedPayments) {
         console.log("PaymentsPage.jsx: Using cached payments data for year", year);
@@ -191,27 +177,27 @@ const PaymentsPage = ({
         setIsLoadingPayments(true);
         console.log("PaymentsPage.jsx: Fetching payments for year", year);
         try {
-          const response = await axios.get(`${BASE_URL}/get-payments`, {
-            headers: { Authorization: `Bearer ${sessionToken}` },
+          const response = await axios.get(`${BASE_URL}/payments`, {
             params: { year },
+            headers: { Authorization: `Bearer ${sessionToken}` },
             timeout: 10000,
             signal: abortSignal,
           });
           const payments = Array.isArray(response.data) ? response.data : [];
           setPaymentsData(payments);
           setCachedData(cacheKey, payments);
-          console.log("PaymentsPage.jsx: Fetched payments for", year, ":", payments.length);
+          console.log("PaymentsPage.jsx: Fetched payments for", year, ":", payments.length, "items");
         } catch (error) {
-          if (error.name === "AbortError") {
+          if (error.name === "AbortError" || error.message === "canceled") {
             console.log("PaymentsPage.jsx: Payments fetch aborted");
-            return;
+            return; // Ignore abort errors
           }
           console.error("PaymentsPage.jsx: Error fetching payments:", {
             message: error.message,
             status: error.response?.status,
             data: error.response?.data,
           });
-          setErrorMessage("Failed to fetch payments for the selected year.");
+          setErrorMessage(`Failed to fetch payments for ${year}.`);
           setPaymentsData([]);
         } finally {
           if (mountedRef.current) {
@@ -223,35 +209,59 @@ const PaymentsPage = ({
     [sessionToken, isOnline, getCacheKey, getCachedData, setCachedData, createDedupedRequest, setPaymentsData, setErrorMessage]
   );
 
+  const debouncedSearchUserYears = useCallback(
+    debounce((signal) => searchUserYears(signal), 300),
+    [searchUserYears]
+  );
+
   // Handle year change
-  const handleYearChangeDebounced = useCallback(
-    debounce((year) => {
+  const handleYearChange = useCallback(
+    (year) => {
       console.log("PaymentsPage.jsx: Year change requested to:", year);
       localStorage.setItem("currentYear", year);
       setCurrentYear(year);
-      const controller = new AbortController();
-      fetchPaymentsForYear(year, controller.signal);
-      return () => controller.abort();
-    }, 300),
-    [setCurrentYear, fetchPaymentsForYear]
+
+      // Cancel previous fetch if it exists
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      abortControllerRef.current = new AbortController();
+
+      // Cancel previous debounced fetch
+      if (debouncedFetchPaymentsRef.current) {
+        debouncedFetchPaymentsRef.current.cancel();
+      }
+
+      // Create new debounced fetch
+      debouncedFetchPaymentsRef.current = debounce(() => {
+        fetchPayments(year, abortControllerRef.current.signal);
+      }, 300);
+
+      debouncedFetchPaymentsRef.current();
+    },
+    [setCurrentYear, fetchPayments]
   );
 
   // Initialize and cleanup
   useEffect(() => {
     onMount();
     const controller = new AbortController();
+    abortControllerRef.current = controller;
     if (sessionToken) {
-      console.log("PaymentsPage.jsx: SessionToken available, fetching years");
+      console.log("PaymentsPage.jsx: SessionToken available, fetching years and payments");
       debouncedSearchUserYears(controller.signal);
-      fetchPaymentsForYear(currentYear, controller.signal);
+      fetchPayments(currentYear, controller.signal);
     }
     return () => {
       controller.abort();
       debouncedSearchUserYears.cancel();
+      if (debouncedFetchPaymentsRef.current) {
+        debouncedFetchPaymentsRef.current.cancel();
+      }
       mountedRef.current = false;
       activeRequestsRef.current.clear();
     };
-  }, [sessionToken, currentYear, debouncedSearchUserYears, fetchPaymentsForYear, onMount]);
+  }, [sessionToken, currentYear, debouncedSearchUserYears, fetchPayments, onMount]);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -283,7 +293,7 @@ const PaymentsPage = ({
         </div>
         <select
           value={currentYear}
-          onChange={(e) => handleYearChangeDebounced(e.target.value)}
+          onChange={(e) => handleYearChange(e.target.value)}
           className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
           disabled={isLoadingYears || isLoadingPayments}
         >
