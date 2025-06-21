@@ -1,169 +1,207 @@
-import { useState, useEffect } from 'react';
-import axios from 'axios';
+import React, { useEffect, useRef, useState, useCallback } from "react";
+import axios from "axios";
+import { debounce } from "lodash";
 
-const BASE_URL = 'https://payment-tracker-aswa.onrender.com/api';
+const BASE_URL = "https://payment-tracker-aswa.onrender.com/api";
+const CACHE_DURATION = 5 * 60 * 1000;
 
-const PaymentsPage = ({ paymentsData, setPaymentsData, fetchClients, fetchPayments, sessionToken, isImporting, currentYear, setCurrentYear, handleYearChange }) => {
-  const [currentPage, setCurrentPage] = useState(1);
-  const entriesPerPage = 10;
-  const totalEntries = paymentsData.length;
-  const totalPages = Math.ceil(totalEntries / entriesPerPage);
+const PaymentsPage = ({
+  paymentsData = [],
+  setPaymentsData = () => {},
+  searchQuery = "",
+  setSearchQuery = () => {},
+  monthFilter = "",
+  setMonthFilter = () => {},
+  statusFilter = "",
+  setStatusFilter = () => {},
+  updatePayment = () => {},
+  handleContextMenu = () => {},
+  contextMenu = null,
+  hideContextMenu = () => {},
+  deleteRow = () => {},
+  setPage = () => {},
+  sessionToken = "",
+  currentYear = "2025",
+  setCurrentYear = () => {},
+  setErrorMessage = () => {},
+  apiCacheRef = { current: {} },
+  currentUser = null,
+  onMount = () => {},
+}) => {
+  // State and Refs
+  const [availableYears, setAvailableYears] = useState(["2025"]);
+  const [isLoadingYears, setIsLoadingYears] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const tableRef = useRef(null);
+  const mountedRef = useRef(true);
+  const activeRequestsRef = useRef(new Set());
 
-  const [availableYears, setAvailableYears] = useState(() => {
-    const storedYears = localStorage.getItem('availableYears');
-    console.log('PaymentsPage.jsx: Initializing availableYears from localStorage:', storedYears);
-    return storedYears ? JSON.parse(storedYears) : ['2025'];
-  });
-  const [selectedYear, setSelectedYear] = useState(currentYear);
-
-  // Sync selectedYear with currentYear on mount or when currentYear changes
-  useEffect(() => {
-    console.log('PaymentsPage.jsx: Syncing selectedYear to currentYear:', currentYear);
-    setSelectedYear(currentYear);
-  }, [currentYear]);
-
-  // Function to search for user-specific years
-  const searchUserYears = async (forceFetch = false) => {
-    console.log('PaymentsPage.jsx: searchUserYears called with forceFetch:', forceFetch, 'sessionToken:', sessionToken);
-    
-    // Skip fetching if we have years in localStorage and not forcing a fetch
-    if (!forceFetch && localStorage.getItem('availableYears')) {
-      console.log('PaymentsPage.jsx: Using cached years from localStorage');
-      const storedYears = JSON.parse(localStorage.getItem('availableYears')) || ['2025'];
-      console.log('PaymentsPage.jsx: Stored years:', storedYears);
-      setAvailableYears(storedYears);
-      const storedYear = localStorage.getItem('currentYear') || '2025';
-      console.log('PaymentsPage.jsx: Stored currentYear:', storedYear);
-      if (storedYears.includes(storedYear) && storedYear !== currentYear) {
-        console.log('PaymentsPage.jsx: Setting currentYear from storedYear:', storedYear);
-        setCurrentYear(storedYear);
-        if (typeof handleYearChange === 'function') {
-          console.log('PaymentsPage.jsx: Calling handleYearChange with:', storedYear);
-          handleYearChange(storedYear);
-        }
-      }
-      return;
-    }
-
-    console.log('PaymentsPage.jsx: Fetching years from API with sessionToken:', sessionToken);
-    try {
-      const response = await axios.get(`${BASE_URL}/get-user-years`, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      });
-      console.log('PaymentsPage.jsx: API response for user years:', response.data);
-      
-      const fetchedYears = (response.data || [])
-        .filter(year => parseInt(year) >= 2025)
-        .sort((a, b) => parseInt(a) - parseInt(b));
-      
-      // Always include 2025
-      const yearsToSet = [...new Set(['2025', ...fetchedYears])]
-        .filter(year => parseInt(year) >= 2025)
-        .sort((a, b) => parseInt(a) - parseInt(b));
-      
-      console.log('PaymentsPage.jsx: Processed years for dropdown:', yearsToSet);
-      setAvailableYears(yearsToSet);
-      console.log('PaymentsPage.jsx: Saving availableYears to localStorage:', yearsToSet);
-      localStorage.setItem('availableYears', JSON.stringify(yearsToSet));
-      
-      // Get stored year or default to 2025
-      const storedYear = localStorage.getItem('currentYear');
-      let yearToSet = storedYear && yearsToSet.includes(storedYear) ? storedYear : '2025';
-      console.log('PaymentsPage.jsx: Selected year to set:', yearToSet);
-      
-      if (yearToSet !== currentYear) {
-        console.log('PaymentsPage.jsx: Updating currentYear to:', yearToSet);
-        setCurrentYear(yearToSet);
-        localStorage.setItem('currentYear', yearToSet);
-        if (typeof handleYearChange === 'function') {
-          console.log('PaymentsPage.jsx: Calling handleYearChange with:', yearToSet);
-          await handleYearChange(yearToSet);
-        }
-      }
-    } catch (error) {
-      console.error('PaymentsPage.jsx: Error searching user years:', error, 'Response:', error.response?.data);
-      
-      const storedYears = JSON.parse(localStorage.getItem('availableYears')) || ['2025'];
-      console.log('PaymentsPage.jsx: Falling back to stored years:', storedYears);
-      setAvailableYears(storedYears);
-      
-      const storedYear = localStorage.getItem('currentYear');
-      const yearToSet = (storedYear && storedYears.includes(storedYear)) ? storedYear : '2025';
-      console.log('PaymentsPage.jsx: Fallback year to set:', yearToSet);
-      
-      if (yearToSet !== currentYear) {
-        console.log('PaymentsPage.jsx: Updating currentYear in fallback to:', yearToSet);
-        setCurrentYear(yearToSet);
-        localStorage.setItem('currentYear', yearToSet);
-        if (typeof handleYearChange === 'function') {
-          console.log('PaymentsPage.jsx: Calling handleYearChange in fallback with:', yearToSet);
-          await handleYearChange(yearToSet);
-        }
-      }
-    }
-  };
-
-  useEffect(() => {
-    console.log('PaymentsPage.jsx: useEffect for sessionToken triggered. sessionToken:', sessionToken);
-    if (sessionToken) {
-      const storedToken = localStorage.getItem('sessionToken');
-      console.log('PaymentsPage.jsx: Stored sessionToken:', storedToken);
-      const isNewSession = sessionToken !== storedToken;
-      console.log('PaymentsPage.jsx: Is new session?', isNewSession);
-      searchUserYears(isNewSession);
-    } else {
-      console.log('PaymentsPage.jsx: No sessionToken, skipping searchUserYears');
-    }
-  }, [sessionToken]);
-
-  useEffect(() => {
-    const serializedYears = JSON.stringify(availableYears);
-    const storedYears = localStorage.getItem('availableYears');
-    if (serializedYears !== storedYears) {
-      console.log('PaymentsPage.jsx: Saving availableYears to localStorage:', availableYears);
-      localStorage.setItem('availableYears', serializedYears);
-    }
-  }, [availableYears]);
-
-  useEffect(() => {
-    if (paymentsData?.length) {
-      console.log('PaymentsPage.jsx: Payments data updated:', paymentsData.length, 'items for year', selectedYear);
-    }
-  }, [paymentsData, selectedYear]);
-
-  const months = [
-    'january',
-    'february',
-    'march',
-    'april',
-    'may',
-    'june',
-    'july',
-    'august',
-    'september',
-    'october',
-    'november',
-    'december',
+  const MONTHS = [
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
   ];
+  const months = MONTHS;
 
-  const paginatedData = paymentsData.slice(
-    (currentPage - 1) * entriesPerPage,
-    currentPage * entriesPerPage
+  // Utility functions
+  const getCacheKey = useCallback((url, params = {}) => {
+    return `${url}_${JSON.stringify(params)}`;
+  }, []);
+
+  const getCachedData = useCallback((key) => {
+    const cached = apiCacheRef.current[key];
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      return cached.data;
+    }
+    return null;
+  }, []);
+
+  const setCachedData = useCallback((key, data) => {
+    apiCacheRef.current[key] = {
+      data,
+      timestamp: Date.now(),
+    };
+  }, []);
+
+  const createDedupedRequest = useCallback(
+    async (requestKey, requestFn) => {
+      if (activeRequestsRef.current.has(requestKey)) {
+        while (activeRequestsRef.current.has(requestKey)) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        return getCachedData(requestKey);
+      }
+      activeRequestsRef.current.add(requestKey);
+      try {
+        const result = await requestFn();
+        setCachedData(requestKey, result);
+        return result;
+      } finally {
+        activeRequestsRef.current.delete(requestKey);
+      }
+    },
+    [getCachedData, setCachedData]
   );
 
-  return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      <h2 className="text-xl font-medium text-gray-700 mb-4">Payments</h2>
-      <div className="mb-6">
+  // Fetch available years
+  const searchUserYears = useCallback(
+    async (abortSignal) => {
+      if (!sessionToken) {
+        console.log("PaymentsPage.jsx: No sessionToken");
+        return;
+      }
+      const cacheKey = getCacheKey("/get-user-years", { sessionToken });
+      const cachedYears = getCachedData(cacheKey);
+      if (cachedYears) {
+        console.log("PaymentsPage.jsx: Using cached years data");
+        setAvailableYears(cachedYears);
+        return;
+      }
+      const requestKey = `years_${sessionToken}`;
+      return createDedupedRequest(requestKey, async () => {
+        setIsLoadingYears(true);
+        console.log("PaymentsPage.jsx: Fetching user-specific years from API");
+        try {
+          const response = await axios.get(`${BASE_URL}/get-user-years`, {
+            headers: { Authorization: `Bearer ${sessionToken}` },
+            timeout: 10000,
+            signal: abortSignal,
+          });
+          const years = Array.isArray(response.data) ? response.data : ["2025"];
+          setAvailableYears(years);
+          setCachedData(cacheKey, years);
+          console.log("PaymentsPage.jsx: Fetched years:", years);
+        } catch (error) {
+          if (error.name === "AbortError") {
+            console.log("PaymentsPage.jsx: Year fetch aborted");
+            return;
+          }
+          console.error("PaymentsPage.jsx: Error fetching user years:", error);
+          setErrorMessage("Failed to fetch available years. Showing default year.");
+          setAvailableYears(["2025"]);
+        } finally {
+          if (mountedRef.current) {
+            setIsLoadingYears(false);
+          }
+        }
+      });
+    },
+    [sessionToken, getCacheKey, getCachedData, setCachedData, createDedupedRequest, setErrorMessage]
+  );
+
+  const debouncedSearchUserYears = useCallback(
+    debounce((signal) => searchUserYears(signal), 300),
+    [searchUserYears]
+  );
+
+  // Handle year change
+  const handleYearChangeDebounced = useCallback(
+    (year) => {
+      console.log("PaymentsPage.jsx: Year change requested to:", year);
+      localStorage.setItem("currentYear", year);
+      setCurrentYear(year);
+      window.location.reload();
+    },
+    [setCurrentYear]
+  );
+
+  // Initialize and cleanup
+  useEffect(() => {
+    onMount();
+    const controller = new AbortController();
+    if (sessionToken) {
+      console.log("PaymentsPage.jsx: SessionToken available, fetching years");
+      debouncedSearchUserYears(controller.signal);
+    }
+    return () => {
+      controller.abort();
+      debouncedSearchUserYears.cancel();
+      mountedRef.current = false;
+    };
+  }, [sessionToken, debouncedSearchUserYears, onMount]);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (tableRef.current && !tableRef.current.contains(e.target)) {
+        hideContextMenu();
+      }
+    };
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, [hideContextMenu]);
+
+  // Render
+  const renderPayments = () => (
+    <>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+        <div className="flex gap-3 mb-4 sm:mb-0">
+          {/* No Add New Year button */}
+        </div>
         <select
-          value={selectedYear}
-          onChange={(e) => {
-            const year = e.target.value;
-            console.log('PaymentsPage.jsx: Dropdown year changed to:', year);
-            setSelectedYear(year);
-            handleYearChange(year);
-          }}
-          className="p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+          value={currentYear}
+          onChange={(e) => handleYearChangeDebounced(e.target.value)}
+          className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+          disabled={isLoadingYears}
         >
           {availableYears.map((year) => (
             <option key={year} value={year}>
@@ -172,145 +210,148 @@ const PaymentsPage = ({ paymentsData, setPaymentsData, fetchClients, fetchPaymen
           ))}
         </select>
       </div>
+
+      <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 mb-6">
+        <div className="relative flex-1 sm:w-1/3">
+          <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+          <input
+            type="text"
+            placeholder="Search by client or type..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base"
+          />
+        </div>
+        <select
+          value={monthFilter}
+          onChange={(e) => setMonthFilter(e.target.value)}
+          className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+        >
+          <option value="">All Months</option>
+          {months.map((month, index) => (
+            <option key={index} value={month}>
+              {month.charAt(0).toUpperCase() + month.slice(1)}
+            </option>
+          ))}
+        </select>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+          disabled={!monthFilter}
+        >
+          <option value="">Status</option>
+          <option value="Paid">Paid</option>
+          <option value="PartiallyPaid">Partially Paid</option>
+          <option value="Unpaid">Unpaid</option>
+        </select>
+      </div>
+
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
+        <div className="overflow-x-auto max-h-96 overflow-y-auto">
+          <table className="w-full" ref={tableRef}>
+            <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
               <tr>
-                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Client
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                  Client Name
                 </th>
-                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
                   Type
                 </th>
-                <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
                   Amount To Be Paid
                 </th>
-                {months.map((month) => (
+                {months.map((month, index) => (
                   <th
-                    key={month}
-                    className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    key={index}
+                    className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50"
                   >
                     {month.charAt(0).toUpperCase() + month.slice(1)}
                   </th>
                 ))}
-                <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Total Due
+                <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                  Due Payment
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {paginatedData.map((payment, index) => (
-                <tr key={index} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm sm:text-base text-gray-900">
-                    <i className="fas fa-user-circle mr-2 text-gray-400"></i>
-                    {payment.Client_Name}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center text-sm sm:text-base text-gray-900">
-                    {payment.Type || 'N/A'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm sm:text-base text-gray-900">
-                    ₹{payment.Amount_To_Be_Paid}
-                  </td>
-                  {months.map((month) => (
-                    <td
-                      key={month}
-                      className="px-6 py-4 whitespace-nowrap text-right text-sm sm:text-base text-gray-900"
-                    >
-                      {payment[month] || '—'}
-                    </td>
-                  ))}
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm sm:text-base text-gray-900">
-                    ₹{payment.Due_Payment}
+              {paymentsData.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={15}
+                    className="px-6 py-12 text-center text-gray-500"
+                  >
+                    No payments found.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                paymentsData.map((row, rowIndex) => (
+                  <tr
+                    key={`${row?.Client_Name || "unknown"}-${rowIndex}`}
+                    onContextMenu={(e) => handleContextMenu(e, rowIndex)}
+                    className="hover:bg-gray-50"
+                  >
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {row?.Client_Name || "N/A"}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {row?.Type || "N/A"}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      {parseFloat(row?.Amount_To_Be_Paid || 0).toFixed(2)}
+                    </td>
+                    {months.map((month, colIndex) => (
+                      <td
+                        key={colIndex}
+                        className="px-6 py-4 whitespace-nowrap text-right"
+                      >
+                        {parseFloat(row?.[month] || 0).toFixed(2)}
+                      </td>
+                    ))}
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      {parseFloat(row?.Due_Payment || 0).toFixed(2)}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
-      <div className="flex flex-col sm:flex-row justify-between items-center mt-6 space-y-3 sm:space-y-0">
-  <p className="text-sm sm:text-base text-gray-700">
-    Showing {(currentPage - 1) * entriesPerPage + 1} to{' '}
-    {Math.min(currentPage * entriesPerPage, totalEntries)} of {totalEntries}{' '}
-    entries
-  </p>
-  <div className="flex flex-wrap justify-center gap-2 max-w-md">
-    <button
-      onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-      disabled={currentPage === 1}
-      className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base disabled:opacity-50 hover:bg-gray-50 transition duration-200"
-    >
-      Previous
-    </button>
-    {totalPages <= 5 ? (
-      [...Array(totalPages)].map((_, i) => (
-        <button
-          key={i}
-          onClick={() => setCurrentPage(i + 1)}
-          className={`px-4 py-2 border border-gray-300 rounded-md text-sm sm:text-base ${
-            currentPage === i + 1 ? 'bg-gray-800 text-white' : 'text-gray-700 hover:bg-gray-50'
-          } transition duration-200`}
+
+      {contextMenu && (
+        <div
+          className="absolute bg-white border border-gray-300 rounded-lg shadow-sm p-2 z-50"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
         >
-          {i + 1}
-        </button>
-      ))
-    ) : (
-      <>
-        {currentPage > 3 && (
-          <>
-            <button
-              onClick={() => setCurrentPage(1)}
-              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base hover:bg-gray-50 transition duration-200"
-            >
-              1
-            </button>
-            {currentPage > 4 && (
-              <span className="px-4 py-2 text-gray-700">...</span>
-            )}
-          </>
-        )}
-        {[...Array(5)].map((_, i) => {
-          const pageNum = currentPage <= 3 ? i + 1 : currentPage - 2 + i;
-          if (pageNum <= totalPages && pageNum > 0) {
-            return (
-              <button
-                key={pageNum}
-                onClick={() => setCurrentPage(pageNum)}
-                className={`px-4 py-2 border border-gray-300 rounded-md text-sm sm:text-base ${
-                  currentPage === pageNum ? 'bg-gray-800 text-white' : 'text-gray-700 hover:bg-gray-50'
-                } transition duration-200`}
-              >
-                {pageNum}
-              </button>
-            );
-          }
-          return null;
-        })}
-        {currentPage < totalPages - 2 && (
-          <>
-            {currentPage < totalPages - 3 && (
-              <span className="px-4 py-2 text-gray-700">...</span>
-            )}
-            <button
-              onClick={() => setCurrentPage(totalPages)}
-              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base hover:bg-gray-50 transition duration-200"
-            >
-              {totalPages}
-            </button>
-          </>
-        )}
-      </>
-    )}
-    <button
-      onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-      disabled={currentPage === totalPages}
-      className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base disabled:opacity-50 hover:bg-gray-50 transition duration-200"
-    >
-      Next
-    </button>
-  </div>
-</div>
+          <button
+            onClick={deleteRow}
+            className="w-full text-left px-4 py-2 hover:bg-gray-50 text-gray-700 flex items-center"
+          >
+            <i className="fas fa-trash mr-2"></i> Delete
+          </button>
+        </div>
+      )}
+    </>
+  );
+
+  return (
+    <div className="p-6 bg-gray-50 min-h-screen">
+      {!isOnline && (
+        <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <i className="fas fa-exclamation-triangle"></i>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm">
+                You're currently offline. Changes will be saved when connection is restored.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      {renderPayments()}
     </div>
   );
 };
