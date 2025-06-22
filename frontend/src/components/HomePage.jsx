@@ -448,23 +448,51 @@ const HomePage = ({
     [setCurrentYear]
   );
 
-  const handleInputChange = useCallback(
-    (rowIndex, month, value) => {
-      const parsedValue = value.trim() === "" ? "" : parseFloat(value);
-      if (value !== "" && (isNaN(parsedValue) || parsedValue < 0)) {
-        alert("Please enter a valid non-negative number.");
-        return;
-      }
+const handleInputChange = useCallback(
+  (rowIndex, month, value) => {
+    const parsedValue = value.trim() === "" ? "" : parseFloat(value);
+    if (value !== "" && (isNaN(parsedValue) || parsedValue < 0)) {
+      alert("Please enter a valid non-negative number.");
+      return;
+    }
 
-      const key = `${rowIndex}-${month}`;
-      setLocalInputValues((prev) => ({
-        ...prev,
-        [key]: value,
-      }));
-      debouncedUpdate(rowIndex, month, value, currentYear);
-    },
-    [debouncedUpdate, currentYear]
-  );
+    const key = `${rowIndex}-${month}`;
+    setLocalInputValues((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+
+    // Find the last paid month for this client
+    const rowData = paymentsData[rowIndex];
+    let lastPaidMonthIndex = -1;
+    months.forEach((m, index) => {
+      const monthValue = parseFloat(rowData?.[m] || 0);
+      if (monthValue > 0 && index > lastPaidMonthIndex) {
+        lastPaidMonthIndex = index;
+      }
+    });
+
+    const currentMonthIndex = months.indexOf(month);
+    // Queue updates for months between last paid and current input month
+    if (lastPaidMonthIndex >= 0 && currentMonthIndex > lastPaidMonthIndex + 1) {
+      for (let i = lastPaidMonthIndex + 1; i < currentMonthIndex; i++) {
+        const intermediateMonth = months[i];
+        const intermediateKey = `${rowIndex}-${intermediateMonth}`;
+        // Only update if the month is not already modified by user
+        if (localInputValues[intermediateKey] === undefined || localInputValues[intermediateKey] === rowData?.[intermediateMonth]) {
+          setLocalInputValues((prev) => ({
+            ...prev,
+            [intermediateKey]: "0",
+          }));
+          debouncedUpdate(rowIndex, intermediateMonth, "0", currentYear);
+        }
+      }
+    }
+
+    debouncedUpdate(rowIndex, month, value, currentYear);
+  },
+  [debouncedUpdate, currentYear, paymentsData, months, localInputValues]
+);
 
   // Initialize component
   useEffect(() => {
