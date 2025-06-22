@@ -25,12 +25,15 @@ const AddClientPage = ({
 
   useEffect(() => {
   if (sessionToken && currentUser) {
-    console.log(`AddClientPage.jsx: Fetching types on mount for ${currentUser}`);
+    console.log(`AddClientPage.jsx: Checking types for ${currentUser}`);
     const cacheKey = `types_${currentUser}_${sessionToken}`;
-    delete apiCacheRef.current[cacheKey]; // Clear cache to force fresh fetch
-    fetchTypes(sessionToken);
+    // Only fetch if types are not already loaded
+    if (!types.length) {
+      console.log(`AddClientPage.jsx: Fetching types for ${currentUser}`);
+      fetchTypes(sessionToken);
+    }
   }
-}, [sessionToken, currentUser, fetchTypes, apiCacheRef]);
+}, [sessionToken, currentUser, types, fetchTypes]);
 
   useEffect(() => {
     if (editClient) {
