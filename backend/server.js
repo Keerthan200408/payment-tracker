@@ -85,25 +85,29 @@ app.use(cookieParser());
 // Parse JSON
 app.use(express.json());
 
-// Nodemailer transport setup for Brevo SMTP
-if (!process.env.EMAIL_HOST || !process.env.EMAIL_PORT || !process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+// Validate environment variables at startup
+if (!process.env.EMAIL_HOST || !process.env.EMAIL_PORT || !process.env.EMAIL_USER || !process.env.EMAIL_PASS || !process.env.EMAIL_FROM) {
   console.error("Missing email configuration:", {
     EMAIL_HOST: !!process.env.EMAIL_HOST,
     EMAIL_PORT: !!process.env.EMAIL_PORT,
     EMAIL_USER: !!process.env.EMAIL_USER,
     EMAIL_PASS: !!process.env.EMAIL_PASS,
+    EMAIL_FROM: !!process.env.EMAIL_FROM,
   });
-  throw new Error("EMAIL_HOST, EMAIL_PORT, EMAIL_USER, and EMAIL_PASS environment variables are required");
+  throw new Error("EMAIL_HOST, EMAIL_PORT, EMAIL_USER, EMAIL_PASS, and EMAIL_FROM environment variables are required");
 }
 
 // Nodemailer transport setup for Brevo SMTP
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST,
-  port: process.env.EMAIL_PORT,
+  port: parseInt(process.env.EMAIL_PORT),
+  secure: process.env.EMAIL_PORT === "465", // Use SSL for port 465, TLS for 587
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
+  logger: true, // Enable logging for debugging
+  debug: true, // Include detailed SMTP logs
 });
 
 // Verify transporter on server start
@@ -1987,7 +1991,7 @@ app.post("/api/send-email", authenticateToken, async (req, res) => {
       return res.status(400).json({ error: "HTML content is invalid or empty after sanitization" });
     }
     const info = await transporter.sendMail({
-      from: `"Payment Tracker" <${process.env.EMAIL_USER}>`,
+      from: `"Payment Tracker" <${process.env.EMAIL_FROM}>`,
       to: to.trim(),
       subject,
       html: sanitizedHtml,
