@@ -352,6 +352,13 @@ const processBatchUpdates = useCallback(async () => {
     const { rowIndex, month, value, year } = update;
     if (!acc[rowIndex]) {
       const rowData = paymentsData[rowIndex];
+      console.log(`DEBUG: Row ${rowIndex} data:`, {
+      Client_Name: rowData?.Client_Name,
+      Type: rowData?.Type,
+      Email: rowData?.Email,
+      email: rowData?.email,
+      allFields: rowData ? Object.keys(rowData) : 'rowData is null'
+    });
       // Fix: Use the correct field name that matches your backend response
       const clientEmail = rowData?.Email || rowData?.email || ""; // Backend sends 'Email' field
       acc[rowIndex] = {
@@ -573,7 +580,7 @@ const processBatchUpdates = useCallback(async () => {
     setIsUpdating(false);
   }
 }, [paymentsData, sessionToken, months, localInputValues, hasValidEmail, setErrorMessage]);
- 
+
 
   const debouncedUpdate = useCallback(
     (rowIndex, month, value, year) => {
