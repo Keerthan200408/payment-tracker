@@ -86,6 +86,17 @@ app.use(cookieParser());
 app.use(express.json());
 
 // Nodemailer transport setup for Brevo SMTP
+if (!process.env.EMAIL_HOST || !process.env.EMAIL_PORT || !process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+  console.error("Missing email configuration:", {
+    EMAIL_HOST: !!process.env.EMAIL_HOST,
+    EMAIL_PORT: !!process.env.EMAIL_PORT,
+    EMAIL_USER: !!process.env.EMAIL_USER,
+    EMAIL_PASS: !!process.env.EMAIL_PASS,
+  });
+  throw new Error("EMAIL_HOST, EMAIL_PORT, EMAIL_USER, and EMAIL_PASS environment variables are required");
+}
+
+// Nodemailer transport setup for Brevo SMTP
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST,
   port: process.env.EMAIL_PORT,
@@ -93,6 +104,19 @@ const transporter = nodemailer.createTransport({
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
+});
+
+// Verify transporter on server start
+transporter.verify((error, success) => {
+  if (error) {
+    console.error("Email transporter verification failed:", {
+      message: error.message,
+      code: error.code,
+      stack: error.stack,
+    });
+  } else {
+    console.log("Email transporter is ready");
+  }
 });
 
 
@@ -368,11 +392,36 @@ const authenticateToken = (req, res, next) => {
   }
 };
 
-// Helper: Sanitize input
+// Helper: Sanitize input for email HTML
 const sanitizeInput = (input) => {
+  if (typeof input !== "string") {
+    console.warn("sanitizeInput received non-string input:", input);
+    return "";
+  }
   return sanitizeHtml(input, {
-    allowedTags: [],
-    allowedAttributes: {},
+    allowedTags: ["div", "h1", "h2", "p", "strong", "table", "thead", "tbody", "tr", "th", "td", "span", "br", "hr"],
+    allowedAttributes: {
+      "*": ["style"],
+      div: ["style"],
+      table: ["style"],
+      th: ["style"],
+      td: ["style"],
+      span: ["style"],
+      p: ["style"],
+      hr: ["style"],
+    },
+    allowedStyles: {
+      "*": {
+        "color": [/^#(0x)?[0-9a-f]+$/i, /^rgb\(/, /^rgba\(/],
+        "background-color": [/^#(0x)?[0-9a-f]+$/i, /^rgb\(/, /^rgba\(/],
+        "border": [/^.*$/],
+        "border-collapse": [/^.*$/],
+        "border-radius": [/^.*$/],
+        "padding": [/^.*$/],
+        "margin": [/^.*$/],
+        "text-align": [/^.*$/],
+      },
+    },
   });
 };
 
@@ -1924,25 +1973,36 @@ app.get("/api/test-smtp", async (req, res) => {
 app.post("/api/send-email", authenticateToken, async (req, res) => {
   const { to, subject, html } = req.body;
   if (!to || !subject || !html) {
-    console.error("Missing required fields:", { to, subject, html });
+    console.error("Missing required fields:", { to, subject, html, user: req.user.username });
     return res.status(400).json({ error: "Recipient email, subject, and HTML content are required" });
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
-    console.error("Invalid email address:", to);
+    console.error("Invalid email address:", { to, user: req.user.username });
     return res.status(400).json({ error: "Invalid recipient email address" });
   }
   try {
+    const sanitizedHtml = sanitizeInput(html);
+    if (!sanitizedHtml.trim()) {
+      console.error("Sanitized HTML is empty:", { originalHtml: html, user: req.user.username });
+      return res.status(400).json({ error: "HTML content is invalid or empty after sanitization" });
+    }
     const info = await transporter.sendMail({
       from: `"Payment Tracker" <${process.env.EMAIL_USER}>`,
-      to,
+      to: to.trim(),
       subject,
-      html: sanitizeInput(html),
+      html: sanitizedHtml,
     });
-    console.log(`Email sent successfully to ${to}`);
+    console.log(`Email sent successfully to ${to}:`, {
+      messageId: info.messageId,
+      response: info.response,
+      user: req.user.username,
+    });
     res.json({ message: "Email sent successfully" });
   } catch (error) {
     console.error("Send email error:", {
       message: error.message,
+      code: error.code,
+      stack: error.stack,
       to,
       user: req.user.username,
     });
