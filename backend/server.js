@@ -923,6 +923,7 @@ app.delete("/api/delete-client", authenticateToken, async (req, res) => {
 });
 
 // Get Payments by Year
+
 app.get("/api/get-payments-by-year", authenticateToken, async (req, res) => {
   const { year } = req.query;
   if (!year || isNaN(year)) {
@@ -950,15 +951,28 @@ app.get("/api/get-payments-by-year", authenticateToken, async (req, res) => {
       "Due_Payment",
     ];
     await ensureSheet("Payments", headers, year);
+    // Fetch payments data
     const payments = await readSheet(getPaymentSheetName(year), "A2:R");
     const userPayments = payments.filter((payment) => payment[0] === req.user.username);
 
+    // Fetch clients data to get emails
+    await ensureSheet("Clients", ["User", "Client_Name", "Email", "Type", "Monthly_Payment", "Phone_Number"]);
+    const clients = await readSheet("Clients", "A2:F");
+    const userClients = clients.filter((client) => client[0] === req.user.username);
+
+    // Create a map of clients for quick email lookup
+    const clientEmailMap = new Map();
+    userClients.forEach((client) => {
+      const key = `${client[1]}_${client[3]}`; // Client_Name_Type
+      clientEmailMap.set(key, client[2] || ""); // Email
+    });
+
     let processedPayments = userPayments.map((payment) => {
-      // Validate array length to prevent index errors
       if (!payment || payment.length < headers.length) {
         console.warn(`Invalid payment row for user ${req.user.username} in year ${year}:`, payment);
         return null;
       }
+      const key = `${payment[1]}_${payment[2]}`; // Client_Name_Type
       return {
         User: payment[0] || "",
         Client_Name: payment[1] || "",
@@ -977,8 +991,9 @@ app.get("/api/get-payments-by-year", authenticateToken, async (req, res) => {
         november: payment[14] || "",
         december: payment[15] || "",
         Due_Payment: parseFloat(payment[16]) || 0,
+        Email: clientEmailMap.get(key) || "", // Add Email field
       };
-    }).filter((p) => p !== null); // Remove invalid rows
+    }).filter((p) => p !== null);
 
     if (parseInt(year) > 2025) {
       const calculateCumulativeDue = async (targetYear) => {
@@ -1028,7 +1043,6 @@ app.get("/api/get-payments-by-year", authenticateToken, async (req, res) => {
         });
       } catch (error) {
         console.error(`Error calculating cumulative due for ${year}:`, error.message);
-        // Continue with current year's data instead of failing
       }
     }
 
