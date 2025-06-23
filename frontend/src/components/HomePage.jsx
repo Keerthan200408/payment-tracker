@@ -305,7 +305,7 @@ const HomePage = ({
   }, [currentYear, sessionToken]);
 
 const hasValidEmail = useCallback((clientData) => {
-    const email = clientData?.Email || clientData?.email;
+    const email = clientData?.Email_Address || clientData?.email_address || clientData?.Email || clientData?.email;
     return email && email.trim() !== "" && email.includes("@");
   }, []);
 
@@ -353,7 +353,7 @@ const processBatchUpdates = useCallback(async () => {
     if (!acc[rowIndex]) {
       const rowData = paymentsData[rowIndex];
       // Normalize email field lookup
-      const clientEmail = rowData?.email_address || rowData?.Email || rowData?.email;
+      const clientEmail = rowData?.Email_Address || rowData?.email_address || rowData?.Email || rowData?.email;
       acc[rowIndex] = {
         rowIndex,
         year,
