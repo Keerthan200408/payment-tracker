@@ -960,11 +960,38 @@ app.get("/api/get-payments-by-year", authenticateToken, async (req, res) => {
     const clients = await readSheet("Clients", "A2:F");
     const userClients = clients.filter((client) => client[0] === req.user.username);
 
+    // DEBUG: Log all user clients
+    console.log(`DEBUG: Found ${userClients.length} clients for user ${req.user.username}:`);
+    userClients.forEach((client, index) => {
+      console.log(`  Client ${index + 1}:`, {
+        name: client[1],
+        email: client[2],
+        type: client[3],
+        key: `${client[1]}_${client[3]}`
+      });
+    });
+
     // Create a map of clients for quick email lookup
     const clientEmailMap = new Map();
     userClients.forEach((client) => {
       const key = `${client[1]}_${client[3]}`; // Client_Name_Type
       clientEmailMap.set(key, client[2] || ""); // Email
+      console.log(`DEBUG: Added to map - Key: "${key}", Email: "${client[2] || ''}"`);
+    });
+
+    // DEBUG: Log all payment clients to see what we're looking for
+    console.log(`DEBUG: Found ${userPayments.length} payments for user ${req.user.username}:`);
+    userPayments.forEach((payment, index) => {
+      if (payment && payment.length >= 3) {
+        const lookupKey = `${payment[1]}_${payment[2]}`;
+        const foundEmail = clientEmailMap.get(lookupKey);
+        console.log(`  Payment ${index + 1}:`, {
+          name: payment[1],
+          type: payment[2],
+          lookupKey: lookupKey,
+          foundEmail: foundEmail || 'NOT FOUND'
+        });
+      }
     });
 
     let processedPayments = userPayments.map((payment) => {
@@ -973,6 +1000,11 @@ app.get("/api/get-payments-by-year", authenticateToken, async (req, res) => {
         return null;
       }
       const key = `${payment[1]}_${payment[2]}`; // Client_Name_Type
+      const email = clientEmailMap.get(key) || "";
+      
+      // DEBUG: Log each email lookup
+      console.log(`DEBUG: Looking up email for "${key}" -> "${email}"`);
+      
       return {
         User: payment[0] || "",
         Client_Name: payment[1] || "",
@@ -991,7 +1023,7 @@ app.get("/api/get-payments-by-year", authenticateToken, async (req, res) => {
         november: payment[14] || "",
         december: payment[15] || "",
         Due_Payment: parseFloat(payment[16]) || 0,
-        Email: clientEmailMap.get(key) || "", // Add Email field
+        Email: email, // Add Email field
       };
     }).filter((p) => p !== null);
 
