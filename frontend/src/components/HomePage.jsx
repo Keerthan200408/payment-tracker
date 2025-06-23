@@ -319,85 +319,126 @@ const HomePage = ({
     }
 
     const updates = [...updateQueueRef.current];
-    updateQueueRef.current = []; // Clear queue immediately
+    updateQueueRef.current = [];
     batchTimerRef.current = null;
-    console.log(
-      `HomePage.jsx: Processing batch of ${updates.length} updates`,
-      updates
-    );
+    console.log(`HomePage.jsx: Processing batch of ${updates.length} updates`, updates);
     setIsUpdating(true);
 
     const updatedLocalValues = { ...localInputValues };
 
+    // Group updates by rowIndex
+    const updatesByRow = updates.reduce((acc, update) => {
+      const { rowIndex, month, value, year } = update;
+      if (!acc[rowIndex]) {
+        acc[rowIndex] = {
+          rowIndex,
+          year,
+          updates: [],
+          clientName: paymentsData[rowIndex]?.Client_Name,
+          type: paymentsData[rowIndex]?.Type,
+        };
+      }
+      acc[rowIndex].updates.push({ month, value });
+      return acc;
+    }, {});
+
     try {
-      for (const update of updates) {
-        const { rowIndex, month, value, year } = update;
+      for (const rowUpdate of Object.values(updatesByRow)) {
+        const { rowIndex, year, updates, clientName, type } = rowUpdate;
         const rowData = paymentsData[rowIndex];
         if (!rowData) {
           console.warn(`HomePage.jsx: Invalid rowIndex ${rowIndex}`);
+          setErrorMessage(`Invalid row index ${rowIndex}. Please refresh and try again.`);
           continue;
         }
-        if (typeof updatePayment !== "function") {
-          console.error("HomePage.jsx: updatePayment is not a function");
-          setLocalErrorMessage("Update failed: Invalid update function");
-          updateQueueRef.current.push(update);
-          continue;
-        }
-        try {
-          await updatePayment(rowIndex, month, value, year);
-          const key = `${rowIndex}-${month}`;
-          updatedLocalValues[key] = value;
-          setPendingUpdates((prev) => {
-            const newPending = { ...prev };
-            delete newPending[key];
-            return newPending;
+
+        // Optimistic update for all months in this row
+        setPaymentsData((prev) => {
+          const updatedPayments = [...prev];
+          const rowData = { ...updatedPayments[rowIndex] };
+          updates.forEach(({ month, value }) => {
+            rowData[month] = value || "";
           });
+
+          const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
+          const activeMonths = months.filter(
+            (m) => rowData[m] && parseFloat(rowData[m]) >= 0
+          ).length;
+          const expectedPayment = amountToBePaid * activeMonths;
+          const totalPayments = months.reduce(
+            (sum, m) => sum + (parseFloat(rowData[m]) || 0),
+            0
+          );
+          const currentYearDuePayment = Math.max(expectedPayment - totalPayments, 0);
+          rowData.Due_Payment = currentYearDuePayment.toFixed(2);
+          updatedPayments[rowIndex] = rowData;
+          return updatedPayments;
+        });
+
+        // Send batch update
+        try {
+          const response = await axios.post(
+            `${BASE_URL}/batch-save-payments`,
+            { clientName, type, updates },
+            {
+              headers: { Authorization: `Bearer ${sessionToken}` },
+              params: { year },
+              timeout: 10000,
+            }
+          );
+          const { updatedRow } = response.data;
+          updates.forEach(({ month }) => {
+            const key = `${rowIndex}-${month}`;
+            updatedLocalValues[key] = updatedRow[month] || "";
+            setPendingUpdates((prev) => {
+              const newPending = { ...prev };
+              delete newPending[key];
+              return newPending;
+            });
+          });
+          setPaymentsData((prev) =>
+            prev.map((row, idx) =>
+              idx === rowIndex ? { ...row, ...updatedRow } : row
+            )
+          );
         } catch (error) {
-          console.error(
-            `HomePage.jsx: Failed to update ${month} for row ${rowIndex}:`,
-            error
+          console.error(`HomePage.jsx: Failed to batch update row ${rowIndex}:`, error);
+          setErrorMessage(`Failed to update ${rowData.Client_Name}: ${error.response?.data?.error || error.message}`);
+          // Revert optimistic update and re-queue failed updates
+          setPaymentsData((prev) =>
+            prev.map((row, idx) =>
+              idx === rowIndex ? { ...paymentsData[rowIndex] } : row
+            )
           );
-          setLocalErrorMessage(
-            `Failed to update ${month} for ${rowData.Client_Name}: ${error.message}`
-          );
-          setErrorMessage(
-            `Failed to update ${month} for ${rowData.Client_Name}: ${error.message}`
-          );
-          updateQueueRef.current.push(update);
+          updateQueueRef.current.push(...updates.filter((u) => u.rowIndex === rowIndex));
         }
       }
+
       setLocalInputValues(updatedLocalValues);
       if (updateQueueRef.current.length > 0) {
         console.log("HomePage.jsx: Scheduling retry for failed updates");
-        batchTimerRef.current = setTimeout(processBatchUpdates, BATCH_DELAY);
+        batchTimerRef.current = setTimeout(processBatchUpdates, 1500);
       }
     } catch (error) {
       console.error("HomePage.jsx: Batch update error:", error);
-      setLocalErrorMessage(`Batch update failed: ${error.message}`);
       setErrorMessage(`Batch update failed: ${error.message}`);
       updateQueueRef.current = [...updates, ...updateQueueRef.current];
-      batchTimerRef.current = setTimeout(processBatchUpdates, BATCH_DELAY * 2);
+      batchTimerRef.current = setTimeout(processBatchUpdates, 1500 * 2);
     } finally {
       setIsUpdating(false);
     }
-  }, [updatePayment, paymentsData, localInputValues, setErrorMessage]);
+  }, [paymentsData, sessionToken]);
 
   const debouncedUpdate = useCallback(
     (rowIndex, month, value, year) => {
       if (!paymentsData.length) {
-        console.warn(
-          "HomePage.jsx: Cannot queue update, paymentsData is empty"
-        );
-        alert("Please wait for data to load before making updates.");
+        console.warn("HomePage.jsx: Cannot queue update, paymentsData is empty");
+        setErrorMessage("Please wait for data to load before making updates.");
         return;
       }
       if (!paymentsData[rowIndex]) {
         console.warn("HomePage.jsx: Invalid rowIndex:", rowIndex);
-        return;
-      }
-      if (typeof updatePayment !== "function") {
-        console.error("HomePage.jsx: updatePayment is not a function");
-        alert("Update failed: Invalid update function");
+        setErrorMessage("Invalid row index. Please refresh and try again.");
         return;
       }
       const key = `${rowIndex}-${month}`;
@@ -423,19 +464,14 @@ const HomePage = ({
           year,
           timestamp: Date.now(),
         });
-        console.log("HomePage.jsx: Queued update:", {
-          rowIndex,
-          month,
-          value,
-          year,
-        });
+        console.log("HomePage.jsx: Queued update:", { rowIndex, month, value, year });
         if (!batchTimerRef.current) {
-          batchTimerRef.current = setTimeout(processBatchUpdates, BATCH_DELAY);
+          batchTimerRef.current = setTimeout(processBatchUpdates, 1500);
         }
         delete debounceTimersRef.current[key];
-      }, 1000);
+      }, 1500);
     },
-    [paymentsData, updatePayment]
+    [paymentsData]
   );
 
   const handleYearChangeDebounced = useCallback(
@@ -448,51 +484,49 @@ const HomePage = ({
     [setCurrentYear]
   );
 
-const handleInputChange = useCallback(
-  (rowIndex, month, value) => {
-    const parsedValue = value.trim() === "" ? "" : parseFloat(value);
-    if (value !== "" && (isNaN(parsedValue) || parsedValue < 0)) {
-      alert("Please enter a valid non-negative number.");
-      return;
-    }
-
-    const key = `${rowIndex}-${month}`;
-    setLocalInputValues((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
-
-    // Find the last paid month for this client
-    const rowData = paymentsData[rowIndex];
-    let lastPaidMonthIndex = -1;
-    months.forEach((m, index) => {
-      const monthValue = parseFloat(rowData?.[m] || 0);
-      if (monthValue > 0 && index > lastPaidMonthIndex) {
-        lastPaidMonthIndex = index;
+  const handleInputChange = useCallback(
+    (rowIndex, month, value) => {
+      const parsedValue = value.trim() === "" ? "" : parseFloat(value);
+      if (value !== "" && (isNaN(parsedValue) || parsedValue < 0)) {
+        setErrorMessage("Please enter a valid non-negative number.");
+        return;
       }
-    });
 
-    const currentMonthIndex = months.indexOf(month);
-    // Queue updates for months between last paid and current input month
-    if (lastPaidMonthIndex >= 0 && currentMonthIndex > lastPaidMonthIndex + 1) {
-      for (let i = lastPaidMonthIndex + 1; i < currentMonthIndex; i++) {
-        const intermediateMonth = months[i];
-        const intermediateKey = `${rowIndex}-${intermediateMonth}`;
-        // Only update if the month is not already modified by user
-        if (localInputValues[intermediateKey] === undefined || localInputValues[intermediateKey] === rowData?.[intermediateMonth]) {
-          setLocalInputValues((prev) => ({
-            ...prev,
-            [intermediateKey]: "0",
-          }));
-          debouncedUpdate(rowIndex, intermediateMonth, "0", currentYear);
+      const key = `${rowIndex}-${month}`;
+      setLocalInputValues((prev) => ({
+        ...prev,
+        [key]: value,
+      }));
+
+      // Mandatory intermediate month updates
+      const rowData = paymentsData[rowIndex];
+      let lastPaidMonthIndex = -1;
+      months.forEach((m, index) => {
+        const monthValue = parseFloat(rowData?.[m] || 0);
+        if (monthValue > 0 && index > lastPaidMonthIndex) {
+          lastPaidMonthIndex = index;
+        }
+      });
+
+      const currentMonthIndex = months.indexOf(month);
+      if (lastPaidMonthIndex >= 0 && currentMonthIndex > lastPaidMonthIndex + 1) {
+        for (let i = lastPaidMonthIndex + 1; i < currentMonthIndex; i++) {
+          const intermediateMonth = months[i];
+          const intermediateKey = `${rowIndex}-${intermediateMonth}`;
+          if (localInputValues[intermediateKey] === undefined || localInputValues[intermediateKey] === rowData?.[intermediateMonth]) {
+            setLocalInputValues((prev) => ({
+              ...prev,
+              [intermediateKey]: "0",
+            }));
+            debouncedUpdate(rowIndex, intermediateMonth, "0", currentYear);
+          }
         }
       }
-    }
 
-    debouncedUpdate(rowIndex, month, value, currentYear);
-  },
-  [debouncedUpdate, currentYear, paymentsData, months, localInputValues]
-);
+      debouncedUpdate(rowIndex, month, value, currentYear);
+    },
+    [debouncedUpdate, currentYear, paymentsData, localInputValues]
+  );
 
   // Initialize component
   useEffect(() => {

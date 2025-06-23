@@ -1229,6 +1229,201 @@ if (parseInt(year) > 2025) {
   }
 });
 
+app.post("/api/batch-save-payments", authenticateToken, paymentLimiter, async (req, res) => {
+  const { clientName, type, updates } = req.body;
+  const year = req.query.year || new Date().getFullYear().toString();
+
+  console.log("Batch save payment request:", {
+    clientName,
+    type,
+    updates,
+    year,
+    user: req.user?.username,
+  });
+
+  // Validate inputs
+  if (!clientName || !type || !Array.isArray(updates) || updates.length === 0) {
+    console.error("Missing required fields:", { clientName, type, updates });
+    return res.status(400).json({ error: "Client name, type, and non-empty updates array are required" });
+  }
+
+  for (const { month, value } of updates) {
+    if (!month) {
+      console.error("Missing month in update:", { month, value });
+      return res.status(400).json({ error: "Month is required for each update" });
+    }
+    if (value !== "" && value !== null && value !== undefined) {
+      const numericValue = parseFloat(value);
+      if (isNaN(numericValue) || numericValue < 0) {
+        console.error("Invalid payment value:", value);
+        return res.status(400).json({ error: `Invalid payment value for ${month}` });
+      }
+    }
+  }
+
+  try {
+    const headers = [
+      "User",
+      "Client_Name",
+      "Type",
+      "Amount_To_Be_Paid",
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+      "Due_Payment",
+    ];
+
+    const monthMap = {
+      january: 4,
+      february: 5,
+      march: 6,
+      april: 7,
+      may: 8,
+      june: 9,
+      july: 10,
+      august: 11,
+      september: 12,
+      october: 13,
+      november: 14,
+      december: 15,
+    };
+
+    // Validate all months
+    const invalidMonth = updates.find(({ month }) => !monthMap[month.toLowerCase()]);
+    if (invalidMonth) {
+      console.error("Invalid month:", invalidMonth.month);
+      return res.status(400).json({ error: `Invalid month: ${invalidMonth.month}` });
+    }
+
+    // Ensure sheet exists
+    await retryWithBackoff(() => ensureSheet("Payments", headers, year));
+    console.log("Sheet ensured for year:", year);
+
+    // Read payments
+    let payments;
+    try {
+      payments = await retryWithBackoff(() => readSheet(getPaymentSheetName(year), "A2:R"));
+      console.log("Read payments, count:", payments?.length || 0);
+    } catch (sheetError) {
+      console.error("Error reading sheet:", sheetError.message);
+      return res.status(500).json({ error: "Failed to read payment data" });
+    }
+
+    // Find payment record
+    const paymentIndex = payments.findIndex(
+      (p) => p[0] === req.user.username && p[1] === clientName && p[2] === type
+    );
+
+    if (paymentIndex === -1) {
+      console.error("Payment record not found:", {
+        user: req.user.username,
+        clientName,
+        type,
+      });
+      return res.status(404).json({ error: "Payment record not found" });
+    }
+
+    console.log("Found payment at index:", paymentIndex);
+
+    // Update payment row
+    const paymentRow = [...payments[paymentIndex]];
+    while (paymentRow.length < 17) {
+      paymentRow.push("");
+    }
+
+    updates.forEach(({ month, value }) => {
+      paymentRow[monthMap[month.toLowerCase()]] = value || "";
+      console.log("Updated row for month", month, "with value:", value);
+    });
+
+    const amountToBePaid = parseFloat(paymentRow[3]) || 0;
+    if (isNaN(amountToBePaid)) {
+      console.error("Invalid Amount_To_Be_Paid:", paymentRow[3]);
+      return res.status(500).json({ error: "Invalid payment data in sheet" });
+    }
+
+    const activeMonths = paymentRow.slice(4, 16).filter((m) => m && parseFloat(m) >= 0).length;
+    const expectedPayment = amountToBePaid * activeMonths;
+    const totalPayments = paymentRow.slice(4, 16).reduce((sum, m) => sum + (parseFloat(m) || 0), 0);
+    let currentYearDuePayment = Math.max(expectedPayment - totalPayments, 0);
+
+    let prevYearCumulativeDue = 0;
+    if (parseInt(year) > 2025) {
+      const prevYear = (parseInt(year) - 1).toString();
+      try {
+        console.log(`Fetching previous year data for ${prevYear}`);
+        const prevPayments = await readSheet(getPaymentSheetName(prevYear), "A2:R");
+        const prevPayment = prevPayments.find(
+          (p) => p[0] === req.user.username && p[1] === clientName && p[2] === type
+        );
+        prevYearCumulativeDue = prevPayment && prevPayment[16] ? parseFloat(prevPayment[16]) || 0 : 0;
+        console.log(`Previous year ${prevYear} cumulative due: ${prevYearCumulativeDue}`);
+      } catch (error) {
+        console.warn(`No data found for previous year ${prevYear}:`, error.message);
+        prevYearCumulativeDue = 0;
+      }
+    }
+
+    paymentRow[16] = (currentYearDuePayment + prevYearCumulativeDue).toFixed(2);
+
+    payments[paymentIndex] = paymentRow;
+
+    // Update sheet with retry
+    const range = `${getPaymentSheetName(year)}!A${paymentIndex + 2}:R${paymentIndex + 2}`;
+    try {
+      await retryWithBackoff(() => updateSheet(range, [paymentRow]));
+      console.log("Successfully updated sheet range:", range);
+    } catch (updateError) {
+      console.error("Error updating sheet:", updateError.message);
+      return res.status(500).json({ error: "Failed to update payment data" });
+    }
+
+    // Prepare response
+    const updatedRow = {
+      User: paymentRow[0],
+      Client_Name: paymentRow[1],
+      Type: paymentRow[2],
+      Amount_To_Be_Paid: parseFloat(paymentRow[3]) || 0,
+      january: paymentRow[4] || "",
+      february: paymentRow[5] || "",
+      march: paymentRow[6] || "",
+      april: paymentRow[7] || "",
+      may: paymentRow[8] || "",
+      june: paymentRow[9] || "",
+      july: paymentRow[10] || "",
+      august: paymentRow[11] || "",
+      september: paymentRow[12] || "",
+      october: paymentRow[13] || "",
+      november: paymentRow[14] || "",
+      december: paymentRow[15] || "",
+      Due_Payment: parseFloat(paymentRow[16]) || 0,
+    };
+
+    console.log("Batch payment updated successfully for:", clientName, updates);
+    res.json({ message: "Batch payment updated successfully", updatedRow });
+  } catch (error) {
+    console.error("Batch save payment error:", {
+      message: error.message,
+      stack: error.stack,
+      clientName,
+      type,
+      updates,
+      year,
+      user: req.user?.username,
+    });
+    res.status(500).json({ error: `Failed to save batch payments: ${error.message}` });
+  }
+});
+
 // Get User Years
 app.get("/api/get-user-years", authenticateToken, async (req, res) => {
   try {
