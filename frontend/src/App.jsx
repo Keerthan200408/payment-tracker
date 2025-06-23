@@ -492,11 +492,22 @@ const importCsv = async (e) => {
   }
 };
 
-const updatePayment = async (rowIndex, month, value, year, paymentsData, setPaymentsData, setErrorMessage, sessionToken, saveTimeouts) => {
+const updatePayment = async (
+  rowIndex,
+  month,
+  value,
+  year,
+  paymentsData,
+  setPaymentsData,
+  setErrorMessage,
+  sessionToken,
+  saveTimeouts
+) => {
   if (!paymentsData[rowIndex]) {
     setErrorMessage("Invalid row index. Please refresh and try again.");
     return;
   }
+
   if (value && isNaN(parseFloat(value)) && value !== "") {
     setErrorMessage("Please enter a valid number for payment.");
     return;
@@ -581,11 +592,17 @@ const updatePayment = async (rowIndex, month, value, year, paymentsData, setPaym
     };
 
     const response = await savePaymentWithRetry(payloadData);
+
     if (response.updatedRow) {
       setPaymentsData((prev) =>
-        prev.map((row, idx) =>
-          idx === rowIndex ? { ...row, ...response.updatedRow } : row
-        )
+        prev.map((row, idx) => {
+          if (idx !== rowIndex) return row;
+          return {
+            ...row, // preserve existing fields like Email, Phone_Number, etc.
+            ...response.updatedRow,
+            Email: row.Email || response.updatedRow.Email, // explicitly preserve Email
+          };
+        })
       );
     }
   } catch (error) {
