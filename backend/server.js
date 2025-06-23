@@ -1859,6 +1859,17 @@ app.get("/api/get-types", authenticateToken, async (req, res) => {
   }
 });
 
+app.get("/api/test-smtp", async (req, res) => {
+  try {
+    await transporter.verify();
+    console.log("SMTP server is ready");
+    res.json({ message: "SMTP server is ready" });
+  } catch (error) {
+    console.error("SMTP verification failed:", error);
+    res.status(500).json({ error: `SMTP verification failed: ${error.message}` });
+  }
+});
+
 // Send Email
 app.post("/api/send-email", authenticateToken, async (req, res) => {
   const { to, subject, html } = req.body;
@@ -1871,7 +1882,7 @@ app.post("/api/send-email", authenticateToken, async (req, res) => {
     return res.status(400).json({ error: "Invalid recipient email address" });
   }
   try {
-    await transporter.sendMail({
+    const info = await transporter.sendMail({
       from: `"Payment Tracker" <${process.env.EMAIL_USER}>`,
       to,
       subject,

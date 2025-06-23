@@ -361,6 +361,7 @@ const processBatchUpdates = useCallback(async () => {
         if (paidInMonth === 0) status = "Unpaid";
         else if (paidInMonth >= amountToBePaid) status = "Paid";
         else status = "PartiallyPaid";
+        console.log("Status for", month, ":", { paidInMonth, amountToBePaid, status });
         return { month, status };
       });
 
@@ -448,6 +449,15 @@ const processBatchUpdates = useCallback(async () => {
                 timeout: 5000,
               }
             );
+
+            console.log("Checking email notification conditions:", {
+  clientName: clientName,
+  clientEmail: clientEmail,
+  notifyStatuses: notifyStatuses,
+  amountToBePaid: rowData.Amount_To_Be_Paid,
+  paidInMonth: updates.map(u => ({ month: u.month, value: parseFloat(u.value) || 0 })),
+});
+
             console.log(`HomePage.jsx: Email sent to ${clientEmail} for ${clientName}`);
           } catch (emailError) {
             console.error(`HomePage.jsx: Failed to send email to ${clientEmail}:`, emailError);
