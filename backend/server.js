@@ -960,13 +960,17 @@ app.get("/api/get-payments-by-year", authenticateToken, async (req, res) => {
     const clients = await readSheet("Clients", "A2:F");
     const userClients = clients.filter((client) => client[0] === req.user.username);
 
-    // DEBUG: Log all user clients
+    // DEBUG: Log all user clients with raw data
     console.log(`DEBUG: Found ${userClients.length} clients for user ${req.user.username}:`);
     userClients.forEach((client, index) => {
-      console.log(`  Client ${index + 1}:`, {
+      console.log(`  Client ${index + 1} RAW:`, client);
+      console.log(`  Client ${index + 1} PARSED:`, {
+        user: client[0],
         name: client[1],
         email: client[2],
         type: client[3],
+        monthly_payment: client[4],
+        phone: client[5],
         key: `${client[1]}_${client[3]}`
       });
     });
