@@ -12,6 +12,8 @@ require("dotenv").config();
 const app = express();
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
+const nodemailer = require("nodemailer");
+
 
 // CORS configuration
 app.use(
@@ -81,6 +83,16 @@ app.use(cookieParser());
 
 // Parse JSON
 app.use(express.json());
+
+// Nodemailer transport setup for Brevo SMTP
+const transporter = nodemailer.createTransport({
+  host: process.env.EMAIL_HOST,
+  port: process.env.EMAIL_PORT,
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
 
 
 // Health check
@@ -1843,6 +1855,36 @@ app.get("/api/get-types", authenticateToken, async (req, res) => {
       username,
     });
     res.status(500).json({ error: `Failed to fetch types: ${error.message}` });
+  }
+});
+
+// Send Email
+app.post("/api/send-email", authenticateToken, async (req, res) => {
+  const { to, subject, html } = req.body;
+  if (!to || !subject || !html) {
+    console.error("Missing required fields:", { to, subject, html });
+    return res.status(400).json({ error: "Recipient email, subject, and HTML content are required" });
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+    console.error("Invalid email address:", to);
+    return res.status(400).json({ error: "Invalid recipient email address" });
+  }
+  try {
+    await transporter.sendMail({
+      from: `"Payment Tracker" <${process.env.EMAIL_USER}>`,
+      to,
+      subject,
+      html: sanitizeInput(html),
+    });
+    console.log(`Email sent successfully to ${to}`);
+    res.json({ message: "Email sent successfully" });
+  } catch (error) {
+    console.error("Send email error:", {
+      message: error.message,
+      to,
+      user: req.user.username,
+    });
+    res.status(500).json({ error: `Failed to send email: ${error.message}` });
   }
 });
 
