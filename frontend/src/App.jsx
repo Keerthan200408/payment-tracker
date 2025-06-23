@@ -493,30 +493,18 @@ const importCsv = async (e) => {
 };
 
 const updatePayment = async (rowIndex, month, value, year, paymentsData, setPaymentsData, setErrorMessage, sessionToken, saveTimeouts) => {
-  console.log("updatePayment called:", { rowIndex, month, value, year });
   if (!paymentsData[rowIndex]) {
-    console.error("App.jsx: Invalid rowIndex:", rowIndex);
+    setErrorMessage("Invalid row index. Please refresh and try again.");
     return;
   }
   if (value && isNaN(parseFloat(value)) && value !== "") {
-    alert("Please enter a valid number");
+    setErrorMessage("Please enter a valid number for payment.");
     return;
   }
 
-  const savePaymentWithRetry = async (
-    payload,
-    retries = 3,
-    delayMs = 1000
-  ) => {
+  const savePaymentWithRetry = async (payload, retries = 3, delayMs = 1000) => {
     for (let i = 0; i < retries; i++) {
       try {
-        console.log(
-          "App.jsx: Saving payment for:",
-          payload.clientName,
-          month,
-          value,
-          year
-        );
         const response = await axios.post(
           `${BASE_URL}/save-payment`,
           payload,
@@ -526,18 +514,8 @@ const updatePayment = async (rowIndex, month, value, year, paymentsData, setPaym
             timeout: 10000,
           }
         );
-        console.log("App.jsx: Payment saved successfully:", response.data);
         return response.data;
       } catch (error) {
-        console.error("App.jsx: Save payment error:", {
-          message: error.message,
-          status: error.response?.status,
-          data: error.response?.data,
-          rowIndex,
-          month,
-          year,
-          attempt: i + 1,
-        });
         if (
           (error.response?.status === 429 || error.code === "ECONNABORTED") &&
           i < retries - 1
@@ -552,102 +530,74 @@ const updatePayment = async (rowIndex, month, value, year, paymentsData, setPaym
     throw new Error("Max retries reached for save payment");
   };
 
-  // Use stable timeoutKey to debounce updates for the same row and month
-  const timeoutKey = `${rowIndex}-${month}`;
-  if (saveTimeouts.current[timeoutKey]) {
-    clearTimeout(saveTimeouts.current[timeoutKey]);
-  }
-
-  // Store original row for reversion on error
   const originalRowData = { ...paymentsData[rowIndex] };
   let updatedRowData = { ...originalRowData };
 
-  saveTimeouts.current[timeoutKey] = setTimeout(async () => {
-    try {
-      // Optimistic update
-      setPaymentsData((prev) => {
-        const updatedPayments = [...prev];
-        const rowData = { ...updatedPayments[rowIndex] };
-        rowData[month] = value || "";
+  try {
+    // Optimistic update
+    setPaymentsData((prev) => {
+      const updatedPayments = [...prev];
+      const rowData = { ...updatedPayments[rowIndex] };
+      rowData[month] = value || "";
 
-        const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
-        const activeMonths = months.filter(
-          (m) => rowData[m] && parseFloat(rowData[m]) >= 0
-        ).length;
-        const expectedPayment = amountToBePaid * activeMonths;
-        const totalPayments = months.reduce(
-          (sum, m) => sum + (parseFloat(rowData[m]) || 0),
-          0
-        );
-        const currentYearDuePayment = Math.max(
-          expectedPayment - totalPayments,
-          0
-        );
-
-        let prevYearCumulativeDue = 0;
-        if (parseInt(year) > 2025) {
-          const originalDuePayment =
-            parseFloat(prev[rowIndex]?.Due_Payment) || 0;
-          const originalAmountToBePaid =
-            parseFloat(prev[rowIndex]?.Amount_To_Be_Paid) || 0;
-          const originalActiveMonths = months.filter(
-            (m) => prev[rowIndex]?.[m] && parseFloat(prev[rowIndex][m]) >= 0
-          ).length;
-          const originalExpectedPayment =
-            originalAmountToBePaid * originalActiveMonths;
-          const originalTotalPayments = months.reduce(
-            (sum, m) => sum + (parseFloat(prev[rowIndex]?.[m]) || 0),
-            0
-          );
-          const originalCurrentYearDue = Math.max(
-            originalExpectedPayment - originalTotalPayments,
-            0
-          );
-          prevYearCumulativeDue = Math.max(
-            originalDuePayment - doriginalCurrentYearDue,
-            0
-          );
-        }
-
-        rowData.Due_Payment = (
-          currentYearDuePayment + prevYearCumulativeDue
-        ).toFixed(2);
-        updatedPayments[rowIndex] = rowData;
-        updatedRowData = rowData;
-        return updatedPayments;
-      });
-
-      const payloadData = {
-        clientName: updatedRowData.Client_Name,
-        type: updatedRowData.Type,
-        month,
-        value: value || "",
-      };
-
-      const response = await savePaymentWithRetry(payloadData);
-      if (response.updatedRow) {
-        setPaymentsData((prev) =>
-          prev.map((row, idx) =>
-            idx === rowIndex ? { ...row, ...response.updatedRow } : row
-          )
-        );
-      }
-    } catch (error) {
-      setErrorMessage(
-        `Failed to save payment for ${
-          updatedRowData?.Client_Name || "unknown"
-        }: ${error.response?.data?.error || error.message}`
+      const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
+      const activeMonths = months.filter(
+        (m) => rowData[m] && parseFloat(rowData[m]) >= 0
+      ).length;
+      const expectedPayment = amountToBePaid * activeMonths;
+      const totalPayments = months.reduce(
+        (sum, m) => sum + (parseFloat(rowData[m]) || 0),
+        0
       );
-      // Revert to original data on error
+      const currentYearDuePayment = Math.max(expectedPayment - totalPayments, 0);
+
+      let prevYearCumulativeDue = 0;
+      if (parseInt(year) > 2025) {
+        const originalDuePayment = parseFloat(prev[rowIndex]?.Due_Payment) || 0;
+        const originalAmountToBePaid = parseFloat(prev[rowIndex]?.Amount_To_Be_Paid) || 0;
+        const originalActiveMonths = months.filter(
+          (m) => prev[rowIndex]?.[m] && parseFloat(prev[rowIndex][m]) >= 0
+        ).length;
+        const originalExpectedPayment = originalAmountToBePaid * originalActiveMonths;
+        const originalTotalPayments = months.reduce(
+          (sum, m) => sum + (parseFloat(prev[rowIndex]?.[m]) || 0),
+          0
+        );
+        const originalCurrentYearDue = Math.max(originalExpectedPayment - originalTotalPayments, 0);
+        prevYearCumulativeDue = Math.max(originalDuePayment - originalCurrentYearDue, 0);
+      }
+
+      rowData.Due_Payment = (currentYearDuePayment + prevYearCumulativeDue).toFixed(2);
+      updatedPayments[rowIndex] = rowData;
+      updatedRowData = rowData;
+      return updatedPayments;
+    });
+
+    const payloadData = {
+      clientName: updatedRowData.Client_Name,
+      type: updatedRowData.Type,
+      month,
+      value: value || "",
+    };
+
+    const response = await savePaymentWithRetry(payloadData);
+    if (response.updatedRow) {
       setPaymentsData((prev) =>
         prev.map((row, idx) =>
-          idx === rowIndex ? originalRowData : row
+          idx === rowIndex ? { ...row, ...response.updatedRow } : row
         )
       );
-    } finally {
-      delete saveTimeouts.current[timeoutKey];
     }
-  }, 500);
+  } catch (error) {
+    setErrorMessage(
+      `Failed to save payment for ${updatedRowData?.Client_Name || "unknown"} in ${month}: ${error.response?.data?.error || error.message}`
+    );
+    setPaymentsData((prev) =>
+      prev.map((row, idx) =>
+        idx === rowIndex ? originalRowData : row
+      )
+    );
+  }
 };
 
   return (
