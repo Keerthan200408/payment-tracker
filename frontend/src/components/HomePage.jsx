@@ -336,6 +336,7 @@ const processBatchUpdates = useCallback(async () => {
         updates: [],
         clientName: paymentsData[rowIndex]?.Client_Name,
         type: paymentsData[rowIndex]?.Type,
+        clientEmail: paymentsData[rowIndex]?.Email, // Use Email field
       };
     }
     acc[rowIndex].updates.push({ month, value });
@@ -344,13 +345,24 @@ const processBatchUpdates = useCallback(async () => {
 
   try {
     for (const rowUpdate of Object.values(updatesByRow)) {
-      const { rowIndex, year, updates, clientName, type } = rowUpdate;
+      const { rowIndex, year, updates, clientName, type, clientEmail } = rowUpdate;
       const rowData = paymentsData[rowIndex];
       if (!rowData) {
         console.warn(`HomePage.jsx: Invalid rowIndex ${rowIndex}`);
         setErrorMessage(`Invalid row index ${rowIndex}. Please refresh and try again.`);
         continue;
       }
+
+      // Calculate status for each updated month
+      const statuses = updates.map(({ month, value }) => {
+        const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
+        const paidInMonth = parseFloat(value) || 0;
+        let status;
+        if (paidInMonth === 0) status = "Unpaid";
+        else if (paidInMonth >= amountToBePaid) status = "Paid";
+        else status = "PartiallyPaid";
+        return { month, status };
+      });
 
       // Optimistic update for all months in this row
       setPaymentsData((prev) => {
@@ -401,6 +413,50 @@ const processBatchUpdates = useCallback(async () => {
             idx === rowIndex ? { ...row, ...updatedRow } : row
           )
         );
+
+        // Send email notifications for PartiallyPaid or Unpaid statuses
+        const notifyStatuses = statuses.filter(
+          ({ status }) => status === "PartiallyPaid" || status === "Unpaid"
+        );
+        if (notifyStatuses.length > 0 && clientEmail) {
+          try {
+            await axios.post(
+              `${BASE_URL}/send-email`,
+              {
+                to: clientEmail,
+                subject: `Payment Status Update for ${clientName}`,
+                html: `
+                  <p>Dear ${clientName},</p>
+                  <p>Your payment status for ${type} has been updated for ${year}:</p>
+                  <ul>
+                    ${notifyStatuses
+                      .map(
+                        ({ month, status }) =>
+                          `<li>${
+                            month.charAt(0).toUpperCase() + month.slice(1)
+                          }: ${status}</li>`
+                      )
+                      .join("")}
+                  </ul>
+                  <p>Please review your account or contact us for details.</p>
+                  <p>Best regards,</p>
+                  <p>Payment Tracker Team</p>
+                `,
+              },
+              {
+                headers: { Authorization: `Bearer ${sessionToken}` },
+                timeout: 5000,
+              }
+            );
+            console.log(`HomePage.jsx: Email sent to ${clientEmail} for ${clientName}`);
+          } catch (emailError) {
+            console.error(`HomePage.jsx: Failed to send email to ${clientEmail}:`, emailError);
+            setErrorMessage(`Failed to send email to ${clientName}: ${emailError.response?.data?.error || emailError.message}`);
+          }
+        } else if (!clientEmail && notifyStatuses.length > 0) {
+          console.warn(`HomePage.jsx: No email address for ${clientName}`);
+          setErrorMessage(`No email address found for ${clientName}. Notification not sent.`);
+        }
       } catch (error) {
         console.error(`HomePage.jsx: Failed to batch update row ${rowIndex}:`, error);
         setErrorMessage(`Failed to update ${rowData.Client_Name}: ${error.response?.data?.error || error.message}`);

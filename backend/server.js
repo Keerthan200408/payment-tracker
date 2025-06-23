@@ -14,6 +14,7 @@ const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const nodemailer = require("nodemailer");
 
+app.set("trust proxy", 1); // Trust the first proxy (Render)
 
 // CORS configuration
 app.use(
