@@ -304,7 +304,34 @@ const HomePage = ({
     }
   }, [currentYear, sessionToken]);
 
+const hasValidEmail = useCallback((clientData) => {
+    const email = clientData?.Email || clientData?.email;
+    return email && email.trim() !== "" && email.includes("@");
+  }, []);
 
+  const ErrorMessageDisplay = ({ message, onDismiss, type = "error" }) => {
+    if (!message) return null;
+    
+    const bgColor = type === "warning" ? "bg-yellow-50 border-yellow-200 text-yellow-800" : "bg-red-50 border-red-200 text-red-800";
+    const icon = type === "warning" ? "fas fa-exclamation-triangle" : "fas fa-exclamation-circle";
+    
+    return (
+      <div className={`mb-4 p-4 rounded-lg border ${bgColor}`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <i className={`${icon} mr-2`}></i>
+            <span className="text-sm">{message}</span>
+          </div>
+          <button
+            onClick={onDismiss}
+            className="ml-2 hover:opacity-75 transition-opacity"
+          >
+            <i className="fas fa-times"></i>
+          </button>
+        </div>
+      </div>
+    );
+  };
 const processBatchUpdates = useCallback(async () => {
   if (!updateQueueRef.current.length) {
     console.log("HomePage.jsx: No updates to process");
@@ -548,34 +575,7 @@ const processBatchUpdates = useCallback(async () => {
   }
 }, [paymentsData, sessionToken, months, localInputValues, hasValidEmail, setErrorMessage]);
 
-  const hasValidEmail = useCallback((clientData) => {
-    const email = clientData?.Email || clientData?.email;
-    return email && email.trim() !== "" && email.includes("@");
-  }, []);
-
-  const ErrorMessageDisplay = ({ message, onDismiss, type = "error" }) => {
-    if (!message) return null;
-    
-    const bgColor = type === "warning" ? "bg-yellow-50 border-yellow-200 text-yellow-800" : "bg-red-50 border-red-200 text-red-800";
-    const icon = type === "warning" ? "fas fa-exclamation-triangle" : "fas fa-exclamation-circle";
-    
-    return (
-      <div className={`mb-4 p-4 rounded-lg border ${bgColor}`}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <i className={`${icon} mr-2`}></i>
-            <span className="text-sm">{message}</span>
-          </div>
-          <button
-            onClick={onDismiss}
-            className="ml-2 hover:opacity-75 transition-opacity"
-          >
-            <i className="fas fa-times"></i>
-          </button>
-        </div>
-      </div>
-    );
-  };
+  
 
   const debouncedUpdate = useCallback(
     (rowIndex, month, value, year) => {
