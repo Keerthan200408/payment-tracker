@@ -352,8 +352,8 @@ const processBatchUpdates = useCallback(async () => {
     const { rowIndex, month, value, year } = update;
     if (!acc[rowIndex]) {
       const rowData = paymentsData[rowIndex];
-      // Normalize email field lookup
-      const clientEmail = rowData?.Email_Address || rowData?.email_address || rowData?.Email || rowData?.email;
+      // Fix: Use the correct field name that matches your backend response
+      const clientEmail = rowData?.Email || rowData?.email || ""; // Backend sends 'Email' field
       acc[rowIndex] = {
         rowIndex,
         year,
@@ -448,7 +448,8 @@ const processBatchUpdates = useCallback(async () => {
         });
 
         if (notifyStatuses.length > 0) {
-          if (hasValidEmail({ Email: clientEmail, email: clientEmail })) {
+          // Fix: Check if clientEmail exists and is valid
+          if (clientEmail && clientEmail.trim() && hasValidEmail({ Email: clientEmail, email: clientEmail })) {
             try {
               const emailContent = `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -535,6 +536,7 @@ const processBatchUpdates = useCallback(async () => {
           } else {
             // Silently track clients with missing emails
             missingEmailClients.push(clientName);
+            console.log(`HomePage.jsx: No valid email found for ${clientName}, skipping email notification`);
           }
         } else {
           console.log(`HomePage.jsx: All payments are fully paid for ${clientName}, no email notification needed`);
@@ -571,8 +573,7 @@ const processBatchUpdates = useCallback(async () => {
     setIsUpdating(false);
   }
 }, [paymentsData, sessionToken, months, localInputValues, hasValidEmail, setErrorMessage]);
-
-  
+ 
 
   const debouncedUpdate = useCallback(
     (rowIndex, month, value, year) => {
