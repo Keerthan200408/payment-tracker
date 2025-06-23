@@ -304,236 +304,249 @@ const HomePage = ({
     }
   }, [currentYear, sessionToken]);
 
-  const processBatchUpdates = useCallback(async () => {
-    if (!updateQueueRef.current.length) {
-      console.log("HomePage.jsx: No updates to process");
-      batchTimerRef.current = null;
-      return;
-    }
 
-    const updates = [...updateQueueRef.current];
-    updateQueueRef.current = [];
+const processBatchUpdates = useCallback(async () => {
+  if (!updateQueueRef.current.length) {
+    console.log("HomePage.jsx: No updates to process");
     batchTimerRef.current = null;
-    console.log(`HomePage.jsx: Processing batch of ${updates.length} updates`, updates);
-    setIsUpdating(true);
+    return;
+  }
 
-    const updatedLocalValues = { ...localInputValues };
+  const updates = [...updateQueueRef.current];
+  updateQueueRef.current = [];
+  batchTimerRef.current = null;
+  console.log(`HomePage.jsx: Processing batch of ${updates.length} updates`, updates);
+  setIsUpdating(true);
 
-    const updatesByRow = updates.reduce((acc, update) => {
-      const { rowIndex, month, value, year } = update;
-      if (!acc[rowIndex]) {
-        acc[rowIndex] = {
-          rowIndex,
-          year,
-          updates: [],
-          clientName: paymentsData[rowIndex]?.Client_Name,
-          type: paymentsData[rowIndex]?.Type,
-          clientEmail: paymentsData[rowIndex]?.Email || paymentsData[rowIndex]?.email,
-        };
+  const updatedLocalValues = { ...localInputValues };
+  const missingEmailClients = []; // Track clients with missing emails
+
+  const updatesByRow = updates.reduce((acc, update) => {
+    const { rowIndex, month, value, year } = update;
+    if (!acc[rowIndex]) {
+      const rowData = paymentsData[rowIndex];
+      // Normalize email field lookup
+      const clientEmail = Object.keys(rowData || {}).reduce((email, key) => {
+        if (key.toLowerCase() === 'email') return rowData[key];
+        return email;
+      }, rowData?.Email || rowData?.email);
+      acc[rowIndex] = {
+        rowIndex,
+        year,
+        updates: [],
+        clientName: rowData?.Client_Name,
+        type: rowData?.Type,
+        clientEmail,
+      };
+    }
+    acc[rowIndex].updates.push({ month, value });
+    return acc;
+  }, {});
+
+  try {
+    for (const rowUpdate of Object.values(updatesByRow)) {
+      const { rowIndex, year, updates, clientName, type, clientEmail } = rowUpdate;
+      const rowData = paymentsData[rowIndex];
+      if (!rowData) {
+        console.warn(`HomePage.jsx: Invalid rowIndex ${rowIndex}`);
+        setErrorMessage(`Invalid row index ${rowIndex}. Please refresh and try again.`);
+        continue;
       }
-      acc[rowIndex].updates.push({ month, value });
-      return acc;
-    }, {});
 
-    try {
-      for (const rowUpdate of Object.values(updatesByRow)) {
-        const { rowIndex, year, updates, clientName, type, clientEmail } = rowUpdate;
-        const rowData = paymentsData[rowIndex];
-        if (!rowData) {
-          console.warn(`HomePage.jsx: Invalid rowIndex ${rowIndex}`);
-          setErrorMessage(`Invalid row index ${rowIndex}. Please refresh and try again.`);
-          continue;
-        }
+      const statuses = updates.map(({ month, value }) => {
+        const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
+        const paidInMonth = parseFloat(value) || 0;
+        let status;
+        if (paidInMonth === 0) status = "Unpaid";
+        else if (paidInMonth >= amountToBePaid) status = "Paid";
+        else status = "PartiallyPaid";
+        console.log("Status for", month, ":", { paidInMonth, amountToBePaid, status });
+        return { month, status, paidAmount: paidInMonth, expectedAmount: amountToBePaid };
+      });
 
-        const statuses = updates.map(({ month, value }) => {
-          const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
-          const paidInMonth = parseFloat(value) || 0;
-          let status;
-          if (paidInMonth === 0) status = "Unpaid";
-          else if (paidInMonth >= amountToBePaid) status = "Paid";
-          else status = "PartiallyPaid";
-          console.log("Status for", month, ":", { paidInMonth, amountToBePaid, status });
-          return { month, status, paidAmount: paidInMonth, expectedAmount: amountToBePaid };
+      setPaymentsData((prev) => {
+        const updatedPayments = [...prev];
+        const rowData = { ...updatedPayments[rowIndex] };
+        updates.forEach(({ month, value }) => {
+          rowData[month] = value || "";
         });
 
-        setPaymentsData((prev) => {
-          const updatedPayments = [...prev];
-          const rowData = { ...updatedPayments[rowIndex] };
-          updates.forEach(({ month, value }) => {
-            rowData[month] = value || "";
-          });
+        const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
+        const activeMonths = months.filter(
+          (m) => rowData[m] && parseFloat(rowData[m]) >= 0
+        ).length;
+        const expectedPayment = amountToBePaid * activeMonths;
+        const totalPayments = months.reduce(
+          (sum, m) => sum + (parseFloat(rowData[m]) || 0),
+          0
+        );
+        const currentYearDuePayment = Math.max(expectedPayment - totalPayments, 0);
+        rowData.Due_Payment = currentYearDuePayment.toFixed(2);
+        updatedPayments[rowIndex] = rowData;
+        return updatedPayments;
+      });
 
-          const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
-          const activeMonths = months.filter(
-            (m) => rowData[m] && parseFloat(rowData[m]) >= 0
-          ).length;
-          const expectedPayment = amountToBePaid * activeMonths;
-          const totalPayments = months.reduce(
-            (sum, m) => sum + (parseFloat(rowData[m]) || 0),
-            0
-          );
-          const currentYearDuePayment = Math.max(expectedPayment - totalPayments, 0);
-          rowData.Due_Payment = currentYearDuePayment.toFixed(2);
-          updatedPayments[rowIndex] = rowData;
-          return updatedPayments;
+      try {
+        const response = await axios.post(
+          `${BASE_URL}/batch-save-payments`,
+          { clientName, type, updates },
+          {
+            headers: { Authorization: `Bearer ${sessionToken}` },
+            params: { year },
+            timeout: 10000,
+          }
+        );
+        const { updatedRow } = response.data;
+        updates.forEach(({ month }) => {
+          const key = `${rowIndex}-${month}`;
+          updatedLocalValues[key] = updatedRow[month] || "";
+          setPendingUpdates((prev) => {
+            const newPending = { ...prev };
+            delete newPending[key];
+            return newPending;
+          });
+        });
+        setPaymentsData((prev) =>
+          prev.map((row, idx) =>
+            idx === rowIndex ? { ...row, ...updatedRow } : row
+          )
+        );
+
+        const notifyStatuses = statuses.filter(
+          ({ status }) => status === "PartiallyPaid" || status === "Unpaid"
+        );
+
+        console.log("Checking email notification conditions:", {
+          clientName,
+          clientEmail,
+          notifyStatuses,
+          hasEmailAddress: hasValidEmail({ Email: clientEmail, email: clientEmail }),
         });
 
-        try {
-          const response = await axios.post(
-            `${BASE_URL}/batch-save-payments`,
-            { clientName, type, updates },
-            {
-              headers: { Authorization: `Bearer ${sessionToken}` },
-              params: { year },
-              timeout: 10000,
-            }
-          );
-          const { updatedRow } = response.data;
-          updates.forEach(({ month }) => {
-            const key = `${rowIndex}-${month}`;
-            updatedLocalValues[key] = updatedRow[month] || "";
-            setPendingUpdates((prev) => {
-              const newPending = { ...prev };
-              delete newPending[key];
-              return newPending;
-            });
-          });
-          setPaymentsData((prev) =>
-            prev.map((row, idx) =>
-              idx === rowIndex ? { ...row, ...updatedRow } : row
-            )
-          );
-
-          const notifyStatuses = statuses.filter(
-            ({ status }) => status === "PartiallyPaid" || status === "Unpaid"
-          );
-
-          console.log("Checking email notification conditions:", {
-            clientName: clientName,
-            clientEmail: clientEmail,
-            notifyStatuses: notifyStatuses,
-            hasEmailAddress: !!clientEmail,
-            emailField: rowData.Email,
-            emailFieldLower: rowData.email,
-          });
-
-          if (notifyStatuses.length > 0) {
-            if (clientEmail && clientEmail.trim() !== "") {
-              try {
-                const emailContent = `
-                  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                    <h2 style="color: #333; border-bottom: 2px solid #007bff; padding-bottom: 10px;">
-                      Payment Status Update
-                    </h2>
-                    <p>Dear <strong>${clientName}</strong>,</p>
-                    <p>Your payment status for <strong>${type}</strong> has been updated for <strong>${year}</strong>:</p>
-                    
-                    <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-                      <thead>
-                        <tr style="background-color: #f8f9fa;">
-                          <th style="border: 1px solid #dee2e6; padding: 12px; text-align: left;">Month</th>
-                          <th style="border: 1px solid #dee2e6; padding: 12px; text-align: left;">Status</th>
-                          <th style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">Paid Amount</th>
-                          <th style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">Expected Amount</th>
+        if (notifyStatuses.length > 0) {
+          if (hasValidEmail({ Email: clientEmail, email: clientEmail })) {
+            try {
+              const emailContent = `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                  <h2 style="color: #333; border-bottom: 2px solid #007bff; padding-bottom: 10px;">
+                    Payment Status Update
+                  </h2>
+                  <p>Dear <strong>${clientName}</strong>,</p>
+                  <p>Your payment status for <strong>${type}</strong> has been updated for <strong>${year}</strong>:</p>
+                  
+                  <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+                    <thead>
+                      <tr style="background-color: #f8f9fa;">
+                        <th style="border: 1px solid #dee2e6; padding: 12px; text-align: left;">Month</th>
+                        <th style="border: 1px solid #dee2e6; padding: 12px; text-align: left;">Status</th>
+                        <th style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">Paid Amount</th>
+                        <th style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">Expected Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${notifyStatuses
+                        .map(
+                          ({ month, status, paidAmount, expectedAmount }) => `
+                        <tr>
+                          <td style="border: 1px solid #dee2e6; padding: 12px;">${
+                            month.charAt(0).toUpperCase() + month.slice(1)
+                          }</td>
+                          <td style="border: 1px solid #dee2e6; padding: 12px;">
+                            <span style="
+                              padding: 4px 8px; 
+                              border-radius: 4px; 
+                              color: white;
+                              background-color: ${status === 'Unpaid' ? '#dc3545' : '#ffc107'};
+                            ">${status === 'PartiallyPaid' ? 'Partially Paid' : status}</span>
+                          </td>
+                          <td style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">₹${paidAmount.toFixed(2)}</td>
+                          <td style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">₹${expectedAmount.toFixed(2)}</td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        ${notifyStatuses
-                          .map(
-                            ({ month, status, paidAmount, expectedAmount }) => `
-                          <tr>
-                            <td style="border: 1px solid #dee2e6; padding: 12px;">${
-                              month.charAt(0).toUpperCase() + month.slice(1)
-                            }</td>
-                            <td style="border: 1px solid #dee2e6; padding: 12px;">
-                              <span style="
-                                padding: 4px 8px; 
-                                border-radius: 4px; 
-                                color: white;
-                                background-color: ${status === 'Unpaid' ? '#dc3545' : '#ffc107'};
-                              ">${status === 'PartiallyPaid' ? 'Partially Paid' : status}</span>
-                            </td>
-                            <td style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">₹${paidAmount.toFixed(2)}</td>
-                            <td style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">₹${expectedAmount.toFixed(2)}</td>
-                          </tr>
-                        `
-                          )
-                          .join("")}
-                      </tbody>
-                    </table>
-                    
-                    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                      <p style="margin: 0;"><strong>Note:</strong> Please review your account or contact us for any clarifications regarding your payment status.</p>
-                    </div>
-                    
-                    <p>Best regards,<br>
-                    <strong>Payment Tracker Team</strong></p>
-                    
-                    <hr style="margin: 30px 0; border: none; border-top: 1px solid #dee2e6;">
-                    <p style="font-size: 12px; color: #6c757d;">
-                      This is an automated notification. Please do not reply to this email.
-                    </p>
+                      `
+                        )
+                        .join("")}
+                    </tbody>
+                  </table>
+                  
+                  <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                    <p style="margin: 0;"><strong>Note:</strong> Please review your account or contact us for any clarifications regarding your payment status.</p>
                   </div>
-                `;
+                  
+                  <p>Best regards,<br>
+                  <strong>Payment Tracker Team</strong></p>
+                  
+                  <hr style="margin: 30px 0; border: none; border-top: 1px solid #dee2e6;">
+                  <p style="font-size: 12px; color: #6c757d;">
+                    This is an automated notification. Please do not reply to this email.
+                  </p>
+                </div>
+              `;
 
-                await axios.post(
-                  `${BASE_URL}/send-email`,
-                  {
-                    to: clientEmail.trim(),
-                    subject: `Payment Status Update - ${clientName} (${type}) - ${year}`,
-                    html: emailContent,
-                  },
-                  {
-                    headers: { Authorization: `Bearer ${sessionToken}` },
-                    timeout: 15000,
-                  }
-                );
-
-                console.log(`HomePage.jsx: Email sent successfully to ${clientEmail} for ${clientName}`);
-              } catch (emailError) {
-                console.error(`HomePage.jsx: Failed to send email to ${clientEmail}:`, emailError);
-                if (!emailError.code || !['ECONNABORTED', 'NETWORK_ERROR'].includes(emailError.code)) {
-                  setErrorMessage(
-                    `Payment updated successfully, but failed to send email to ${clientName}: ${
-                      emailError.response?.data?.error || emailError.message
-                    }`
-                  );
-                } else {
-                  console.warn(`HomePage.jsx: Email sending timed out for ${clientEmail}, but payment was saved`);
+              await axios.post(
+                `${BASE_URL}/send-email`,
+                {
+                  to: clientEmail.trim(),
+                  subject: `Payment Status Update - ${clientName} (${type}) - ${year}`,
+                  html: emailContent,
+                },
+                {
+                  headers: { Authorization: `Bearer ${sessionToken}` },
+                  timeout: 15000,
                 }
+              );
+
+              console.log(`HomePage.jsx: Email sent successfully to ${clientEmail} for ${clientName}`);
+            } catch (emailError) {
+              console.error(`HomePage.jsx: Failed to send email to ${clientEmail}:`, emailError);
+              if (!emailError.code || !['ECONNABORTED', 'NETWORK_ERROR'].includes(emailError.code)) {
+                setErrorMessage(
+                  `Payment updated successfully, but failed to send email to ${clientName}: ${
+                    emailError.response?.data?.error || emailError.message
+                  }`
+                );
+              } else {
+                console.warn(`HomePage.jsx: Email sending timed out for ${clientEmail}, but payment was saved`);
               }
-            } else {
-              console.warn(`HomePage.jsx: No valid email address for ${clientName}. Email field: '${clientEmail}'`);
             }
           } else {
-            console.log(`HomePage.jsx: All payments are fully paid for ${clientName}, no email notification needed`);
+            // Silently track clients with missing emails
+            missingEmailClients.push(clientName);
           }
-        } catch (error) {
-          console.error(`HomePage.jsx: Failed to batch update row ${rowIndex}:`, error);
-          setErrorMessage(`Failed to update ${rowData.Client_Name}: ${error.response?.data?.error || error.message}`);
-          setPaymentsData((prev) =>
-            prev.map((row, idx) =>
-              idx === rowIndex ? { ...paymentsData[rowIndex] } : row
-            )
-          );
-          updateQueueRef.current.push(...updates.filter((u) => u.rowIndex === rowIndex));
+        } else {
+          console.log(`HomePage.jsx: All payments are fully paid for ${clientName}, no email notification needed`);
         }
+      } catch (error) {
+        console.error(`HomePage.jsx: Failed to batch update row ${rowIndex}:`, error);
+        setErrorMessage(`Failed to update ${rowData.Client_Name}: ${error.response?.data?.error || error.message}`);
+        setPaymentsData((prev) =>
+          prev.map((row, idx) =>
+            idx === rowIndex ? { ...paymentsData[rowIndex] } : row
+          )
+        );
+        updateQueueRef.current.push(...updates.filter((u) => u.rowIndex === rowIndex));
       }
-
-      setLocalInputValues(updatedLocalValues);
-      if (updateQueueRef.current.length > 0) {
-        console.log("HomePage.jsx: Scheduling retry for failed updates");
-        batchTimerRef.current = setTimeout(processBatchUpdates, 1500);
-      }
-    } catch (error) {
-      console.error("HomePage.jsx: Batch update error:", error);
-      setErrorMessage(`Batch update failed: ${error.message}`);
-      updateQueueRef.current = [...updates, ...updateQueueRef.current];
-      batchTimerRef.current = setTimeout(processBatchUpdates, 1500 * 2);
-    } finally {
-      setIsUpdating(false);
     }
-  }, [paymentsData, sessionToken, months, localInputValues]);
+
+    setLocalInputValues(updatedLocalValues);
+    // Display warning if any clients lacked email addresses
+    if (missingEmailClients.length > 0) {
+      setErrorMessage(
+        `Payments updated, but email notifications could not be sent to: ${missingEmailClients.join(", ")} (missing valid email addresses).`
+      );
+    }
+    if (updateQueueRef.current.length > 0) {
+      console.log("HomePage.jsx: Scheduling retry for failed updates");
+      batchTimerRef.current = setTimeout(processBatchUpdates, 1500);
+    }
+  } catch (error) {
+    console.error("HomePage.jsx: Batch update error:", error);
+    setErrorMessage(`Batch update failed: ${error.message}`);
+    updateQueueRef.current = [...updates, ...updateQueueRef.current];
+    batchTimerRef.current = setTimeout(processBatchUpdates, 1500 * 2);
+  } finally {
+    setIsUpdating(false);
+  }
+}, [paymentsData, sessionToken, months, localInputValues, hasValidEmail, setErrorMessage]);
 
   const hasValidEmail = useCallback((clientData) => {
     const email = clientData?.Email || clientData?.email;
