@@ -353,10 +353,7 @@ const processBatchUpdates = useCallback(async () => {
     if (!acc[rowIndex]) {
       const rowData = paymentsData[rowIndex];
       // Normalize email field lookup
-      const clientEmail = Object.keys(rowData || {}).reduce((email, key) => {
-        if (key.toLowerCase() === 'email') return rowData[key];
-        return email;
-      }, rowData?.Email || rowData?.email);
+      const clientEmail = rowData?.email_address || rowData?.Email || rowData?.email;
       acc[rowIndex] = {
         rowIndex,
         year,
