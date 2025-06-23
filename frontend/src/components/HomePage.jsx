@@ -28,7 +28,7 @@ const HomePage = ({
   hideContextMenu = () => {},
   deleteRow = () => {},
   setPage = () => {},
-  importCsv = () => {}, // Keep importCsv
+  importCsv = () => {},
   isReportsPage = false,
   isImporting = false,
   sessionToken = "",
@@ -36,12 +36,11 @@ const HomePage = ({
   setCurrentYear = () => {},
   handleYearChange = () => {},
   setErrorMessage = () => {},
-  apiCacheRef = { current: {} }, // Default to empty ref object
+  apiCacheRef = { current: {} },
   currentUser = null,
   onMount = () => {},
   fetchTypes = () => {},
 }) => {
-  // State and Refs
   const [availableYears, setAvailableYears] = useState(["2025"]);
   const [isLoadingYears, setIsLoadingYears] = useState(false);
   const [localInputValues, setLocalInputValues] = useState({});
@@ -74,10 +73,8 @@ const HomePage = ({
     "december",
   ];
 
-  // Remove useMemo and use MONTHS directly
   const months = MONTHS;
 
-  // Replace both functions with a single one
   const getPaymentStatus = useCallback((row, month) => {
     const amountToBePaid = parseFloat(row?.Amount_To_Be_Paid || 0);
     const paidInMonth = parseFloat(row?.[month] || 0);
@@ -114,7 +111,6 @@ const HomePage = ({
     [localInputValues, pendingUpdates]
   );
 
-  // Update filteredData to use getPaymentStatus
   const filteredData = useMemo(() => {
     return (paymentsData || []).filter((row) => {
       const matchesSearch =
@@ -142,7 +138,6 @@ const HomePage = ({
     });
   }, [paymentsData, searchQuery, monthFilter, statusFilter, getPaymentStatus]);
 
-  // Utility functions
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
   const retryWithBackoff = async (fn, retries = 3, delay = 500) => {
@@ -155,7 +150,7 @@ const HomePage = ({
             `HomePage.jsx: Rate limit hit, retrying in ${delay}ms...`
           );
           await sleep(delay);
-          delay *= 2; // Exponential backoff
+          delay *= 2;
         } else {
           throw error;
         }
@@ -237,7 +232,7 @@ const HomePage = ({
         } catch (error) {
           if (error.name === "AbortError") {
             console.log("HomePage.jsx: Year fetch aborted");
-            return; // Ignore abort errors
+            return;
           }
           console.error("HomePage.jsx: Error fetching user years:", error);
           setLocalErrorMessage(
@@ -260,7 +255,6 @@ const HomePage = ({
     ]
   );
 
-  // Debounced version of searchUserYears
   const debouncedSearchUserYears = useCallback(
     debounce((signal) => searchUserYears(signal), 300),
     [searchUserYears]
@@ -290,9 +284,8 @@ const HomePage = ({
 
       alert(response.data.message);
 
-      // ✅ Force reload with the new year set in localStorage
       localStorage.setItem("currentYear", newYear);
-      window.location.reload(); // ✅ this reloads the page and pulls new data
+      window.location.reload();
     } catch (error) {
       if (error.name === "AbortError") {
         console.log("HomePage.jsx: Add new year request cancelled");
@@ -311,341 +304,317 @@ const HomePage = ({
     }
   }, [currentYear, sessionToken]);
 
-// Fixed processBatchUpdates function with improved email handling
-const processBatchUpdates = useCallback(async () => {
-  if (!updateQueueRef.current.length) {
-    console.log("HomePage.jsx: No updates to process");
-    batchTimerRef.current = null;
-    return;
-  }
-
-  const updates = [...updateQueueRef.current];
-  updateQueueRef.current = [];
-  batchTimerRef.current = null;
-  console.log(`HomePage.jsx: Processing batch of ${updates.length} updates`, updates);
-  setIsUpdating(true);
-
-  const updatedLocalValues = { ...localInputValues };
-
-  // Group updates by rowIndex
-  const updatesByRow = updates.reduce((acc, update) => {
-    const { rowIndex, month, value, year } = update;
-    if (!acc[rowIndex]) {
-      acc[rowIndex] = {
-        rowIndex,
-        year,
-        updates: [],
-        clientName: paymentsData[rowIndex]?.Client_Name,
-        type: paymentsData[rowIndex]?.Type,
-        clientEmail: paymentsData[rowIndex]?.Email || paymentsData[rowIndex]?.email, // Check both Email and email fields
-      };
+  const processBatchUpdates = useCallback(async () => {
+    if (!updateQueueRef.current.length) {
+      console.log("HomePage.jsx: No updates to process");
+      batchTimerRef.current = null;
+      return;
     }
-    acc[rowIndex].updates.push({ month, value });
-    return acc;
-  }, {});
 
-  try {
-    for (const rowUpdate of Object.values(updatesByRow)) {
-      const { rowIndex, year, updates, clientName, type, clientEmail } = rowUpdate;
-      const rowData = paymentsData[rowIndex];
-      if (!rowData) {
-        console.warn(`HomePage.jsx: Invalid rowIndex ${rowIndex}`);
-        setErrorMessage(`Invalid row index ${rowIndex}. Please refresh and try again.`);
-        continue;
+    const updates = [...updateQueueRef.current];
+    updateQueueRef.current = [];
+    batchTimerRef.current = null;
+    console.log(`HomePage.jsx: Processing batch of ${updates.length} updates`, updates);
+    setIsUpdating(true);
+
+    const updatedLocalValues = { ...localInputValues };
+
+    const updatesByRow = updates.reduce((acc, update) => {
+      const { rowIndex, month, value, year } = update;
+      if (!acc[rowIndex]) {
+        acc[rowIndex] = {
+          rowIndex,
+          year,
+          updates: [],
+          clientName: paymentsData[rowIndex]?.Client_Name,
+          type: paymentsData[rowIndex]?.Type,
+          clientEmail: paymentsData[rowIndex]?.Email || paymentsData[rowIndex]?.email,
+        };
       }
+      acc[rowIndex].updates.push({ month, value });
+      return acc;
+    }, {});
 
-      // Calculate status for each updated month
-      const statuses = updates.map(({ month, value }) => {
-        const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
-        const paidInMonth = parseFloat(value) || 0;
-        let status;
-        if (paidInMonth === 0) status = "Unpaid";
-        else if (paidInMonth >= amountToBePaid) status = "Paid";
-        else status = "PartiallyPaid";
-        console.log("Status for", month, ":", { paidInMonth, amountToBePaid, status });
-        return { month, status, paidAmount: paidInMonth, expectedAmount: amountToBePaid };
-      });
+    try {
+      for (const rowUpdate of Object.values(updatesByRow)) {
+        const { rowIndex, year, updates, clientName, type, clientEmail } = rowUpdate;
+        const rowData = paymentsData[rowIndex];
+        if (!rowData) {
+          console.warn(`HomePage.jsx: Invalid rowIndex ${rowIndex}`);
+          setErrorMessage(`Invalid row index ${rowIndex}. Please refresh and try again.`);
+          continue;
+        }
 
-      // Optimistic update for all months in this row
-      setPaymentsData((prev) => {
-        const updatedPayments = [...prev];
-        const rowData = { ...updatedPayments[rowIndex] };
-        updates.forEach(({ month, value }) => {
-          rowData[month] = value || "";
+        const statuses = updates.map(({ month, value }) => {
+          const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
+          const paidInMonth = parseFloat(value) || 0;
+          let status;
+          if (paidInMonth === 0) status = "Unpaid";
+          else if (paidInMonth >= amountToBePaid) status = "Paid";
+          else status = "PartiallyPaid";
+          console.log("Status for", month, ":", { paidInMonth, amountToBePaid, status });
+          return { month, status, paidAmount: paidInMonth, expectedAmount: amountToBePaid };
         });
 
-        const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
-        const activeMonths = months.filter(
-          (m) => rowData[m] && parseFloat(rowData[m]) >= 0
-        ).length;
-        const expectedPayment = amountToBePaid * activeMonths;
-        const totalPayments = months.reduce(
-          (sum, m) => sum + (parseFloat(rowData[m]) || 0),
-          0
-        );
-        const currentYearDuePayment = Math.max(expectedPayment - totalPayments, 0);
-        rowData.Due_Payment = currentYearDuePayment.toFixed(2);
-        updatedPayments[rowIndex] = rowData;
-        return updatedPayments;
-      });
-
-      // Send batch update
-      try {
-        const response = await axios.post(
-          `${BASE_URL}/batch-save-payments`,
-          { clientName, type, updates },
-          {
-            headers: { Authorization: `Bearer ${sessionToken}` },
-            params: { year },
-            timeout: 10000,
-          }
-        );
-        const { updatedRow } = response.data;
-        updates.forEach(({ month }) => {
-          const key = `${rowIndex}-${month}`;
-          updatedLocalValues[key] = updatedRow[month] || "";
-          setPendingUpdates((prev) => {
-            const newPending = { ...prev };
-            delete newPending[key];
-            return newPending;
+        setPaymentsData((prev) => {
+          const updatedPayments = [...prev];
+          const rowData = { ...updatedPayments[rowIndex] };
+          updates.forEach(({ month, value }) => {
+            rowData[month] = value || "";
           });
-        });
-        setPaymentsData((prev) =>
-          prev.map((row, idx) =>
-            idx === rowIndex ? { ...row, ...updatedRow } : row
-          )
-        );
 
-        // Send email notifications for PartiallyPaid or Unpaid statuses
-        const notifyStatuses = statuses.filter(
-          ({ status }) => status === "PartiallyPaid" || status === "Unpaid"
-        );
-
-        console.log("Checking email notification conditions:", {
-          clientName: clientName,
-          clientEmail: clientEmail,
-          notifyStatuses: notifyStatuses,
-          hasEmailAddress: !!clientEmail,
-          emailField: rowData.Email,
-          emailFieldLower: rowData.email,
+          const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
+          const activeMonths = months.filter(
+            (m) => rowData[m] && parseFloat(rowData[m]) >= 0
+          ).length;
+          const expectedPayment = amountToBePaid * activeMonths;
+          const totalPayments = months.reduce(
+            (sum, m) => sum + (parseFloat(rowData[m]) || 0),
+            0
+          );
+          const currentYearDuePayment = Math.max(expectedPayment - totalPayments, 0);
+          rowData.Due_Payment = currentYearDuePayment.toFixed(2);
+          updatedPayments[rowIndex] = rowData;
+          return updatedPayments;
         });
 
-        if (notifyStatuses.length > 0) {
-          if (clientEmail && clientEmail.trim() !== "") {
-            try {
-              // Create detailed email content
-              const emailContent = `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                  <h2 style="color: #333; border-bottom: 2px solid #007bff; padding-bottom: 10px;">
-                    Payment Status Update
-                  </h2>
-                  <p>Dear <strong>${clientName}</strong>,</p>
-                  <p>Your payment status for <strong>${type}</strong> has been updated for <strong>${year}</strong>:</p>
-                  
-                  <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-                    <thead>
-                      <tr style="background-color: #f8f9fa;">
-                        <th style="border: 1px solid #dee2e6; padding: 12px; text-align: left;">Month</th>
-                        <th style="border: 1px solid #dee2e6; padding: 12px; text-align: left;">Status</th>
-                        <th style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">Paid Amount</th>
-                        <th style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">Expected Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      ${notifyStatuses
-                        .map(
-                          ({ month, status, paidAmount, expectedAmount }) => `
-                        <tr>
-                          <td style="border: 1px solid #dee2e6; padding: 12px;">${
-                            month.charAt(0).toUpperCase() + month.slice(1)
-                          }</td>
-                          <td style="border: 1px solid #dee2e6; padding: 12px;">
-                            <span style="
-                              padding: 4px 8px; 
-                              border-radius: 4px; 
-                              color: white;
-                              background-color: ${status === 'Unpaid' ? '#dc3545' : '#ffc107'};
-                            ">${status === 'PartiallyPaid' ? 'Partially Paid' : status}</span>
-                          </td>
-                          <td style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">₹${paidAmount.toFixed(2)}</td>
-                          <td style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">₹${expectedAmount.toFixed(2)}</td>
+        try {
+          const response = await axios.post(
+            `${BASE_URL}/batch-save-payments`,
+            { clientName, type, updates },
+            {
+              headers: { Authorization: `Bearer ${sessionToken}` },
+              params: { year },
+              timeout: 10000,
+            }
+          );
+          const { updatedRow } = response.data;
+          updates.forEach(({ month }) => {
+            const key = `${rowIndex}-${month}`;
+            updatedLocalValues[key] = updatedRow[month] || "";
+            setPendingUpdates((prev) => {
+              const newPending = { ...prev };
+              delete newPending[key];
+              return newPending;
+            });
+          });
+          setPaymentsData((prev) =>
+            prev.map((row, idx) =>
+              idx === rowIndex ? { ...row, ...updatedRow } : row
+            )
+          );
+
+          const notifyStatuses = statuses.filter(
+            ({ status }) => status === "PartiallyPaid" || status === "Unpaid"
+          );
+
+          console.log("Checking email notification conditions:", {
+            clientName: clientName,
+            clientEmail: clientEmail,
+            notifyStatuses: notifyStatuses,
+            hasEmailAddress: !!clientEmail,
+            emailField: rowData.Email,
+            emailFieldLower: rowData.email,
+          });
+
+          if (notifyStatuses.length > 0) {
+            if (clientEmail && clientEmail.trim() !== "") {
+              try {
+                const emailContent = `
+                  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    <h2 style="color: #333; border-bottom: 2px solid #007bff; padding-bottom: 10px;">
+                      Payment Status Update
+                    </h2>
+                    <p>Dear <strong>${clientName}</strong>,</p>
+                    <p>Your payment status for <strong>${type}</strong> has been updated for <strong>${year}</strong>:</p>
+                    
+                    <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+                      <thead>
+                        <tr style="background-color: #f8f9fa;">
+                          <th style="border: 1px solid #dee2e6; padding: 12px; text-align: left;">Month</th>
+                          <th style="border: 1px solid #dee2e6; padding: 12px; text-align: left;">Status</th>
+                          <th style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">Paid Amount</th>
+                          <th style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">Expected Amount</th>
                         </tr>
-                      `
-                        )
-                        .join("")}
-                    </tbody>
-                  </table>
-                  
-                  <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                    <p style="margin: 0;"><strong>Note:</strong> Please review your account or contact us for any clarifications regarding your payment status.</p>
+                      </thead>
+                      <tbody>
+                        ${notifyStatuses
+                          .map(
+                            ({ month, status, paidAmount, expectedAmount }) => `
+                          <tr>
+                            <td style="border: 1px solid #dee2e6; padding: 12px;">${
+                              month.charAt(0).toUpperCase() + month.slice(1)
+                            }</td>
+                            <td style="border: 1px solid #dee2e6; padding: 12px;">
+                              <span style="
+                                padding: 4px 8px; 
+                                border-radius: 4px; 
+                                color: white;
+                                background-color: ${status === 'Unpaid' ? '#dc3545' : '#ffc107'};
+                              ">${status === 'PartiallyPaid' ? 'Partially Paid' : status}</span>
+                            </td>
+                            <td style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">₹${paidAmount.toFixed(2)}</td>
+                            <td style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">₹${expectedAmount.toFixed(2)}</td>
+                          </tr>
+                        `
+                          )
+                          .join("")}
+                      </tbody>
+                    </table>
+                    
+                    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                      <p style="margin: 0;"><strong>Note:</strong> Please review your account or contact us for any clarifications regarding your payment status.</p>
+                    </div>
+                    
+                    <p>Best regards,<br>
+                    <strong>Payment Tracker Team</strong></p>
+                    
+                    <hr style="margin: 30px 0; border: none; border-top: 1px solid #dee2e6;">
+                    <p style="font-size: 12px; color: #6c757d;">
+                      This is an automated notification. Please do not reply to this email.
+                    </p>
                   </div>
-                  
-                  <p>Best regards,<br>
-                  <strong>Payment Tracker Team</strong></p>
-                  
-                  <hr style="margin: 30px 0; border: none; border-top: 1px solid #dee2e6;">
-                  <p style="font-size: 12px; color: #6c757d;">
-                    This is an automated notification. Please do not reply to this email.
-                  </p>
-                </div>
-              `;
+                `;
 
-              await axios.post(
-                `${BASE_URL}/send-email`,
-                {
-                  to: clientEmail.trim(),
-                  subject: `Payment Status Update - ${clientName} (${type}) - ${year}`,
-                  html: emailContent,
-                },
-                {
-                  headers: { Authorization: `Bearer ${sessionToken}` },
-                  timeout: 15000, // Increased timeout for email sending
-                }
-              );
-
-              console.log(`HomePage.jsx: Email sent successfully to ${clientEmail} for ${clientName}`);
-              
-              // Show success message to user (optional)
-              // You can uncomment this if you want to show success notifications
-              // setLocalErrorMessage(`Email notification sent to ${clientName} (${clientEmail})`);
-              // setTimeout(() => setLocalErrorMessage(""), 3000);
-              
-            } catch (emailError) {
-              console.error(`HomePage.jsx: Failed to send email to ${clientEmail}:`, emailError);
-              
-              // Only show error if it's not a network/timeout issue
-              if (!emailError.code || !['ECONNABORTED', 'NETWORK_ERROR'].includes(emailError.code)) {
-                setErrorMessage(
-                  `Payment updated successfully, but failed to send email to ${clientName}: ${
-                    emailError.response?.data?.error || emailError.message
-                  }`
+                await axios.post(
+                  `${BASE_URL}/send-email`,
+                  {
+                    to: clientEmail.trim(),
+                    subject: `Payment Status Update - ${clientName} (${type}) - ${year}`,
+                    html: emailContent,
+                  },
+                  {
+                    headers: { Authorization: `Bearer ${sessionToken}` },
+                    timeout: 15000,
+                  }
                 );
-              } else {
-                console.warn(`HomePage.jsx: Email sending timed out for ${clientEmail}, but payment was saved`);
+
+                console.log(`HomePage.jsx: Email sent successfully to ${clientEmail} for ${clientName}`);
+              } catch (emailError) {
+                console.error(`HomePage.jsx: Failed to send email to ${clientEmail}:`, emailError);
+                if (!emailError.code || !['ECONNABORTED', 'NETWORK_ERROR'].includes(emailError.code)) {
+                  setErrorMessage(
+                    `Payment updated successfully, but failed to send email to ${clientName}: ${
+                      emailError.response?.data?.error || emailError.message
+                    }`
+                  );
+                } else {
+                  console.warn(`HomePage.jsx: Email sending timed out for ${clientEmail}, but payment was saved`);
+                }
               }
+            } else {
+              console.warn(`HomePage.jsx: No valid email address for ${clientName}. Email field: '${clientEmail}'`);
             }
           } else {
-            console.warn(`HomePage.jsx: No valid email address for ${clientName}. Email field: '${clientEmail}'`);
-            
-            // Optional: Show a warning message to the user about missing email
-            // You can uncomment this if you want to notify users about missing emails
-            // setLocalErrorMessage(`Payment updated for ${clientName}, but no email address found for notification.`);
-            // setTimeout(() => setLocalErrorMessage(""), 5000);
+            console.log(`HomePage.jsx: All payments are fully paid for ${clientName}, no email notification needed`);
           }
-        } else {
-          console.log(`HomePage.jsx: All payments are fully paid for ${clientName}, no email notification needed`);
+        } catch (error) {
+          console.error(`HomePage.jsx: Failed to batch update row ${rowIndex}:`, error);
+          setErrorMessage(`Failed to update ${rowData.Client_Name}: ${error.response?.data?.error || error.message}`);
+          setPaymentsData((prev) =>
+            prev.map((row, idx) =>
+              idx === rowIndex ? { ...paymentsData[rowIndex] } : row
+            )
+          );
+          updateQueueRef.current.push(...updates.filter((u) => u.rowIndex === rowIndex));
         }
-        
-      } catch (error) {
-        console.error(`HomePage.jsx: Failed to batch update row ${rowIndex}:`, error);
-        setErrorMessage(`Failed to update ${rowData.Client_Name}: ${error.response?.data?.error || error.message}`);
-        // Revert optimistic update and re-queue failed updates
-        setPaymentsData((prev) =>
-          prev.map((row, idx) =>
-            idx === rowIndex ? { ...paymentsData[rowIndex] } : row
-          )
-        );
-        updateQueueRef.current.push(...updates.filter((u) => u.rowIndex === rowIndex));
       }
-    }
 
-    setLocalInputValues(updatedLocalValues);
-    if (updateQueueRef.current.length > 0) {
-      console.log("HomePage.jsx: Scheduling retry for failed updates");
-      batchTimerRef.current = setTimeout(processBatchUpdates, 1500);
-    }
-  } catch (error) {
-    console.error("HomePage.jsx: Batch update error:", error);
-    setErrorMessage(`Batch update failed: ${error.message}`);
-    updateQueueRef.current = [...updates, ...updateQueueRef.current];
-    batchTimerRef.current = setTimeout(processBatchUpdates, 1500 * 2);
-  } finally {
-    setIsUpdating(false);
-  }
-}, [paymentsData, sessionToken, months, localInputValues]);
-
-// Additional helper function to check if client has email
-const hasValidEmail = useCallback((clientData) => {
-  const email = clientData?.Email || clientData?.email;
-  return email && email.trim() !== "" && email.includes("@");
-}, []);
-
-// Enhanced error message display component
-const ErrorMessageDisplay = ({ message, onDismiss, type = "error" }) => {
-  if (!message) return null;
-  
-  const bgColor = type === "warning" ? "bg-yellow-50 border-yellow-200 text-yellow-800" : "bg-red-50 border-red-200 text-red-800";
-  const icon = type === "warning" ? "fas fa-exclamation-triangle" : "fas fa-exclamation-circle";
-  
-  return (
-    <div className={`mb-4 p-4 rounded-lg border ${bgColor}`}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center">
-          <i className={`${icon} mr-2`}></i>
-          <span className="text-sm">{message}</span>
-        </div>
-        <button
-          onClick={onDismiss}
-          className="ml-2 hover:opacity-75 transition-opacity"
-        >
-          <i className="fas fa-times"></i>
-        </button>
-      </div>
-    </div>
-  );
-};
-
-const debouncedUpdate = useCallback(
-  (rowIndex, month, value, year) => {
-    if (!paymentsData.length) {
-      console.warn("HomePage.jsx: Cannot queue update, paymentsData is empty");
-      setErrorMessage("Please wait for data to load before making updates.");
-      return;
-    }
-    if (!paymentsData[rowIndex]) {
-      console.warn("HomePage.jsx: Invalid rowIndex:", rowIndex);
-      setErrorMessage("Invalid row index.");
-      return;
-    }
-    const key = `${rowIndex}-${month}`;
-    setLocalInputValues((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
-    if (debounceTimersRef.current[key]) {
-      clearTimeout(debounceTimersRef.current[key]);
-    }
-    setPendingUpdates((prev) => ({
-      ...prev,
-      [key]: true,
-    }));
-    debounceTimersRef.current[key] = setTimeout(() => {
-      updateQueueRef.current = updateQueueRef.current.filter(
-        (update) => !(update.rowIndex === rowIndex && update.month === month)
-      );
-      updateQueueRef.current.push({
-        rowIndex,
-        month,
-        value,
-        year,
-        timestamp: Date.now(),
-      });
-      console.log("HomePage.jsx: Queued update:", { rowIndex, month, value, year });
-      if (!batchTimerRef.current) {
+      setLocalInputValues(updatedLocalValues);
+      if (updateQueueRef.current.length > 0) {
+        console.log("HomePage.jsx: Scheduling retry for failed updates");
         batchTimerRef.current = setTimeout(processBatchUpdates, 1500);
       }
-      delete debounceTimersRef.current[key];
-    }, 1500);
-  },
-  [paymentsData]
-);
+    } catch (error) {
+      console.error("HomePage.jsx: Batch update error:", error);
+      setErrorMessage(`Batch update failed: ${error.message}`);
+      updateQueueRef.current = [...updates, ...updateQueueRef.current];
+      batchTimerRef.current = setTimeout(processBatchUpdates, 1500 * 2);
+    } finally {
+      setIsUpdating(false);
+    }
+  }, [paymentsData, sessionToken, months, localInputValues]);
+
+  const hasValidEmail = useCallback((clientData) => {
+    const email = clientData?.Email || clientData?.email;
+    return email && email.trim() !== "" && email.includes("@");
+  }, []);
+
+  const ErrorMessageDisplay = ({ message, onDismiss, type = "error" }) => {
+    if (!message) return null;
+    
+    const bgColor = type === "warning" ? "bg-yellow-50 border-yellow-200 text-yellow-800" : "bg-red-50 border-red-200 text-red-800";
+    const icon = type === "warning" ? "fas fa-exclamation-triangle" : "fas fa-exclamation-circle";
+    
+    return (
+      <div className={`mb-4 p-4 rounded-lg border ${bgColor}`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <i className={`${icon} mr-2`}></i>
+            <span className="text-sm">{message}</span>
+          </div>
+          <button
+            onClick={onDismiss}
+            className="ml-2 hover:opacity-75 transition-opacity"
+          >
+            <i className="fas fa-times"></i>
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const debouncedUpdate = useCallback(
+    (rowIndex, month, value, year) => {
+      if (!paymentsData.length) {
+        console.warn("HomePage.jsx: Cannot queue update, paymentsData is empty");
+        setErrorMessage("Please wait for data to load before making updates.");
+        return;
+      }
+      if (!paymentsData[rowIndex]) {
+        console.warn("HomePage.jsx: Invalid rowIndex:", rowIndex);
+        setErrorMessage("Invalid row index.");
+        return;
+      }
+      const key = `${rowIndex}-${month}`;
+      setLocalInputValues((prev) => ({
+        ...prev,
+        [key]: value,
+      }));
+      if (debounceTimersRef.current[key]) {
+        clearTimeout(debounceTimersRef.current[key]);
+      }
+      setPendingUpdates((prev) => ({
+        ...prev,
+        [key]: true,
+      }));
+      debounceTimersRef.current[key] = setTimeout(() => {
+        updateQueueRef.current = updateQueueRef.current.filter(
+          (update) => !(update.rowIndex === rowIndex && update.month === month)
+        );
+        updateQueueRef.current.push({
+          rowIndex,
+          month,
+          value,
+          year,
+          timestamp: Date.now(),
+        });
+        console.log("HomePage.jsx: Queued update:", { rowIndex, month, value, year });
+        if (!batchTimerRef.current) {
+          batchTimerRef.current = setTimeout(processBatchUpdates, 1500);
+        }
+        delete debounceTimersRef.current[key];
+      }, 1500);
+    },
+    [paymentsData]
+  );
 
   const handleYearChangeDebounced = useCallback(
     (year) => {
       console.log("HomePage.jsx: Year change requested to:", year);
       localStorage.setItem("currentYear", year);
       setCurrentYear(year);
-      window.location.reload(); // <-- force page reload after setting year
+      window.location.reload();
     },
     [setCurrentYear]
   );
@@ -664,7 +633,6 @@ const debouncedUpdate = useCallback(
         [key]: value,
       }));
 
-      // Mandatory intermediate month updates
       const rowData = paymentsData[rowIndex];
       let lastPaidMonthIndex = -1;
       months.forEach((m, index) => {
@@ -694,7 +662,6 @@ const debouncedUpdate = useCallback(
     [debouncedUpdate, currentYear, paymentsData, localInputValues]
   );
 
-  // Initialize component
   useEffect(() => {
     onMount();
   }, [onMount]);
@@ -711,7 +678,6 @@ const debouncedUpdate = useCallback(
     paymentsData.forEach((row, rowIndex) => {
       months.forEach((month) => {
         const key = `${rowIndex}-${month}`;
-        // Only set the value if it hasn't been modified by the user
         if (localInputValues[key] === undefined) {
           initialValues[key] = row?.[month] || "";
         } else {
@@ -753,7 +719,6 @@ const debouncedUpdate = useCallback(
 
   useEffect(() => {
     return () => {
-      // Clear all timers
       Object.values(debounceTimersRef.current).forEach((timer) => {
         if (timer) clearTimeout(timer);
       });
@@ -764,56 +729,52 @@ const debouncedUpdate = useCallback(
         batchTimerRef.current = null;
       }
 
-      // Process remaining updates only if component is still mounted
       if (updateQueueRef.current.length > 0 && mountedRef.current) {
-        // Force immediate processing without setTimeout
         const updates = [...updateQueueRef.current];
         updateQueueRef.current = [];
-        // Process synchronously if possible
       }
     };
   }, []);
 
-const handleAddType = async () => {
-  console.log(`HomePage.jsx: type: ${newType}, user: ${currentUser}`);
-  if (!newType.trim()) {
-    setLocalErrorMessage("Type name cannot be empty.");
-    return;
-  }
-  if (newType.trim().length > 50) {
-    setLocalErrorMessage("Type name too long.");
-    return;
-  }
-  const capitalizedType = newType.trim().toUpperCase();
-  try {
-    const response = await axios.post(
-      `${BASE_URL}/add-type`,
-      { type: capitalizedType },
-      {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-        timeout: 2000,
-      }
-    );
-    console.log(`HomePage.jsx: Added ${capitalizedType} for ${currentUser}`, response.data);
-    setIsTypeModalOpen(false);
-    setNewType("");
-    setSearchQuery("");
-    setLocalErrorMessage("");
-    const cacheKey = `types_${currentUser}_${sessionToken}`;
-    delete apiCacheRef.current[cacheKey];
-    await fetchTypes();
-    alert(`Type ${capitalizedType} added successfully.`);
-  } catch (error) {
-    console.error(`HomePage.jsx: Error adding type for ${currentUser}:`, error);
-    const errorMsg = error.response?.data?.error || error.message;
-    setLocalErrorMessage(errorMsg === "Type already exists for this user" ? "This type already exists." : `Failed to add type: ${errorMsg}`);
-    if (error.response?.status === 401 || errorMsg.includes("Invalid token")) {
-      setPage("signIn");
+  const handleAddType = async () => {
+    console.log(`HomePage.jsx: type: ${newType}, user: ${currentUser}`);
+    if (!newType.trim()) {
+      setLocalErrorMessage("Type name cannot be empty.");
+      return;
     }
-  }
-};
+    if (newType.trim().length > 50) {
+      setLocalErrorMessage("Type name too long.");
+      return;
+    }
+    const capitalizedType = newType.trim().toUpperCase();
+    try {
+      const response = await axios.post(
+        `${BASE_URL}/add-type`,
+        { type: capitalizedType },
+        {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+          timeout: 2000,
+        }
+      );
+      console.log(`HomePage.jsx: Added ${capitalizedType} for ${currentUser}`, response.data);
+      setIsTypeModalOpen(false);
+      setNewType("");
+      setSearchQuery("");
+      setLocalErrorMessage("");
+      const cacheKey = `types_${currentUser}_${sessionToken}`;
+      delete apiCacheRef.current[cacheKey];
+      await fetchTypes();
+      alert(`Type ${capitalizedType} added successfully.`);
+    } catch (error) {
+      console.error(`HomePage.jsx: Error adding type for ${currentUser}:`, error);
+      const errorMsg = error.response?.data?.error || error.message;
+      setLocalErrorMessage(errorMsg === "Type already exists for this user" ? "This type already exists." : `Failed to add type: ${errorMsg}`);
+      if (error.response?.status === 401 || errorMsg.includes("Invalid token")) {
+        setPage("signIn");
+      }
+    }
+  };
 
-  // Updated useEffect for fetching years
   useEffect(() => {
     const controller = new AbortController();
     if (sessionToken) {
@@ -822,7 +783,7 @@ const handleAddType = async () => {
     }
     return () => {
       controller.abort();
-      debouncedSearchUserYears.cancel(); // Cancel debounced calls on cleanup
+      debouncedSearchUserYears.cancel();
     };
   }, [sessionToken, debouncedSearchUserYears]);
 
