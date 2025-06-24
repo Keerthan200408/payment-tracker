@@ -361,7 +361,6 @@ const processBatchUpdates = useCallback(async () => {
         Phone_Number: rowData?.Phone_Number,
         allFields: rowData ? Object.keys(rowData) : 'rowData is null'
       });
-      // Use Email and Phone_Number from paymentsData (fetched from /get-payments-by-year)
       const clientEmail = rowData?.Email || "";
       const clientPhone = rowData?.Phone_Number || "";
       acc[rowIndex] = {
@@ -372,6 +371,7 @@ const processBatchUpdates = useCallback(async () => {
         type: rowData?.Type,
         clientEmail,
         clientPhone,
+        duePayment: rowData?.Due_Payment || "0.00" // Include Due_Payment
       };
     }
     acc[rowIndex].updates.push({ month, value });
@@ -380,7 +380,7 @@ const processBatchUpdates = useCallback(async () => {
 
   try {
     for (const rowUpdate of Object.values(updatesByRow)) {
-      const { rowIndex, year, updates, clientName, type, clientEmail, clientPhone } = rowUpdate;
+      const { rowIndex, year, updates, clientName, type, clientEmail, clientPhone, duePayment } = rowUpdate;
       const rowData = paymentsData[rowIndex];
       if (!rowData) {
         console.warn(`HomePage.jsx: Invalid rowIndex ${rowIndex}`);
@@ -468,14 +468,17 @@ const processBatchUpdates = useCallback(async () => {
           // Try WhatsApp notification first if phone number exists
           if (hasValidPhone) {
             try {
+              const duePaymentText = parseFloat(duePayment) > 0
+                ? `\n\nTotal Due Payment: ₹${parseFloat(duePayment).toFixed(2)}`
+                : "";
               const messageContent = `Dear ${clientName},\n\nYour payment status for ${type} (${year}) has been updated:\n\n${notifyStatuses
                 .map(
                   ({ month, status, paidAmount, expectedAmount }) =>
                     `- ${month.charAt(0).toUpperCase() + month.slice(1)}: ${status} (Paid: ₹${paidAmount.toFixed(2)}, Expected: ₹${expectedAmount.toFixed(2)})`
                 )
-                .join("\n")}\n\nPlease review your account or contact us for clarifications.\nBest regards,\nPayment Tracker Team`;
+                .join("\n")}${duePaymentText}\n\nPlease review your account or contact us for clarifications.\nBest regards,\nPayment Tracker Team`;
 
-              await axios.post(
+              const whatsappResponse = await axios.post(
                 `${BASE_URL}/send-whatsapp`,
                 {
                   to: clientPhone.trim(),
@@ -487,10 +490,10 @@ const processBatchUpdates = useCallback(async () => {
                 }
               );
 
-              console.log(`HomePage.jsx: WhatsApp message sent successfully to ${clientPhone} for ${clientName}`);
+              console.log(`HomePage.jsx: WhatsApp message sent successfully to ${clientPhone} for ${clientName}`, whatsappResponse.data);
               notificationSent = true;
             } catch (whatsappError) {
-              console.error(`HomePage.jsx: Failed to send WhatsApp message to ${clientPhone}:`, whatsappError);
+              console.error(`HomePage.jsx: Failed to send WhatsApp message to ${clientPhone}:`, whatsappError, { response: whatsappError.response?.data });
               setErrorMessage(
                 `Payment updated successfully, but failed to send WhatsApp notification to ${clientName}: ${
                   whatsappError.response?.data?.error || whatsappError.message
@@ -502,6 +505,9 @@ const processBatchUpdates = useCallback(async () => {
           // Fall back to email if WhatsApp fails or no valid phone number
           if (!notificationSent && hasValidEmailAddress) {
             try {
+              const duePaymentText = parseFloat(duePayment) > 0
+                ? `<p><strong>Total Due Payment:</strong> ₹${parseFloat(duePayment).toFixed(2)}</p>`
+                : "";
               const emailContent = `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                   <h2 style="color: #333; border-bottom: 2px solid #007bff; padding-bottom: 10px;">
@@ -542,6 +548,7 @@ const processBatchUpdates = useCallback(async () => {
                         .join("")}
                     </tbody>
                   </table>
+                  ${duePaymentText}
                   <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
                     <p style="margin: 0;"><strong>Note:</strong> Please review your account or contact us for any clarifications regarding your payment status.</p>
                   </div>
