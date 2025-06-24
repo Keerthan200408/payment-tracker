@@ -8,7 +8,6 @@ const { GoogleSpreadsheet } = require("google-spreadsheet");
 const jwt = require("jsonwebtoken");
 const sanitizeHtml = require("sanitize-html");
 const { OAuth2Client } = require("google-auth-library");
-const { Client } = require("twilio");
 const nodemailer = require("nodemailer");
 const axios = require('axios');
 
@@ -139,7 +138,7 @@ const auth = new google.auth.JWT(
   ["https://www.googleapis.com/auth/spreadsheets"]
 );
 
-const spreadsheetId = process.env.GOOGLE_SHEET_IDSHEET_ID;
+const spreadsheetId = process.env.GOOGLE_SHEET_ID;
 
 // Helper to get year-specific sheet name
 const getPaymentSheetName = (year) => `Payments_${year}`;
@@ -1540,6 +1539,11 @@ app.post("/api/batch-save-payments", authenticateToken, paymentLimiter, async (r
     res.status(500).json({ error: `Failed to save batch payments: ${error.message}` });
   }
 });
+// Add case-insensitive routing
+app.post("/api/BATCH-SAVE-PAYMENTS", authenticateToken, paymentLimiter, async (req, res) => {
+  req.url = '/api/batch-save-payments'; // Redirect to lowercase
+  app._router.handle(req, res);
+});
 
 // Get User Years
 app.get("/api/get-user-years", authenticateToken, async (req, res) => {
@@ -1965,7 +1969,16 @@ app.post("/api/send-email", authenticateToken, async (req, res) => {
   }
 });
 
-app.post("/api/send-whatsapp", authenticateToken, async (req, res) => {
+// Before /api/send-whatsapp
+const whatsappLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Allow 100 WhatsApp messages per window
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Replace the existing /api/send-whatsapp endpoint with:
+app.post("/api/send-whatsapp", authenticateToken, whatsappLimiter, async (req, res) => {
   const { to, message } = req.body;
   if (!to || !message) {
     console.error("Missing required fields:", { to, message, user: req.user.username });
@@ -1979,26 +1992,39 @@ app.post("/api/send-whatsapp", authenticateToken, async (req, res) => {
     // Format phone number to E.164 without spaces or dashes
     let formattedPhone = to.trim().replace(/[\s-]/g, "");
     if (!formattedPhone.startsWith("+")) {
-      formattedPhone = `+91${formattedPhone.replace(/\D/g, "")}`; // Adjust country code as needed
+      formattedPhone = `+91${formattedPhone.replace(/\D/g, "")}`; // Default to +91
     }
-
     // UltraMsg API payload
     const payload = {
       token: process.env.ULTRAMSG_TOKEN,
       to: formattedPhone,
       body: message,
     };
-
-    const response = await axios.post(
-      `https://api.ultramsg.com/${process.env.ULTRAMSG_INSTANCE_ID}/messages/chat`,
-      new URLSearchParams(payload).toString(),
-      {
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
+    // Retry logic
+    const maxRetries = 3;
+    let attempt = 0;
+    let response;
+    while (attempt < maxRetries) {
+      try {
+        response = await axios.post(
+          `https://api.ultramsg.com/${process.env.ULTRAMSG_INSTANCE_ID}/messages/chat`,
+          new URLSearchParams(payload).toString(),
+          {
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+          }
+        );
+        break;
+      } catch (error) {
+        attempt++;
+        if (attempt === maxRetries || !error.response || error.response.status !== 429) {
+          throw error;
+        }
+        console.log(`UltraMsg retry ${attempt}/${maxRetries} for ${formattedPhone}`);
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
       }
-    );
-
+    }
     if (response.data.status === "success") {
       console.log(`WhatsApp message sent successfully to ${formattedPhone}:`, {
         messageId: response.data.messageId,
