@@ -334,7 +334,6 @@ const hasValidEmail = useCallback((clientData) => {
   };
 
   
-// In HomePage.jsx, replace the existing processBatchUpdates function with this updated version
 const processBatchUpdates = useCallback(async () => {
   if (!updateQueueRef.current.length) {
     console.log("HomePage.jsx: No updates to process");
@@ -457,13 +456,14 @@ const processBatchUpdates = useCallback(async () => {
           clientEmail,
           clientPhone,
           notifyStatuses,
-          hasEmailAddress: hasValidEmail({ Email: clientEmail, email: clientEmail }),
-          hasPhoneNumber: clientPhone && /^\+?[\d\s-]{10,15}$/.test(clientPhone),
+          hasValidPhone: clientPhone && /^\+?[\d\s-]{10,15}$/.test(clientPhone),
+          hasValidEmailAddress: hasValidEmail({ Email: clientEmail, email: clientEmail }),
         });
 
+        let notificationSent = false;
         if (notifyStatuses.length > 0) {
           const hasValidPhone = clientPhone && /^\+?[\d\s-]{10,15}$/.test(clientPhone);
-          let notificationSent = false;
+          const hasValidEmailAddress = hasValidEmail({ Email: clientEmail, email: clientEmail });
 
           // Try WhatsApp notification first if phone number exists
           if (hasValidPhone) {
@@ -500,7 +500,7 @@ const processBatchUpdates = useCallback(async () => {
           }
 
           // Fall back to email if WhatsApp fails or no valid phone number
-          if (!notificationSent && clientEmail && hasValidEmail({ Email: clientEmail, email: clientEmail })) {
+          if (!notificationSent && hasValidEmailAddress) {
             try {
               const emailContent = `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -509,7 +509,6 @@ const processBatchUpdates = useCallback(async () => {
                   </h2>
                   <p>Dear <strong>${clientName}</strong>,</p>
                   <p>Your payment status for <strong>${type}</strong> has been updated for <strong>${year}</strong>:</p>
-                  
                   <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
                     <thead>
                       <tr style="background-color: #f8f9fa;">
@@ -543,14 +542,11 @@ const processBatchUpdates = useCallback(async () => {
                         .join("")}
                     </tbody>
                   </table>
-                  
                   <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
                     <p style="margin: 0;"><strong>Note:</strong> Please review your account or contact us for any clarifications regarding your payment status.</p>
                   </div>
-                  
                   <p>Best regards,<br>
                   <strong>Payment Tracker Team</strong></p>
-                  
                   <hr style="margin: 30px 0; border: none; border-top: 1px solid #dee2e6;">
                   <p style="font-size: 12px; color: #6c757d;">
                     This is an automated notification. Please do not reply to this email.
@@ -584,7 +580,7 @@ const processBatchUpdates = useCallback(async () => {
           }
 
           // If no notification was sent, add to missing contact list
-          if (!notificationSent) {
+          if (!notificationSent && !hasValidPhone && !hasValidEmailAddress) {
             missingContactClients.push(clientName);
             console.log(`HomePage.jsx: No valid contact (phone/email) found for ${clientName}, skipping notification`);
           }
@@ -607,8 +603,12 @@ const processBatchUpdates = useCallback(async () => {
     // Display warning if any clients lacked contact details
     if (missingContactClients.length > 0) {
       setErrorMessage(
-        `Payments updated, but notifications could not be sent to: ${missingContactClients.join(", ")} (missing valid phone number or email address).`
+        `Payments updated, but notifications could not be sent to: ${missingContactClients.join(
+          ", "
+        )} (missing valid phone number or email address).`
       );
+    } else if (!updateQueueRef.current.length) {
+      setErrorMessage(""); // Clear any previous error if all notifications were sent
     }
     if (updateQueueRef.current.length > 0) {
       console.log("HomePage.jsx: Scheduling retry for failed updates");

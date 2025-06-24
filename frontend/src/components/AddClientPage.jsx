@@ -112,7 +112,7 @@ const AddClientPage = ({
       });
     }
     setSuccess(`${editClient ? 'Client updated' : 'Client added'} successfully! Redirecting to clients page...`);
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
     await Promise.all([
       fetchClients(sessionToken),
       fetchPayments(sessionToken, new Date().getFullYear())
