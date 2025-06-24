@@ -857,6 +857,15 @@ const processBatchUpdates = useCallback(async () => {
     return () => document.removeEventListener("click", handleClickOutside);
   }, [hideContextMenu]);
 
+  useEffect(() => {
+  if (errorMessage) {
+    const timer = setTimeout(() => {
+      setLocalErrorMessage("");
+    }, 5000);
+    return () => clearTimeout(timer);
+  }
+}, [errorMessage]);
+
   const renderDashboard = () => (
     <>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
@@ -1298,17 +1307,12 @@ const processBatchUpdates = useCallback(async () => {
         </div>
       )}
       {errorMessage && (
-        <div className="mb-4 p-4 bg-red-50 text-red-800 rounded-lg text-center border border-red-200">
-          <i className="fas fa-exclamation-circle mr-2"></i>
-          {errorMessage}
-          <button
-            onClick={() => setLocalErrorMessage("")}
-            className="ml-2 text-red-600 hover:text-red-800"
-          >
-            <i className="fas fa-times"></i>
-          </button>
-        </div>
-      )}
+  <ErrorMessageDisplay
+    message={errorMessage}
+    onDismiss={() => setLocalErrorMessage("")}
+    type="error"
+  />
+)}
       
       {isReportsPage ? renderReports() : renderDashboard()}
       {isTypeModalOpen && (
