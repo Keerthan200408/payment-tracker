@@ -4,7 +4,6 @@ const cookieParser = require("cookie-parser");
 const rateLimit = require("express-rate-limit");
 const { google } = require("googleapis");
 const bcrypt = require("bcryptjs");
-const { GoogleSpreadsheet } = require("google-spreadsheet");
 const jwt = require("jsonwebtoken");
 const sanitizeHtml = require("sanitize-html");
 const { OAuth2Client } = require("google-auth-library");
