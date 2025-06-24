@@ -87,14 +87,7 @@ app.use(cookieParser());
 // Parse JSON
 app.use(express.json());
 
-const missingEnvVars = requiredEnvVars.filter((varName) => !process.env[varName]);
-if (missingEnvVars.length > 0) {
-  console.error("Missing environment variables:", missingEnvVars);
-  throw new Error("Required environment variables are missing");
-}
 
-// Google Sheets setup
-const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID);
 
 // Nodemailer setup
 const transporter = nodemailer.createTransport({
