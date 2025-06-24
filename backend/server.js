@@ -4,17 +4,21 @@ const cookieParser = require("cookie-parser");
 const rateLimit = require("express-rate-limit");
 const { google } = require("googleapis");
 const bcrypt = require("bcryptjs");
+const { GoogleSpreadsheet } = require("google-spreadsheet");
 const jwt = require("jsonwebtoken");
 const sanitizeHtml = require("sanitize-html");
 const { OAuth2Client } = require("google-auth-library");
+const { Client } = require("twilio");
+const nodemailer = require("nodemailer");
+const axios = require('axios');
+
 require("dotenv").config();
 
 const app = express();
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-const nodemailer = require("nodemailer");
-
 app.set("trust proxy", 1); // Trust the first proxy (Render)
+
 
 // CORS configuration
 app.use(
@@ -85,30 +89,28 @@ app.use(cookieParser());
 // Parse JSON
 app.use(express.json());
 
-// Validate environment variables at startup
-if (!process.env.EMAIL_HOST || !process.env.EMAIL_PORT || !process.env.EMAIL_USER || !process.env.EMAIL_PASS || !process.env.EMAIL_FROM) {
-  console.error("Missing email configuration:", {
-    EMAIL_HOST: !!process.env.EMAIL_HOST,
-    EMAIL_PORT: !!process.env.EMAIL_PORT,
-    EMAIL_USER: !!process.env.EMAIL_USER,
-    EMAIL_PASS: !!process.env.EMAIL_PASS,
-    EMAIL_FROM: !!process.env.EMAIL_FROM,
-  });
-  throw new Error("EMAIL_HOST, EMAIL_PORT, EMAIL_USER, EMAIL_PASS, and EMAIL_FROM environment variables are required");
+const missingEnvVars = requiredEnvVars.filter((varName) => !process.env[varName]);
+if (missingEnvVars.length > 0) {
+  console.error("Missing environment variables:", missingEnvVars);
+  throw new Error("Required environment variables are missing");
 }
 
-// Nodemailer transport setup for Brevo SMTP
+// Google Sheets setup
+const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID);
+
+// Nodemailer setup
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST,
   port: parseInt(process.env.EMAIL_PORT),
-  secure: process.env.EMAIL_PORT === "465", // Use SSL for port 465, TLS for 587
+  secure: process.env.EMAIL_PORT === "465",
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
-  logger: true, // Enable logging for debugging
-  debug: true, // Include detailed SMTP logs
+  logger: true,
+  debug: true,
 });
+
 
 // Verify transporter on server start
 transporter.verify((error, success) => {
@@ -137,7 +139,7 @@ const auth = new google.auth.JWT(
   ["https://www.googleapis.com/auth/spreadsheets"]
 );
 
-const spreadsheetId = process.env.SHEET_ID;
+const spreadsheetId = process.env.GOOGLE_SHEET_IDSHEET_ID;
 
 // Helper to get year-specific sheet name
 const getPaymentSheetName = (year) => `Payments_${year}`;
@@ -396,38 +398,32 @@ const authenticateToken = (req, res, next) => {
   }
 };
 
-// Helper: Sanitize input for email HTML
-const sanitizeInput = (input) => {
-  if (typeof input !== "string") {
-    console.warn("sanitizeInput received non-string input:", input);
-    return "";
-  }
-  return sanitizeHtml(input, {
-    allowedTags: ["div", "h1", "h2", "p", "strong", "table", "thead", "tbody", "tr", "th", "td", "span", "br", "hr"],
-    allowedAttributes: {
-      "*": ["style"],
-      div: ["style"],
-      table: ["style"],
-      th: ["style"],
-      td: ["style"],
-      span: ["style"],
-      p: ["style"],
-      hr: ["style"],
+// Sanitization options
+const sanitizeOptions = {
+  allowedTags: [
+    "div", "h1", "h2", "p", "table", "thead", "tbody", "tr", "th", "td",
+    "strong", "em", "ul", "ol", "li", "a", "span", "br", "style",
+  ],
+  allowedAttributes: {
+    "*": ["style", "class", "href", "target"],
+  },
+  allowedStyles: {
+    "*": {
+      "color": [/^#(0x)?[0-9a-f]+$/i, /^rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)$/],
+      "background-color": [/^#(0x)?[0-9a-f]+$/i, /^rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)$/],
+      "font-size": [/^\d+(?:px|em|rem|%)$/],
+      "font-family": [/^[\w\s,'"-]+$/],
+      "text-align": [/^left$/, /^right$/, /^center$/, /^justify$/],
+      "padding": [/^\d+(?:px|em|rem)$/],
+      "margin": [/^\d+(?:px|em|rem)$/],
+      "border": [/^\d+px\s+(solid|dashed|dotted)\s+#(0x)?[0-9a-f]+$/i],
     },
-    allowedStyles: {
-      "*": {
-        "color": [/^#(0x)?[0-9a-f]+$/i, /^rgb\(/, /^rgba\(/],
-        "background-color": [/^#(0x)?[0-9a-f]+$/i, /^rgb\(/, /^rgba\(/],
-        "border": [/^.*$/],
-        "border-collapse": [/^.*$/],
-        "border-radius": [/^.*$/],
-        "padding": [/^.*$/],
-        "margin": [/^.*$/],
-        "text-align": [/^.*$/],
-      },
-    },
-  });
+  },
 };
+
+function sanitizeInput(input) {
+  return sanitizeHtml(input, sanitizeOptions);
+}
 
 // Google Sign-In endpoint
 app.post("/api/google-signin", async (req, res) => {
@@ -1028,13 +1024,15 @@ app.get("/api/get-payments-by-year", authenticateToken, async (req, res) => {
       });
     });
 
-    // Create a map of clients for quick email lookup
-    const clientEmailMap = new Map();
-    userClients.forEach((client) => {
-      const key = `${client[1]}_${client[3]}`; // Client_Name_Type
-      clientEmailMap.set(key, client[2] || ""); // Email
-      console.log(`DEBUG: Added to map - Key: "${key}", Email: "${client[2] || ''}"`);
-    });
+    // In server.js, in the /get-payments-by-year endpoint, replace the clientEmailMap creation with this
+const clientEmailMap = new Map();
+const clientPhoneMap = new Map();
+userClients.forEach((client) => {
+  const key = `${client[1]}_${client[3]}`; // Client_Name_Type
+  clientEmailMap.set(key, client[2] || ""); // Email
+  clientPhoneMap.set(key, client[5] || ""); // Phone_Number
+  console.log(`DEBUG: Added to map - Key: "${key}", Email: "${client[2] || ''}", Phone: "${client[5] || ''}"`);
+});
 
     // DEBUG: Log all payment clients to see what we're looking for
     console.log(`DEBUG: Found ${userPayments.length} payments for user ${req.user.username}:`);
@@ -1051,38 +1049,41 @@ app.get("/api/get-payments-by-year", authenticateToken, async (req, res) => {
       }
     });
 
-    let processedPayments = userPayments.map((payment) => {
-      if (!payment || payment.length < headers.length) {
-        console.warn(`Invalid payment row for user ${req.user.username} in year ${year}:`, payment);
-        return null;
-      }
-      const key = `${payment[1]}_${payment[2]}`; // Client_Name_Type
-      const email = clientEmailMap.get(key) || "";
-      
-      // DEBUG: Log each email lookup
-      console.log(`DEBUG: Looking up email for "${key}" -> "${email}"`);
-      
-      return {
-        User: payment[0] || "",
-        Client_Name: payment[1] || "",
-        Type: payment[2] || "",
-        Amount_To_Be_Paid: parseFloat(payment[3]) || 0,
-        january: payment[4] || "",
-        february: payment[5] || "",
-        march: payment[6] || "",
-        april: payment[7] || "",
-        may: payment[8] || "",
-        june: payment[9] || "",
-        july: payment[10] || "",
-        august: payment[11] || "",
-        september: payment[12] || "",
-        october: payment[13] || "",
-        november: payment[14] || "",
-        december: payment[15] || "",
-        Due_Payment: parseFloat(payment[16]) || 0,
-        Email: email, // Add Email field
-      };
-    }).filter((p) => p !== null);
+    // In server.js, in the /get-payments-by-year endpoint, replace the processedPayments mapping with this
+let processedPayments = userPayments.map((payment) => {
+  if (!payment || payment.length < headers.length) {
+    console.warn(`Invalid payment row for user ${req.user.username} in year ${year}:`, payment);
+    return null;
+  }
+  const key = `${payment[1]}_${payment[2]}`; // Client_Name_Type
+  const email = clientEmailMap.get(key) || "";
+  const phone = clientPhoneMap.get(key) || ""; // Add phone number lookup
+  
+  // DEBUG: Log each email and phone lookup
+  console.log(`DEBUG: Looking up contact for "${key}" -> Email: "${email}", Phone: "${phone}"`);
+  
+  return {
+    User: payment[0] || "",
+    Client_Name: payment[1] || "",
+    Type: payment[2] || "",
+    Amount_To_Be_Paid: parseFloat(payment[3]) || 0,
+    january: payment[4] || "",
+    february: payment[5] || "",
+    march: payment[6] || "",
+    april: payment[7] || "",
+    may: payment[8] || "",
+    june: payment[9] || "",
+    july: payment[10] || "",
+    august: payment[11] || "",
+    september: payment[12] || "",
+    october: payment[13] || "",
+    november: payment[14] || "",
+    december: payment[15] || "",
+    Due_Payment: parseFloat(payment[16]) || 0,
+    Email: email,
+    Phone_Number: phone, // Add Phone_Number field
+  };
+}).filter((p) => p !== null);
 
     if (parseInt(year) > 2025) {
       const calculateCumulativeDue = async (targetYear) => {
@@ -1795,56 +1796,6 @@ app.post('/api/import-csv', authenticateToken, async (req, res) => {
   }
 });
 
-// Update Client
-app.put('/api/update-client', authenticateToken, async (req, res) => {
-  const { oldClient, newClient } = req.body;
-  const year = new Date().getFullYear().toString();
-  if (!oldClient || !newClient || !oldClient.Client_Name || !oldClient.Type || !newClient.Client_Name || !newClient.Type || !newClient.Amount_To_Be_Paid) {
-    return res.status(400).json({ error: 'All required fields must be provided' });
-  }
-  let { Client_Name: oldClientName, Type: oldType } = oldClient;
-  let { Client_Name, Type, Amount_To_Be_Paid, Email, Phone_Number } = newClient;
-  oldClientName = sanitizeInput(oldClientName);
-  oldType = sanitizeInput(oldType);
-  Client_Name = sanitizeInput(Client_Name);
-  Type = sanitizeInput(Type);
-  Email = Email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(Email) ? sanitizeInput(Email) : '';
-  Phone_Number = Phone_Number && /^\+?[\d\s-]{10,15}$/.test(Phone_Number) ? sanitizeInput(Phone_Number) : '';
-  const paymentValue = parseFloat(Amount_To_Be_Paid);
-  if (isNaN(paymentValue) || paymentValue <= 0) {
-    return res.status(400).json({ error: 'Amount to be paid must be a positive number' });
-  }
-  if (!['GST', 'IT Return'].includes(Type)) {
-    return res.status(400).json({ error: 'Type must be either "GST" or "IT Return"' });
-  }
-  try {
-    await retryWithBackoff(() => ensureSheet('Clients', ['User', 'Client_Name', 'Email', 'Type', 'Monthly_Payment', 'Phone_Number']));
-    let clients = await retryWithBackoff(() => readSheet('Clients', 'A2:F'));
-    const clientIndex = clients.findIndex(client => client[0] === req.user.username && client[1] === oldClientName && client[3] === oldType);
-    if (clientIndex === -1) {
-      return res.status(404).json({ error: 'Client not found' });
-    }
-    clients[clientIndex] = [req.user.username, Client_Name, Email, Type, paymentValue, Phone_Number];
-    await retryWithBackoff(() => writeSheet('Clients', 'A2:F', clients));
-    const paymentSheets = (await google.sheets({ version: 'v4', auth }).spreadsheets.get({ spreadsheetId })).data.sheets
-      .filter(sheet => sheet.properties.title.startsWith('Payments_'))
-      .map(sheet => sheet.properties.title);
-    for (const sheetName of paymentSheets) {
-      await retryWithBackoff(() => ensureSheet('Payments', ['User', 'Client_Name', 'Type', 'Amount_To_Be_Paid', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'Due_Payment'], sheetName.split('_')[1]));
-      let payments = await retryWithBackoff(() => readSheet(sheetName, 'A2:R'));
-      const paymentIndex = payments.findIndex(payment => payment[0] === req.user.username && payment[1] === oldClientName && payment[2] === oldType);
-      if (paymentIndex !== -1) {
-        const monthlyPayments = payments[paymentIndex].slice(4, 16);
-        payments[paymentIndex] = [req.user.username, Client_Name, Type, paymentValue, ...monthlyPayments, paymentValue];
-        await retryWithBackoff(() => writeSheet(sheetName, 'A2:R', payments));
-      }
-    }
-    res.json({ message: 'Client updated successfully' });
-  } catch (error) {
-    console.error('Update client error:', error.message);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
 
 // Debug Sheets
 app.get("/api/debug-sheets", authenticateToken, async (req, res) => {
@@ -2011,6 +1962,67 @@ app.post("/api/send-email", authenticateToken, async (req, res) => {
       user: req.user.username,
     });
     res.status(500).json({ error: `Failed to send email: ${error.message}` });
+  }
+});
+
+app.post("/api/send-whatsapp", authenticateToken, async (req, res) => {
+  const { to, message } = req.body;
+  if (!to || !message) {
+    console.error("Missing required fields:", { to, message, user: req.user.username });
+    return res.status(400).json({ error: "Recipient phone number and message are required" });
+  }
+  if (!/^\+?[\d\s-]{10,15}$/.test(to)) {
+    console.error("Invalid phone number:", { to, user: req.user.username });
+    return res.status(400).json({ error: "Invalid recipient phone number" });
+  }
+  try {
+    // Format phone number to E.164 without spaces or dashes
+    let formattedPhone = to.trim().replace(/[\s-]/g, "");
+    if (!formattedPhone.startsWith("+")) {
+      formattedPhone = `+91${formattedPhone.replace(/\D/g, "")}`; // Adjust country code as needed
+    }
+
+    // UltraMsg API payload
+    const payload = {
+      token: process.env.ULTRAMSG_TOKEN,
+      to: formattedPhone,
+      body: message,
+    };
+
+    const response = await axios.post(
+      `https://api.ultramsg.com/${process.env.ULTRAMSG_INSTANCE_ID}/messages/chat`,
+      new URLSearchParams(payload).toString(),
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      }
+    );
+
+    if (response.data.status === "success") {
+      console.log(`WhatsApp message sent successfully to ${formattedPhone}:`, {
+        messageId: response.data.messageId,
+        status: response.data.status,
+        user: req.user.username,
+      });
+      res.json({ message: "WhatsApp message sent successfully" });
+    } else {
+      console.error("UltraMsg API error:", {
+        response: response.data,
+        to: formattedPhone,
+        user: req.user.username,
+      });
+      res.status(500).json({ error: `Failed to send WhatsApp message: ${response.data.error}` });
+    }
+  } catch (error) {
+    console.error("Send WhatsApp error:", {
+      message: error.message,
+      code: error.response?.data?.error?.code,
+      details: error.response?.data,
+      to: formattedPhone,
+      user: req.user.username,
+    });
+    res.status(500).json({ error: `Failed to send WhatsApp message: ${error.message}` });
   }
 });
 

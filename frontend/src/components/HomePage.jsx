@@ -332,6 +332,9 @@ const hasValidEmail = useCallback((clientData) => {
       </div>
     );
   };
+
+  
+// In HomePage.jsx, replace the existing processBatchUpdates function with this updated version
 const processBatchUpdates = useCallback(async () => {
   if (!updateQueueRef.current.length) {
     console.log("HomePage.jsx: No updates to process");
@@ -346,21 +349,22 @@ const processBatchUpdates = useCallback(async () => {
   setIsUpdating(true);
 
   const updatedLocalValues = { ...localInputValues };
-  const missingEmailClients = []; // Track clients with missing emails
+  const missingContactClients = []; // Track clients with missing phone/email
 
   const updatesByRow = updates.reduce((acc, update) => {
     const { rowIndex, month, value, year } = update;
     if (!acc[rowIndex]) {
       const rowData = paymentsData[rowIndex];
       console.log(`DEBUG: Row ${rowIndex} data:`, {
-      Client_Name: rowData?.Client_Name,
-      Type: rowData?.Type,
-      Email: rowData?.Email,
-      email: rowData?.email,
-      allFields: rowData ? Object.keys(rowData) : 'rowData is null'
-    });
-      // Fix: Use the correct field name that matches your backend response
-      const clientEmail = rowData?.Email || rowData?.email || ""; // Backend sends 'Email' field
+        Client_Name: rowData?.Client_Name,
+        Type: rowData?.Type,
+        Email: rowData?.Email,
+        Phone_Number: rowData?.Phone_Number,
+        allFields: rowData ? Object.keys(rowData) : 'rowData is null'
+      });
+      // Use Email and Phone_Number from paymentsData (fetched from /get-payments-by-year)
+      const clientEmail = rowData?.Email || "";
+      const clientPhone = rowData?.Phone_Number || "";
       acc[rowIndex] = {
         rowIndex,
         year,
@@ -368,6 +372,7 @@ const processBatchUpdates = useCallback(async () => {
         clientName: rowData?.Client_Name,
         type: rowData?.Type,
         clientEmail,
+        clientPhone,
       };
     }
     acc[rowIndex].updates.push({ month, value });
@@ -376,7 +381,7 @@ const processBatchUpdates = useCallback(async () => {
 
   try {
     for (const rowUpdate of Object.values(updatesByRow)) {
-      const { rowIndex, year, updates, clientName, type, clientEmail } = rowUpdate;
+      const { rowIndex, year, updates, clientName, type, clientEmail, clientPhone } = rowUpdate;
       const rowData = paymentsData[rowIndex];
       if (!rowData) {
         console.warn(`HomePage.jsx: Invalid rowIndex ${rowIndex}`);
@@ -447,16 +452,55 @@ const processBatchUpdates = useCallback(async () => {
           ({ status }) => status === "PartiallyPaid" || status === "Unpaid"
         );
 
-        console.log("Checking email notification conditions:", {
+        console.log("Checking notification conditions:", {
           clientName,
           clientEmail,
+          clientPhone,
           notifyStatuses,
           hasEmailAddress: hasValidEmail({ Email: clientEmail, email: clientEmail }),
+          hasPhoneNumber: clientPhone && /^\+?[\d\s-]{10,15}$/.test(clientPhone),
         });
 
         if (notifyStatuses.length > 0) {
-          // Fix: Check if clientEmail exists and is valid
-          if (clientEmail && clientEmail.trim() && hasValidEmail({ Email: clientEmail, email: clientEmail })) {
+          const hasValidPhone = clientPhone && /^\+?[\d\s-]{10,15}$/.test(clientPhone);
+          let notificationSent = false;
+
+          // Try WhatsApp notification first if phone number exists
+          if (hasValidPhone) {
+            try {
+              const messageContent = `Dear ${clientName},\n\nYour payment status for ${type} (${year}) has been updated:\n\n${notifyStatuses
+                .map(
+                  ({ month, status, paidAmount, expectedAmount }) =>
+                    `- ${month.charAt(0).toUpperCase() + month.slice(1)}: ${status} (Paid: ₹${paidAmount.toFixed(2)}, Expected: ₹${expectedAmount.toFixed(2)})`
+                )
+                .join("\n")}\n\nPlease review your account or contact us for clarifications.\nBest regards,\nPayment Tracker Team`;
+
+              await axios.post(
+                `${BASE_URL}/send-whatsapp`,
+                {
+                  to: clientPhone.trim(),
+                  message: messageContent,
+                },
+                {
+                  headers: { Authorization: `Bearer ${sessionToken}` },
+                  timeout: 15000,
+                }
+              );
+
+              console.log(`HomePage.jsx: WhatsApp message sent successfully to ${clientPhone} for ${clientName}`);
+              notificationSent = true;
+            } catch (whatsappError) {
+              console.error(`HomePage.jsx: Failed to send WhatsApp message to ${clientPhone}:`, whatsappError);
+              setErrorMessage(
+                `Payment updated successfully, but failed to send WhatsApp notification to ${clientName}: ${
+                  whatsappError.response?.data?.error || whatsappError.message
+                }. Attempting email notification.`
+              );
+            }
+          }
+
+          // Fall back to email if WhatsApp fails or no valid phone number
+          if (!notificationSent && clientEmail && hasValidEmail({ Email: clientEmail, email: clientEmail })) {
             try {
               const emailContent = `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -528,25 +572,24 @@ const processBatchUpdates = useCallback(async () => {
               );
 
               console.log(`HomePage.jsx: Email sent successfully to ${clientEmail} for ${clientName}`);
+              notificationSent = true;
             } catch (emailError) {
               console.error(`HomePage.jsx: Failed to send email to ${clientEmail}:`, emailError);
-              if (!emailError.code || !['ECONNABORTED', 'NETWORK_ERROR'].includes(emailError.code)) {
-                setErrorMessage(
-                  `Payment updated successfully, but failed to send email to ${clientName}: ${
-                    emailError.response?.data?.error || emailError.message
-                  }`
-                );
-              } else {
-                console.warn(`HomePage.jsx: Email sending timed out for ${clientEmail}, but payment was saved`);
-              }
+              setErrorMessage(
+                `Payment updated successfully, but failed to send email to ${clientName}: ${
+                  emailError.response?.data?.error || emailError.message
+                }`
+              );
             }
-          } else {
-            // Silently track clients with missing emails
-            missingEmailClients.push(clientName);
-            console.log(`HomePage.jsx: No valid email found for ${clientName}, skipping email notification`);
+          }
+
+          // If no notification was sent, add to missing contact list
+          if (!notificationSent) {
+            missingContactClients.push(clientName);
+            console.log(`HomePage.jsx: No valid contact (phone/email) found for ${clientName}, skipping notification`);
           }
         } else {
-          console.log(`HomePage.jsx: All payments are fully paid for ${clientName}, no email notification needed`);
+          console.log(`HomePage.jsx: All payments are fully paid for ${clientName}, no notification needed`);
         }
       } catch (error) {
         console.error(`HomePage.jsx: Failed to batch update row ${rowIndex}:`, error);
@@ -561,10 +604,10 @@ const processBatchUpdates = useCallback(async () => {
     }
 
     setLocalInputValues(updatedLocalValues);
-    // Display warning if any clients lacked email addresses
-    if (missingEmailClients.length > 0) {
+    // Display warning if any clients lacked contact details
+    if (missingContactClients.length > 0) {
       setErrorMessage(
-        `Payments updated, but email notifications could not be sent to: ${missingEmailClients.join(", ")} (missing valid email addresses).`
+        `Payments updated, but notifications could not be sent to: ${missingContactClients.join(", ")} (missing valid phone number or email address).`
       );
     }
     if (updateQueueRef.current.length > 0) {
@@ -580,7 +623,6 @@ const processBatchUpdates = useCallback(async () => {
     setIsUpdating(false);
   }
 }, [paymentsData, sessionToken, months, localInputValues, hasValidEmail, setErrorMessage]);
-
 
   const debouncedUpdate = useCallback(
     (rowIndex, month, value, year) => {
