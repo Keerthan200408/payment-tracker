@@ -56,6 +56,7 @@ const HomePage = ({
   const [errorMessage, setLocalErrorMessage] = useState("");
   const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
   const [newType, setNewType] = useState("");
+  const [currentPage, setCurrentPage] = useState(1); // Added for pagination
   const mountedRef = useRef(true);
 
   const MONTHS = [
@@ -873,7 +874,16 @@ const processBatchUpdates = useCallback(async () => {
   }
 }, [errorMessage]);
 
-  const renderDashboard = () => (
+const renderDashboard = () => {
+  const entriesPerPage = 10;
+  const totalEntries = filteredData.length;
+  const totalPages = Math.ceil(totalEntries / entriesPerPage);
+  const paginatedData = filteredData.slice(
+    (currentPage - 1) * entriesPerPage,
+    currentPage * entriesPerPage
+  );
+
+  return (
     <>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
         <div className="flex gap-3 mb-4 sm:mb-0">
@@ -963,7 +973,7 @@ const processBatchUpdates = useCallback(async () => {
       </div>
 
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-        <div className="overflow-x-auto max-h-96 overflow-y-auto">
+        <div className="max-h-96 overflow-y-auto">
           <table className="w-full" ref={tableRef}>
             <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
               <tr>
@@ -1007,7 +1017,7 @@ const processBatchUpdates = useCallback(async () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredData.length === 0 ? (
+              {paginatedData.length === 0 ? (
                 <tr>
                   <td
                     colSpan={15}
@@ -1017,10 +1027,10 @@ const processBatchUpdates = useCallback(async () => {
                   </td>
                 </tr>
               ) : (
-                filteredData.map((row, rowIndex) => (
+                paginatedData.map((row, rowIndex) => (
                   <tr
                     key={`${row?.Client_Name || "unknown"}-${rowIndex}`}
-                    onContextMenu={(e) => handleContextMenu(e, rowIndex)}
+                    onContextMenu={(e) => handleContextMenu(e, (currentPage - 1) * entriesPerPage + rowIndex)}
                     className="hover:bg-gray-50"
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -1040,22 +1050,21 @@ const processBatchUpdates = useCallback(async () => {
                         <input
                           type="text"
                           value={
-                            localInputValues[`${rowIndex}-${month}`] !==
-                            undefined
-                              ? localInputValues[`${rowIndex}-${month}`]
+                            localInputValues[`${(currentPage - 1) * entriesPerPage + rowIndex}-${month}`] !== undefined
+                              ? localInputValues[`${(currentPage - 1) * entriesPerPage + rowIndex}-${month}`]
                               : row?.[month] || ""
                           }
                           onChange={(e) =>
-                            handleInputChange(rowIndex, month, e.target.value)
+                            handleInputChange((currentPage - 1) * entriesPerPage + rowIndex, month, e.target.value)
                           }
                           className={`w-20 p-1 border border-gray-300 rounded text-right focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base ${getInputBackgroundColor(
                             row,
                             month,
-                            rowIndex
+                            (currentPage - 1) * entriesPerPage + rowIndex
                           )}`}
                           placeholder="0.00"
                           title={
-                            pendingUpdates[`${rowIndex}-${month}`]
+                            pendingUpdates[`${(currentPage - 1) * entriesPerPage + rowIndex}-${month}`]
                               ? "Saving..."
                               : ""
                           }
@@ -1070,6 +1079,96 @@ const processBatchUpdates = useCallback(async () => {
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <div className="flex flex-col sm:flex-row justify-between items-center mt-6 space-y-3 sm:space-y-0">
+        <p className="text-sm sm:text-base text-gray-700">
+          Showing {(currentPage - 1) * entriesPerPage + 1} to{" "}
+          {Math.min(currentPage * entriesPerPage, totalEntries)} of{" "}
+          {totalEntries} entries
+        </p>
+        <div className="flex flex-wrap justify-center gap-2 max-w-md">
+          <button
+            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+            disabled={currentPage === 1}
+            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base disabled:opacity-50 hover:bg-gray-50 transition duration-200"
+          >
+            Previous
+          </button>
+          {totalPages <= 5 ? (
+            [...Array(totalPages)].map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setCurrentPage(i + 1)}
+                className={`px-4 py-2 border border-gray-300 rounded-md text-sm sm:text-base ${
+                  currentPage === i + 1
+                    ? "bg-gray-800 text-white"
+                    : "text-gray-700 hover:bg-gray-50"
+                } transition duration-200`}
+              >
+                {i + 1}
+              </button>
+            ))
+          ) : (
+            <>
+              {currentPage > 3 && (
+                <>
+                  <button
+                    onClick={() => setCurrentPage(1)}
+                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base hover:bg-gray-50 transition duration-200"
+                  >
+                    1
+                  </button>
+                  {currentPage > 4 && (
+                    <span className="px-4 py-2 text-gray-700">...</span>
+                  )}
+                </>
+              )}
+              {[...Array(5)].map((_, i) => {
+                const pageNum =
+                  currentPage <= 3 ? i + 1 : currentPage - 2 + i;
+                if (pageNum <= totalPages && pageNum > 0) {
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`px-4 py-2 border border-gray-300 rounded-md text-sm sm:text-base ${
+                        currentPage === pageNum
+                          ? "bg-gray-800 text-white"
+                          : "text-gray-700 hover:bg-gray-50"
+                      } transition duration-200`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                }
+                return null;
+              })}
+              {currentPage < totalPages - 2 && (
+                <>
+                  {currentPage < totalPages - 3 && (
+                    <span className="px-4 py-2 text-gray-700">...</span>
+                  )}
+                  <button
+                    onClick={() => setCurrentPage(totalPages)}
+                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base hover:bg-gray-50 transition duration-200"
+                  >
+                    {totalPages}
+                  </button>
+                </>
+              )}
+            </>
+          )}
+          <button
+            onClick={() =>
+              setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+            }
+            disabled={currentPage === totalPages}
+            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base disabled:opacity-50 hover:bg-gray-50 transition duration-200"
+          >
+            Next
+          </button>
         </div>
       </div>
 
@@ -1088,6 +1187,7 @@ const processBatchUpdates = useCallback(async () => {
       )}
     </>
   );
+};
 
   const renderReports = () => {
     const monthStatus = useMemo(() => {
