@@ -865,14 +865,15 @@ const processBatchUpdates = useCallback(async () => {
     return () => document.removeEventListener("click", handleClickOutside);
   }, [hideContextMenu]);
 
-  useEffect(() => {
-  if (errorMessage) {
+useEffect(() => {
+  if (errorMessage || errorMessage) {
     const timer = setTimeout(() => {
       setLocalErrorMessage("");
+      setErrorMessage(""); // Clear parent error state
     }, 5000);
     return () => clearTimeout(timer);
   }
-}, [errorMessage]);
+}, [errorMessage, errorMessage, setErrorMessage]);
 
 
 const renderDashboard = () => {
@@ -1453,7 +1454,10 @@ const renderReports = () => {
       {errorMessage && (
   <ErrorMessageDisplay
     message={errorMessage}
-    onDismiss={() => setLocalErrorMessage("")}
+    onDismiss={() => {
+      setLocalErrorMessage("");
+      setErrorMessage("");
+    }}
     type="error"
   />
 )}
