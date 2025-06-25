@@ -721,6 +721,17 @@ const updatePayment = async (
                     <i className="fas fa-chart-line mr-3 w-4"></i> Reports
                   </button>
                 </li>
+                <li>
+    <button
+      onClick={() => {
+        logout();
+        setIsSidebarOpen(false);
+      }}
+      className="w-full text-left p-3 rounded-lg flex items-center transition-colors text-red-600 hover:bg-red-50"
+    >
+      <i className="fas fa-sign-out-alt mr-3 w-4"></i> Logout
+    </button>
+  </li>
               </ul>
             </nav>
             <main className="flex-1 p-6 overflow-y-auto sm:ml-64 mt-16 sm:mt-0 bg-gray-50">
@@ -755,12 +766,6 @@ const updatePayment = async (
                           {currentUser}
                         </p>
                       </div>
-                      <button
-                        onClick={logout}
-                        className="w-full text-left p-4 text-red-600 hover:bg-red-50 flex items-center transition-colors"
-                      >
-                        <i className="fas fa-sign-out-alt mr-2"></i> Logout
-                      </button>
                     </div>
                   )}
                 </div>
