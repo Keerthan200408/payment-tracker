@@ -874,6 +874,7 @@ const processBatchUpdates = useCallback(async () => {
   }
 }, [errorMessage]);
 
+
 const renderDashboard = () => {
   const entriesPerPage = 10;
   const totalEntries = filteredData.length;
@@ -973,14 +974,14 @@ const renderDashboard = () => {
       </div>
 
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-        <div className="max-h-96 overflow-y-auto">
+        <div className="overflow-x-auto">
           <table className="w-full" ref={tableRef}>
             <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
               <tr>
                 <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-                  Client Name
+                  Client
                 </th>
-                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
                   Type
                   <button
                     onClick={() => {
@@ -1006,13 +1007,13 @@ const renderDashboard = () => {
                 {months.map((month, index) => (
                   <th
                     key={index}
-                    className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50"
+                    className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50"
                   >
                     {month.charAt(0).toUpperCase() + month.slice(1)}
                   </th>
                 ))}
                 <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-                  Due Payment
+                  Total Due
                 </th>
               </tr>
             </thead>
@@ -1023,7 +1024,17 @@ const renderDashboard = () => {
                     colSpan={15}
                     className="px-6 py-12 text-center text-gray-500"
                   >
-                    No payments found.
+                    <div className="flex flex-col items-center">
+                      <i className="fas fa-users text-4xl text-gray-300 mb-3"></i>
+                      <p className="text-lg font-medium text-gray-600">
+                        {searchQuery
+                          ? "No clients found matching your search."
+                          : "No payments found."}
+                      </p>
+                      <p className="text-sm text-gray-400 mt-1">
+                        {!searchQuery && "Get started by adding a payment."}
+                      </p>
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -1033,19 +1044,20 @@ const renderDashboard = () => {
                     onContextMenu={(e) => handleContextMenu(e, (currentPage - 1) * entriesPerPage + rowIndex)}
                     className="hover:bg-gray-50"
                   >
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-4 whitespace-nowrap flex items-center text-sm sm:text-base text-gray-900">
+                      <i className="fas fa-user-circle mr-2 text-gray-400"></i>
                       {row?.Client_Name || "N/A"}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm sm:text-base text-gray-900">
                       {row?.Type || "N/A"}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      {parseFloat(row?.Amount_To_Be_Paid || 0).toFixed(2)}
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm sm:text-base text-gray-900">
+                      ₹{(parseFloat(row?.Amount_To_Be_Paid) || 0).toLocaleString()}.00
                     </td>
                     {months.map((month, colIndex) => (
                       <td
                         key={colIndex}
-                        className="px-6 py-4 whitespace-nowrap text-right"
+                        className="px-6 py-4 whitespace-nowrap text-center"
                       >
                         <input
                           type="text"
@@ -1071,8 +1083,8 @@ const renderDashboard = () => {
                         />
                       </td>
                     ))}
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      {parseFloat(row?.Due_Payment || 0).toFixed(2)}
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm sm:text-base text-gray-900">
+                      ₹{(parseFloat(row?.Due_Payment) || 0).toLocaleString()}.00
                     </td>
                   </tr>
                 ))
@@ -1082,227 +1094,7 @@ const renderDashboard = () => {
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row justify-between items-center mt-6 space-y-3 sm:space-y-0">
-        <p className="text-sm sm:text-base text-gray-700">
-          Showing {(currentPage - 1) * entriesPerPage + 1} to{" "}
-          {Math.min(currentPage * entriesPerPage, totalEntries)} of{" "}
-          {totalEntries} entries
-        </p>
-        <div className="flex flex-wrap justify-center gap-2 max-w-md">
-          <button
-            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-            disabled={currentPage === 1}
-            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base disabled:opacity-50 hover:bg-gray-50 transition duration-200"
-          >
-            Previous
-          </button>
-          {totalPages <= 5 ? (
-            [...Array(totalPages)].map((_, i) => (
-              <button
-                key={i}
-                onClick={() => setCurrentPage(i + 1)}
-                className={`px-4 py-2 border border-gray-300 rounded-md text-sm sm:text-base ${
-                  currentPage === i + 1
-                    ? "bg-gray-800 text-white"
-                    : "text-gray-700 hover:bg-gray-50"
-                } transition duration-200`}
-              >
-                {i + 1}
-              </button>
-            ))
-          ) : (
-            <>
-              {currentPage > 3 && (
-                <>
-                  <button
-                    onClick={() => setCurrentPage(1)}
-                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base hover:bg-gray-50 transition duration-200"
-                  >
-                    1
-                  </button>
-                  {currentPage > 4 && (
-                    <span className="px-4 py-2 text-gray-700">...</span>
-                  )}
-                </>
-              )}
-              {[...Array(5)].map((_, i) => {
-                const pageNum =
-                  currentPage <= 3 ? i + 1 : currentPage - 2 + i;
-                if (pageNum <= totalPages && pageNum > 0) {
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() => setCurrentPage(pageNum)}
-                      className={`px-4 py-2 border border-gray-300 rounded-md text-sm sm:text-base ${
-                        currentPage === pageNum
-                          ? "bg-gray-800 text-white"
-                          : "text-gray-700 hover:bg-gray-50"
-                      } transition duration-200`}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                }
-                return null;
-              })}
-              {currentPage < totalPages - 2 && (
-                <>
-                  {currentPage < totalPages - 3 && (
-                    <span className="px-4 py-2 text-gray-700">...</span>
-                  )}
-                  <button
-                    onClick={() => setCurrentPage(totalPages)}
-                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base hover:bg-gray-50 transition duration-200"
-                  >
-                    {totalPages}
-                  </button>
-                </>
-              )}
-            </>
-          )}
-          <button
-            onClick={() =>
-              setCurrentPage((prev) => Math.min(prev + 1, totalPages))
-            }
-            disabled={currentPage === totalPages}
-            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base disabled:opacity-50 hover:bg-gray-50 transition duration-200"
-          >
-            Next
-          </button>
-        </div>
-      </div>
-
-      {contextMenu && (
-        <div
-          className="absolute bg-white border border-gray-300 rounded-lg shadow-sm p-2 z-50"
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-        >
-          <button
-            onClick={deleteRow}
-            className="w-full text-left px-4 py-2 hover:bg-gray-50 text-gray-700 flex items-center"
-          >
-            <i className="fas fa-trash mr-2"></i> Delete
-          </button>
-        </div>
-      )}
-    </>
-  );
-};
-
-  const renderReports = () => {
-    const monthStatus = useMemo(() => {
-      return (paymentsData || []).reduce((acc, row) => {
-        if (!acc[row?.Client_Name]) {
-          acc[row?.Client_Name] = {};
-        }
-        months.forEach((month) => {
-          acc[row?.Client_Name][month] = getPaymentStatus(row, month);
-        });
-        return acc;
-      }, {});
-    }, [paymentsData, months, getPaymentStatus]);
-
-    const getStatusBackgroundColor = (status) => {
-      if (status === "Unpaid") return "bg-red-200/50 text-red-800";
-      if (status === "PartiallyPaid") return "bg-yellow-200/50 text-yellow-800";
-      if (status === "Paid") return "bg-green-200/50 text-green-800";
-      return "bg-gray-100 text-gray-800";
-    };
-
-    const entriesPerPage = 10;
-    const totalEntries = Object.keys(monthStatus).length;
-    const totalPages = Math.ceil(totalEntries / entriesPerPage);
-    const [currentPage, setCurrentPage] = useState(1);
-
-    const paginatedClients = Object.keys(monthStatus).slice(
-      (currentPage - 1) * entriesPerPage,
-      currentPage * entriesPerPage
-    );
-
-    return (
-      <>
-        <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 mb-6">
-          <div className="relative flex-1 sm:w-1/3">
-            <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-            <input
-              type="text"
-              placeholder="Search by client..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base"
-            />
-          </div>
-          <select
-            value={currentYear}
-            onChange={(e) => handleYearChangeDebounced(e.target.value)}
-            className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
-            disabled={isLoadingYears}
-          >
-            {availableYears.map((year) => (
-              <option key={year} value={year}>
-                {year}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-          <div className="max-h-96 overflow-y-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
-                <tr>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-                    Client
-                  </th>
-                  {months.map((month, index) => (
-                    <th
-                      key={index}
-                      className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50"
-                    >
-                      {month.charAt(0).toUpperCase() + month.slice(1)}{" "}
-                      {currentYear}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {paginatedClients.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={13}
-                      className="px-6 py-12 text-center text-gray-500"
-                    >
-                      No data available.
-                    </td>
-                  </tr>
-                ) : (
-                  paginatedClients.map((client, idx) => (
-                    <tr key={idx} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap flex items-center text-sm sm:text-base text-gray-900">
-                        <i className="fas fa-user-circle mr-2 text-gray-400"></i>
-                        {client}
-                      </td>
-                      {months.map((month, mIdx) => (
-                        <td
-                          key={mIdx}
-                          className="px-6 py-4 whitespace-nowrap text-center"
-                        >
-                          <span
-                            className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBackgroundColor(
-                              monthStatus[client]?.[month] || "Unpaid"
-                            )}`}
-                          >
-                            {monthStatus[client]?.[month] || "Unpaid"}
-                          </span>
-                        </td>
-                      ))}
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
+      {paginatedData.length > 0 && (
         <div className="flex flex-col sm:flex-row justify-between items-center mt-6 space-y-3 sm:space-y-0">
           <p className="text-sm sm:text-base text-gray-700">
             Showing {(currentPage - 1) * entriesPerPage + 1} to{" "}
@@ -1392,9 +1184,254 @@ const renderDashboard = () => {
             </button>
           </div>
         </div>
-      </>
-    );
+      )}
+
+      {contextMenu && (
+        <div
+          className="absolute bg-white border border-gray-300 rounded-lg shadow-sm p-2 z-50"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+        >
+          <button
+            onClick={deleteRow}
+            className="w-full text-left px-4 py-2 hover:bg-gray-50 text-gray-700 flex items-center"
+          >
+            <i className="fas fa-trash mr-2"></i> Delete
+          </button>
+        </div>
+      )}
+    </>
+  );
+};
+
+
+const renderReports = () => {
+  const monthStatus = useMemo(() => {
+    return (paymentsData || []).reduce((acc, row) => {
+      if (!acc[row?.Client_Name]) {
+        acc[row?.Client_Name] = {};
+      }
+      months.forEach((month) => {
+        acc[row?.Client_Name][month] = getPaymentStatus(row, month);
+      });
+      return acc;
+    }, {});
+  }, [paymentsData, months, getPaymentStatus]);
+
+  const getStatusBackgroundColor = (status) => {
+    if (status === "Unpaid") return "bg-red-100 text-red-800";
+    if (status === "PartiallyPaid") return "bg-yellow-100 text-yellow-800";
+    if (status === "Paid") return "bg-green-100 text-green-800";
+    return "bg-gray-100 text-gray-800";
   };
+
+  const entriesPerPage = 10;
+  const totalEntries = Object.keys(monthStatus).length;
+  const totalPages = Math.ceil(totalEntries / entriesPerPage);
+  const paginatedClients = Object.keys(monthStatus).slice(
+    (currentPage - 1) * entriesPerPage,
+    currentPage * entriesPerPage
+  );
+
+  return (
+    <>
+      <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 mb-6">
+        <div className="relative flex-1 sm:w-1/3">
+          <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+          <input
+            type="text"
+            placeholder="Search by client..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base"
+          />
+        </div>
+        <select
+          value={currentYear}
+          onChange={(e) => handleYearChangeDebounced(e.target.value)}
+          className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+          disabled={isLoadingYears}
+        >
+          {availableYears.map((year) => (
+            <option key={year} value={year}>
+              {year}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
+              <tr>
+                <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                  Client
+                </th>
+                <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                  Type
+                </th>
+                {months.map((month, index) => (
+                  <th
+                    key={index}
+                    className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50"
+                  >
+                    {month.charAt(0).toUpperCase() + month.slice(1)} {currentYear}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {paginatedClients.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={14}
+                    className="px-6 py-12 text-center text-gray-500"
+                  >
+                    <div className="flex flex-col items-center">
+                      <i className="fas fa-users text-4xl text-gray-300 mb-3"></i>
+                      <p className="text-lg font-medium text-gray-600">
+                        {searchQuery
+                          ? "No clients found matching your search."
+                          : "No data available."}
+                      </p>
+                      <p className="text-sm text-gray-400 mt-1">
+                        {!searchQuery && "No payment data found for this year."}
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                paginatedClients.map((client, idx) => {
+                  // Find the corresponding payment data for this client
+                  const paymentData = paymentsData.find(
+                    (row) => row.Client_Name === client
+                  );
+                  return (
+                    <tr key={idx} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap flex items-center text-sm sm:text-base text-gray-900">
+                        <i className="fas fa-user-circle mr-2 text-gray-400"></i>
+                        {client}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-center text-sm sm:text-base text-gray-900">
+                        {paymentData?.Type || "N/A"}
+                      </td>
+                      {months.map((month, mIdx) => (
+                        <td
+                          key={mIdx}
+                          className="px-6 py-4 whitespace-nowrap text-center"
+                        >
+                          <span
+                            className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${getStatusBackgroundColor(
+                              monthStatus[client]?.[month] || "Unpaid"
+                            )}`}
+                          >
+                            {monthStatus[client]?.[month] || "Unpaid"}
+                          </span>
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {paginatedClients.length > 0 && (
+        <div className="flex flex-col sm:flex-row justify-between items-center mt-6 space-y-3 sm:space-y-0">
+          <p className="text-sm sm:text-base text-gray-700">
+            Showing {(currentPage - 1) * entriesPerPage + 1} to{" "}
+            {Math.min(currentPage * entriesPerPage, totalEntries)} of{" "}
+            {totalEntries} entries
+          </p>
+          <div className="flex flex-wrap justify-center gap-2 max-w-md">
+            <button
+              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base disabled:opacity-50 hover:bg-gray-50 transition duration-200"
+            >
+              Previous
+            </button>
+            {totalPages <= 5 ? (
+              [...Array(totalPages)].map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setCurrentPage(i + 1)}
+                  className={`px-4 py-2 border border-gray-300 rounded-md text-sm sm:text-base ${
+                    currentPage === i + 1
+                      ? "bg-gray-800 text-white"
+                      : "text-gray-700 hover:bg-gray-50"
+                  } transition duration-200`}
+                >
+                  {i + 1}
+                </button>
+              ))
+            ) : (
+              <>
+                {currentPage > 3 && (
+                  <>
+                    <button
+                      onClick={() => setCurrentPage(1)}
+                      className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base hover:bg-gray-50 transition duration-200"
+                    >
+                      1
+                    </button>
+                    {currentPage > 4 && (
+                      <span className="px-4 py-2 text-gray-700">...</span>
+                    )}
+                  </>
+                )}
+                {[...Array(5)].map((_, i) => {
+                  const pageNum =
+                    currentPage <= 3 ? i + 1 : currentPage - 2 + i;
+                  if (pageNum <= totalPages && pageNum > 0) {
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`px-4 py-2 border border-gray-300 rounded-md text-sm sm:text-base ${
+                          currentPage === pageNum
+                            ? "bg-gray-800 text-white"
+                            : "text-gray-700 hover:bg-gray-50"
+                        } transition duration-200`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  }
+                  return null;
+                })}
+                {currentPage < totalPages - 2 && (
+                  <>
+                    {currentPage < totalPages - 3 && (
+                      <span className="px-4 py-2 text-gray-700">...</span>
+                    )}
+                    <button
+                      onClick={() => setCurrentPage(totalPages)}
+                      className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base hover:bg-gray-50 transition duration-200"
+                    >
+                      {totalPages}
+                    </button>
+                  </>
+                )}
+              </>
+            )}
+            <button
+              onClick={() =>
+                setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+              }
+              disabled={currentPage === totalPages}
+              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base disabled:opacity-50 hover:bg-gray-50 transition duration-200"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
