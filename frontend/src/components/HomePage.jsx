@@ -385,6 +385,7 @@ const processBatchUpdates = useCallback(async () => {
       const rowData = paymentsData[rowIndex];
       if (!rowData) {
         console.warn(`HomePage.jsx: Invalid rowIndex ${rowIndex}`);
+        setLocalErrorMessage(`Invalid row index ${rowIndex}. Please refresh and try again.`);
         setErrorMessage(`Invalid row index ${rowIndex}. Please refresh and try again.`);
         continue;
       }
@@ -494,14 +495,19 @@ const processBatchUpdates = useCallback(async () => {
               console.log(`HomePage.jsx: WhatsApp message sent successfully to ${clientPhone} for ${clientName}`, whatsappResponse.data);
               notificationSent = true;
             } catch (whatsappError) {
-              console.error(`HomePage.jsx: Failed to send WhatsApp message to ${clientPhone}:`, whatsappError, { response: whatsappError.response?.data });
-              setErrorMessage(
-                `Payment updated successfully, but failed to send WhatsApp notification to ${clientName}: ${
-                  whatsappError.response?.data?.error || whatsappError.message
-                }. Attempting email notification.`
-              );
+                console.error(`HomePage.jsx: Failed to send WhatsApp message to ${clientPhone}:`, whatsappError, { response: whatsappError.response?.data });
+                setLocalErrorMessage(
+                  `Payment updated successfully, but failed to send WhatsApp notification to ${clientName}: ${
+                    whatsappError.response?.data?.error || whatsappError.message
+                  }. Attempting email notification.`
+                );
+                setErrorMessage(
+                  `Payment updated successfully, but failed to send WhatsApp notification to ${clientName}: ${
+                    whatsappError.response?.data?.error || whatsappError.message
+                  }. Attempting email notification.`
+                );
+              }
             }
-          }
 
           // Fall back to email if WhatsApp fails or no valid phone number
           if (!notificationSent && hasValidEmailAddress) {
@@ -578,14 +584,19 @@ const processBatchUpdates = useCallback(async () => {
               console.log(`HomePage.jsx: Email sent successfully to ${clientEmail} for ${clientName}`);
               notificationSent = true;
             } catch (emailError) {
-              console.error(`HomePage.jsx: Failed to send email to ${clientEmail}:`, emailError);
-              setErrorMessage(
-                `Payment updated successfully, but failed to send email to ${clientName}: ${
-                  emailError.response?.data?.error || emailError.message
-                }`
-              );
+                console.error(`HomePage.jsx: Failed to send email to ${clientEmail}:`, emailError);
+                setLocalErrorMessage(
+                  `Payment updated successfully, but failed to send email to ${clientName}: ${
+                    emailError.response?.data?.error || emailError.message
+                  }`
+                );
+                setErrorMessage(
+                  `Payment updated successfully, but failed to send email to ${clientName}: ${
+                    emailError.response?.data?.error || emailError.message
+                  }`
+                );
+              }
             }
-          }
 
           // If no notification was sent, add to missing contact list
           if (!notificationSent && !hasValidPhone && !hasValidEmailAddress) {
@@ -596,27 +607,27 @@ const processBatchUpdates = useCallback(async () => {
           console.log(`HomePage.jsx: All payments are fully paid for ${clientName}, no notification needed`);
         }
       } catch (error) {
-        console.error(`HomePage.jsx: Failed to batch update row ${rowIndex}:`, error);
-        setErrorMessage(`Failed to update ${rowData.Client_Name}: ${error.response?.data?.error || error.message}`);
-        setPaymentsData((prev) =>
-          prev.map((row, idx) =>
-            idx === rowIndex ? { ...paymentsData[rowIndex] } : row
-          )
-        );
-        updateQueueRef.current.push(...updates.filter((u) => u.rowIndex === rowIndex));
+          console.error(`HomePage.jsx: Failed to batch update row ${rowIndex}:`, error);
+          setLocalErrorMessage(`Failed to update ${rowData.Client_Name}: ${error.response?.data?.error || error.message}`);
+          setErrorMessage(`Failed to update ${rowData.Client_Name}: ${error.response?.data?.error || error.message}`);
+          setPaymentsData((prev) =>
+            prev.map((row, idx) =>
+              idx === rowIndex ? { ...paymentsData[rowIndex] } : row
+            )
+          );
+          updateQueueRef.current.push(...updates.filter((u) => u.rowIndex === rowIndex));
+        }
       }
-    }
 
     setLocalInputValues(updatedLocalValues);
     // Display warning if any clients lacked contact details
     if (missingContactClients.length > 0) {
-      setErrorMessage(
-        `Payments updated, but notifications could not be sent to: ${missingContactClients.join(
-          ", "
-        )} (missing valid phone number or email address).`
-      );
+        const errorMsg = `Payments updated, but notifications could not be sent to: ${missingContactClients.join(", ")} (missing valid phone number or email address).`;
+        setLocalErrorMessage(errorMsg);
+        setErrorMessage(errorMsg);
     } else if (!updateQueueRef.current.length) {
-      setErrorMessage(""); // Clear any previous error if all notifications were sent
+        setLocalErrorMessage("");
+        setErrorMessage("");
     }
     if (updateQueueRef.current.length > 0) {
       console.log("HomePage.jsx: Scheduling retry for failed updates");
@@ -866,14 +877,14 @@ const processBatchUpdates = useCallback(async () => {
   }, [hideContextMenu]);
 
 useEffect(() => {
-  if (errorMessage || errorMessage) {
+  if (errorMessage) {
     const timer = setTimeout(() => {
       setLocalErrorMessage("");
       setErrorMessage(""); // Clear parent error state
     }, 5000);
     return () => clearTimeout(timer);
   }
-}, [errorMessage, errorMessage, setErrorMessage]);
+}, [errorMessage, setErrorMessage]);
 
 
 const renderDashboard = () => {
