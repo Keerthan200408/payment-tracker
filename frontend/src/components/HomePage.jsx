@@ -389,8 +389,6 @@ const hasValidEmail = useCallback((clientData) => {
       </div>
     );
   };
-
-  
 const processBatchUpdates = useCallback(async () => {
   if (!updateQueueRef.current.length) {
     console.log("HomePage.jsx: No updates to process");
@@ -405,47 +403,66 @@ const processBatchUpdates = useCallback(async () => {
   setIsUpdating(true);
 
   const updatedLocalValues = { ...localInputValues };
-  const missingContactClients = []; // Track clients with missing phone/email
+  const missingContactClients = [];
+
+  // Pre-calculate row data to avoid repeated lookups
+  const rowDataCache = new Map();
+  updates.forEach(({ rowIndex }) => {
+    if (!rowDataCache.has(rowIndex) && paymentsData[rowIndex]) {
+      rowDataCache.set(rowIndex, paymentsData[rowIndex]);
+    }
+  });
 
   const updatesByRow = updates.reduce((acc, update) => {
     const { rowIndex, month, value, year } = update;
     if (!acc[rowIndex]) {
-      const rowData = paymentsData[rowIndex];
+      const rowData = rowDataCache.get(rowIndex);
+      if (!rowData) {
+        console.warn(`HomePage.jsx: Invalid rowIndex ${rowIndex}`);
+        return acc;
+      }
+      
       console.log(`DEBUG: Row ${rowIndex} data:`, {
-        Client_Name: rowData?.Client_Name,
-        Type: rowData?.Type,
-        Email: rowData?.Email,
-        Phone_Number: rowData?.Phone_Number,
-        allFields: rowData ? Object.keys(rowData) : 'rowData is null'
+        Client_Name: rowData.Client_Name,
+        Type: rowData.Type,
+        Email: rowData.Email,
+        Phone_Number: rowData.Phone_Number,
       });
-      const clientEmail = rowData?.Email || "";
-      const clientPhone = rowData?.Phone_Number || "";
+      
       acc[rowIndex] = {
         rowIndex,
         year,
         updates: [],
-        clientName: rowData?.Client_Name,
-        type: rowData?.Type,
-        clientEmail,
-        clientPhone,
-        duePayment: rowData?.Due_Payment || "0.00" // Include Due_Payment
+        clientName: rowData.Client_Name,
+        type: rowData.Type,
+        clientEmail: rowData.Email || "",
+        clientPhone: rowData.Phone_Number || "",
+        duePayment: rowData.Due_Payment || "0.00",
+        rowData // Cache the row data
       };
     }
     acc[rowIndex].updates.push({ month, value });
     return acc;
   }, {});
 
+  // Batch state updates to reduce re-renders
+  const stateUpdates = {
+    paymentsData: [],
+    pendingUpdates: {},
+    localValues: { ...updatedLocalValues }
+  };
+
   try {
-    for (const rowUpdate of Object.values(updatesByRow)) {
-      const { rowIndex, year, updates, clientName, type, clientEmail, clientPhone, duePayment } = rowUpdate;
-      const rowData = paymentsData[rowIndex];
+    // Process all updates in parallel where possible
+    const updatePromises = Object.values(updatesByRow).map(async (rowUpdate) => {
+      const { rowIndex, year, updates, clientName, type, clientEmail, clientPhone, duePayment, rowData } = rowUpdate;
+      
       if (!rowData) {
         console.warn(`HomePage.jsx: Invalid rowIndex ${rowIndex}`);
-        setLocalErrorMessage(`Invalid row index ${rowIndex}. Please refresh and try again.`);
-        setErrorMessage(`Invalid row index ${rowIndex}. Please refresh and try again.`);
-        continue;
+        return { success: false, rowIndex, error: `Invalid row index ${rowIndex}` };
       }
 
+      // Pre-calculate statuses for notifications
       const statuses = updates.map(({ month, value }) => {
         const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
         const paidInMonth = parseFloat(value) || 0;
@@ -453,306 +470,361 @@ const processBatchUpdates = useCallback(async () => {
         if (paidInMonth === 0) status = "Unpaid";
         else if (paidInMonth >= amountToBePaid) status = "Paid";
         else status = "PartiallyPaid";
-        console.log("Status for", month, ":", { paidInMonth, amountToBePaid, status });
         return { month, status, paidAmount: paidInMonth, expectedAmount: amountToBePaid };
       });
 
-      setPaymentsData((prev) => {
-        const updatedPayments = [...prev];
-        const rowData = { ...updatedPayments[rowIndex] };
-        updates.forEach(({ month, value }) => {
-          rowData[month] = value || "";
-        });
-
-        const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
-        const activeMonths = months.filter(
-          (m) => rowData[m] && parseFloat(rowData[m]) >= 0
-        ).length;
-        const expectedPayment = amountToBePaid * activeMonths;
-        const totalPayments = months.reduce(
-          (sum, m) => sum + (parseFloat(rowData[m]) || 0),
-          0
-        );
-        const currentYearDuePayment = Math.max(expectedPayment - totalPayments, 0);
-        rowData.Due_Payment = currentYearDuePayment.toFixed(2);
-        updatedPayments[rowIndex] = rowData;
-        return updatedPayments;
+      // Prepare optimistic updates
+      const optimisticRowData = { ...rowData };
+      updates.forEach(({ month, value }) => {
+        optimisticRowData[month] = value || "";
       });
 
+      // Calculate due payment
+      const amountToBePaid = parseFloat(optimisticRowData.Amount_To_Be_Paid) || 0;
+      const activeMonths = months.filter(
+        (m) => optimisticRowData[m] && parseFloat(optimisticRowData[m]) >= 0
+      ).length;
+      const expectedPayment = amountToBePaid * activeMonths;
+      const totalPayments = months.reduce(
+        (sum, m) => sum + (parseFloat(optimisticRowData[m]) || 0),
+        0
+      );
+      const currentYearDuePayment = Math.max(expectedPayment - totalPayments, 0);
+      optimisticRowData.Due_Payment = currentYearDuePayment.toFixed(2);
+
+      // Store optimistic update for batch state update
+      stateUpdates.paymentsData.push({ rowIndex, data: optimisticRowData });
+
       try {
+        // Make API call
         const response = await axios.post(
           `${BASE_URL}/batch-save-payments`,
           { clientName, type, updates },
           {
             headers: { Authorization: `Bearer ${sessionToken}` },
             params: { year },
-            timeout: 10000,
+            timeout: 8000, // Reduced timeout for faster response
           }
         );
+
         const { updatedRow } = response.data;
+        
+        // Prepare local values update
         updates.forEach(({ month }) => {
           const key = `${rowIndex}-${month}`;
-          updatedLocalValues[key] = updatedRow[month] || "";
-          setPendingUpdates((prev) => {
-            const newPending = { ...prev };
-            delete newPending[key];
-            return newPending;
-          });
+          stateUpdates.localValues[key] = updatedRow[month] || "";
+          stateUpdates.pendingUpdates[key] = false; // Mark as not pending
         });
-        setPaymentsData((prev) =>
-          prev.map((row, idx) =>
-            idx === rowIndex ? { ...row, ...updatedRow } : row
-          )
-        );
 
+        // Handle notifications asynchronously (don't block UI updates)
         const notifyStatuses = statuses.filter(
           ({ status }) => status === "PartiallyPaid" || status === "Unpaid"
         );
 
-        console.log("Checking notification conditions:", {
-          clientName,
-          clientEmail,
-          clientPhone,
-          notifyStatuses,
-          hasValidPhone: clientPhone && /^\+?[\d\s-]{10,15}$/.test(clientPhone),
-          hasValidEmailAddress: hasValidEmail({ Email: clientEmail, email: clientEmail }),
-        });
-
-        let notificationSent = false;
+        // Fire and forget notifications to avoid blocking
         if (notifyStatuses.length > 0) {
-          const hasValidPhone = clientPhone && /^\+?[\d\s-]{10,15}$/.test(clientPhone);
-          const hasValidEmailAddress = hasValidEmail({ Email: clientEmail, email: clientEmail });
-
-          // Try WhatsApp notification first if phone number exists
-          if (hasValidPhone) {
-            try {
-              const duePaymentText = parseFloat(duePayment) > 0
-                ? `\n\nTotal Due Payment: ₹${parseFloat(duePayment).toFixed(2)}`
-                : "";
-              const messageContent = `Dear ${clientName},\n\nYour payment status for ${type} (${year}) has been updated:\n\n${notifyStatuses
-                .map(
-                  ({ month, status, paidAmount, expectedAmount }) =>
-                    `- ${month.charAt(0).toUpperCase() + month.slice(1)}: ${status} (Paid: ₹${paidAmount.toFixed(2)}, Expected: ₹${expectedAmount.toFixed(2)})`
-                )
-                .join("\n")}${duePaymentText}\n\nPlease review your account or contact us for clarifications.\nBest regards,\nPayment Tracker Team`;
-
-              const whatsappResponse = await axios.post(
-                `${BASE_URL}/send-whatsapp`,
-                {
-                  to: clientPhone.trim(),
-                  message: messageContent,
-                },
-                {
-                  headers: { Authorization: `Bearer ${sessionToken}` },
-                  timeout: 15000,
-                }
+          handleNotifications(clientName, clientEmail, clientPhone, type, year, notifyStatuses, duePayment)
+            .catch(error => {
+              console.error(`Notification failed for ${clientName}:`, error);
+              // Handle notification errors separately without blocking main flow
+              setLocalErrorMessage(prev => 
+                prev ? `${prev}; Notification failed for ${clientName}` 
+                     : `Notification failed for ${clientName}`
               );
-
-              console.log(`HomePage.jsx: WhatsApp message sent successfully to ${clientPhone} for ${clientName}`, whatsappResponse.data);
-              notificationSent = true;
-            } catch (whatsappError) {
-                console.error(`HomePage.jsx: Failed to send WhatsApp message to ${clientPhone}:`, whatsappError, { response: whatsappError.response?.data });
-                setLocalErrorMessage(
-                  `Payment updated successfully, but failed to send WhatsApp notification to ${clientName}: ${
-                    whatsappError.response?.data?.error || whatsappError.message
-                  }. Attempting email notification.`
-                );
-                setErrorMessage(
-                  `Payment updated successfully, but failed to send WhatsApp notification to ${clientName}: ${
-                    whatsappError.response?.data?.error || whatsappError.message
-                  }. Attempting email notification.`
-                );
-              }
-            }
-
-          // Fall back to email if WhatsApp fails or no valid phone number
-          if (!notificationSent && hasValidEmailAddress) {
-            try {
-              const duePaymentText = parseFloat(duePayment) > 0
-                ? `<p><strong>Total Due Payment:</strong> ₹${parseFloat(duePayment).toFixed(2)}</p>`
-                : "";
-              const emailContent = `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                  <h2 style="color: #333; border-bottom: 2px solid #007bff; padding-bottom: 10px;">
-                    Payment Status Update
-                  </h2>
-                  <p>Dear <strong>${clientName}</strong>,</p>
-                  <p>Your payment status for <strong>${type}</strong> has been updated for <strong>${year}</strong>:</p>
-                  <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-                    <thead>
-                      <tr style="background-color: #f8f9fa;">
-                        <th style="border: 1px solid #dee2e6; padding: 12px; text-align: left;">Month</th>
-                        <th style="border: 1px solid #dee2e6; padding: 12px; text-align: left;">Status</th>
-                        <th style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">Paid Amount</th>
-                        <th style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">Expected Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      ${notifyStatuses
-                        .map(
-                          ({ month, status, paidAmount, expectedAmount }) => `
-                        <tr>
-                          <td style="border: 1px solid #dee2e6; padding: 12px;">${
-                            month.charAt(0).toUpperCase() + month.slice(1)
-                          }</td>
-                          <td style="border: 1px solid #dee2e6; padding: 12px;">
-                            <span style="
-                              padding: 4px 8px; 
-                              border-radius: 4px; 
-                              color: white;
-                              background-color: ${status === 'Unpaid' ? '#dc3545' : '#ffc107'};
-                            ">${status === 'PartiallyPaid' ? 'Partially Paid' : status}</span>
-                          </td>
-                          <td style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">₹${paidAmount.toFixed(2)}</td>
-                          <td style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">₹${expectedAmount.toFixed(2)}</td>
-                        </tr>
-                      `
-                        )
-                        .join("")}
-                    </tbody>
-                  </table>
-                  ${duePaymentText}
-                  <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                    <p style="margin: 0;"><strong>Note:</strong> Please review your account or contact us for any clarifications regarding your payment status.</p>
-                  </div>
-                  <p>Best regards,<br>
-                  <strong>Payment Tracker Team</strong></p>
-                  <hr style="margin: 30px 0; border: none; border-top: 1px solid #dee2e6;">
-                  <p style="font-size: 12px; color: #6c757d;">
-                    This is an automated notification. Please do not reply to this email.
-                  </p>
-                </div>
-              `;
-
-              await axios.post(
-                `${BASE_URL}/send-email`,
-                {
-                  to: clientEmail.trim(),
-                  subject: `Payment Status Update - ${clientName} (${type}) - ${year}`,
-                  html: emailContent,
-                },
-                {
-                  headers: { Authorization: `Bearer ${sessionToken}` },
-                  timeout: 15000,
-                }
-              );
-
-              console.log(`HomePage.jsx: Email sent successfully to ${clientEmail} for ${clientName}`);
-              notificationSent = true;
-            } catch (emailError) {
-                console.error(`HomePage.jsx: Failed to send email to ${clientEmail}:`, emailError);
-                setLocalErrorMessage(
-                  `Payment updated successfully, but failed to send email to ${clientName}: ${
-                    emailError.response?.data?.error || emailError.message
-                  }`
-                );
-                setErrorMessage(
-                  `Payment updated successfully, but failed to send email to ${clientName}: ${
-                    emailError.response?.data?.error || emailError.message
-                  }`
-                );
-              }
-            }
-
-          // If no notification was sent, add to missing contact list
-          if (!notificationSent && !hasValidPhone && !hasValidEmailAddress) {
-            missingContactClients.push(clientName);
-            console.log(`HomePage.jsx: No valid contact (phone/email) found for ${clientName}, skipping notification`);
-          }
-        } else {
-          console.log(`HomePage.jsx: All payments are fully paid for ${clientName}, no notification needed`);
+            });
         }
+
+        return { 
+          success: true, 
+          rowIndex, 
+          updatedRow, 
+          updates,
+          hasNotificationContact: !!(clientEmail || clientPhone)
+        };
+
       } catch (error) {
-          console.error(`HomePage.jsx: Failed to batch update row ${rowIndex}:`, error);
-          setLocalErrorMessage(`Failed to update ${rowData.Client_Name}: ${error.response?.data?.error || error.message}`);
-          setErrorMessage(`Failed to update ${rowData.Client_Name}: ${error.response?.data?.error || error.message}`);
-          setPaymentsData((prev) =>
-            prev.map((row, idx) =>
-              idx === rowIndex ? { ...paymentsData[rowIndex] } : row
-            )
-          );
-          updateQueueRef.current.push(...updates.filter((u) => u.rowIndex === rowIndex));
-        }
+        console.error(`HomePage.jsx: Failed to batch update row ${rowIndex}:`, error);
+        return { 
+          success: false, 
+          rowIndex, 
+          error: error.response?.data?.error || error.message,
+          updates 
+        };
       }
+    });
 
-    setLocalInputValues(updatedLocalValues);
-    // Display warning if any clients lacked contact details
-    if (missingContactClients.length > 0) {
-        const errorMsg = `Payments updated, but notifications could not be sent to: ${missingContactClients.join(", ")} (missing valid phone number or email address).`;
-        setLocalErrorMessage(errorMsg);
-        setErrorMessage(errorMsg);
-    } else if (!updateQueueRef.current.length) {
-        setLocalErrorMessage("");
-        setErrorMessage("");
+    // Wait for all updates to complete
+    const results = await Promise.all(updatePromises);
+
+    // Process results and batch state updates
+    const failedUpdates = [];
+    const successfulUpdates = [];
+    const clientsWithoutContact = [];
+
+    results.forEach(result => {
+      if (result.success) {
+        successfulUpdates.push(result);
+        if (!result.hasNotificationContact) {
+          const rowData = rowDataCache.get(result.rowIndex);
+          if (rowData) clientsWithoutContact.push(rowData.Client_Name);
+        }
+      } else {
+        failedUpdates.push(result);
+      }
+    });
+
+    // Single batch state update for payments data
+    setPaymentsData(prev => {
+      const updated = [...prev];
+      successfulUpdates.forEach(({ rowIndex, updatedRow }) => {
+        if (updatedRow) {
+          updated[rowIndex] = { ...updated[rowIndex], ...updatedRow };
+        }
+      });
+      return updated;
+    });
+
+    // Single batch update for pending updates
+    setPendingUpdates(prev => {
+      const newPending = { ...prev };
+      successfulUpdates.forEach(({ updates, rowIndex }) => {
+        updates.forEach(({ month }) => {
+          const key = `${rowIndex}-${month}`;
+          delete newPending[key];
+        });
+      });
+      return newPending;
+    });
+
+    // Single update for local input values
+    setLocalInputValues(stateUpdates.localValues);
+
+    // Handle errors and retries
+    if (failedUpdates.length > 0) {
+      const retryUpdates = [];
+      failedUpdates.forEach(({ rowIndex, updates, error }) => {
+        const rowData = rowDataCache.get(rowIndex);
+        setLocalErrorMessage(`Failed to update ${rowData?.Client_Name || 'unknown'}: ${error}`);
+        setErrorMessage(`Failed to update ${rowData?.Client_Name || 'unknown'}: ${error}`);
+        
+        // Revert optimistic updates for failed rows
+        setPaymentsData(prev => 
+          prev.map((row, idx) => 
+            idx === rowIndex ? rowDataCache.get(rowIndex) : row
+          )
+        );
+        
+        updates.forEach(update => retryUpdates.push({ ...update, rowIndex }));
+      });
+      
+      updateQueueRef.current.push(...retryUpdates);
     }
+
+    // Handle missing contact warnings
+    if (clientsWithoutContact.length > 0) {
+      const errorMsg = `Payments updated, but notifications could not be sent to: ${clientsWithoutContact.join(", ")} (missing valid phone number or email address).`;
+      setLocalErrorMessage(errorMsg);
+      setErrorMessage(errorMsg);
+    } else if (failedUpdates.length === 0) {
+      setLocalErrorMessage("");
+      setErrorMessage("");
+    }
+
+    // Schedule retry for failed updates
     if (updateQueueRef.current.length > 0) {
       console.log("HomePage.jsx: Scheduling retry for failed updates");
-      batchTimerRef.current = setTimeout(processBatchUpdates, 1500);
+      batchTimerRef.current = setTimeout(processBatchUpdates, 1000); // Faster retry
     }
+
   } catch (error) {
-  console.error('HomePage.jsx: Batch update error:', error);
-  const errorMsg = error.response?.data?.error || error.message;
-  let userMessage = 'Batch update failed. Please try again.';
-  if (errorMsg.includes('Sheet not found')) {
-    userMessage = 'Payment data not found. Please refresh and try again.';
-  } else if (errorMsg.includes('Quota exceeded')) {
-    userMessage = 'Server is busy. Please try again in a few minutes.';
-  } else if (errorMsg.includes('Payment record not found')) {
-    userMessage = 'Client payment data not found. Please add the client first.';
+    console.error('HomePage.jsx: Batch update error:', error);
+    const errorMsg = error.response?.data?.error || error.message;
+    let userMessage = 'Batch update failed. Please try again.';
+    
+    if (errorMsg.includes('Sheet not found')) {
+      userMessage = 'Payment data not found. Please refresh and try again.';
+    } else if (errorMsg.includes('Quota exceeded')) {
+      userMessage = 'Server is busy. Please try again in a few minutes.';
+    } else if (errorMsg.includes('Payment record not found')) {
+      userMessage = 'Client payment data not found. Please add the client first.';
+    }
+    
+    setLocalErrorMessage(userMessage);
+    setErrorMessage(userMessage);
+    updateQueueRef.current = [...updates, ...updateQueueRef.current];
+    batchTimerRef.current = setTimeout(processBatchUpdates, 2000);
+  } finally {
+    setIsUpdating(false);
   }
-  setLocalErrorMessage(userMessage);
-  setErrorMessage(userMessage);
-  updateQueueRef.current = [...updates, ...updateQueueRef.current];
-  batchTimerRef.current = setTimeout(processBatchUpdates, 1500 * 2);
-} finally {
-  setIsUpdating(false);
-}
 }, [paymentsData, sessionToken, months, localInputValues, hasValidEmail, setErrorMessage]);
 
-  const debouncedUpdate = useCallback(
-    (rowIndex, month, value, year) => {
-      if (!paymentsData.length) {
-        console.warn("HomePage.jsx: Cannot queue update, paymentsData is empty");
-        setErrorMessage("Please wait for data to load before making updates.");
-        return;
-      }
-      if (!paymentsData[rowIndex]) {
-        console.warn("HomePage.jsx: Invalid rowIndex:", rowIndex);
-        setErrorMessage("Invalid row index.");
-        return;
-      }
-      const key = `${rowIndex}-${month}`;
-      setLocalInputValues((prev) => ({
-        ...prev,
-        [key]: value,
-      }));
-      if (debounceTimersRef.current[key]) {
-        clearTimeout(debounceTimersRef.current[key]);
-      }
-      setPendingUpdates((prev) => ({
-        ...prev,
-        [key]: true,
-      }));
-      debounceTimersRef.current[key] = setTimeout(() => {
-        updateQueueRef.current = updateQueueRef.current.filter(
-          (update) => !(update.rowIndex === rowIndex && update.month === month)
-        );
-        updateQueueRef.current.push({
-          rowIndex,
-          month,
-          value,
-          year,
-          timestamp: Date.now(),
-        });
-        console.log("HomePage.jsx: Queued update:", { rowIndex, month, value, year });
-        if (!batchTimerRef.current) {
-          batchTimerRef.current = setTimeout(processBatchUpdates, 1500);
+// Separate notification handler to avoid blocking main updates
+const handleNotifications = useCallback(async (clientName, clientEmail, clientPhone, type, year, notifyStatuses, duePayment) => {
+  const hasValidPhone = clientPhone && /^\+?[\d\s-]{10,15}$/.test(clientPhone);
+  const hasValidEmailAddress = hasValidEmail({ Email: clientEmail, email: clientEmail });
+
+  let notificationSent = false;
+
+  // Try WhatsApp first
+  if (hasValidPhone) {
+    try {
+      const duePaymentText = parseFloat(duePayment) > 0
+        ? `\n\nTotal Due Payment: ₹${parseFloat(duePayment).toFixed(2)}`
+        : "";
+      const messageContent = `Dear ${clientName},\n\nYour payment status for ${type} (${year}) has been updated:\n\n${notifyStatuses
+        .map(({ month, status, paidAmount, expectedAmount }) =>
+          `- ${month.charAt(0).toUpperCase() + month.slice(1)}: ${status} (Paid: ₹${paidAmount.toFixed(2)}, Expected: ₹${expectedAmount.toFixed(2)})`
+        )
+        .join("\n")}${duePaymentText}\n\nPlease review your account or contact us for clarifications.\nBest regards,\nPayment Tracker Team`;
+
+      await axios.post(
+        `${BASE_URL}/send-whatsapp`,
+        {
+          to: clientPhone.trim(),
+          message: messageContent,
+        },
+        {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+          timeout: 10000,
         }
-        delete debounceTimersRef.current[key];
-      }, 1500);
-    },
-    [paymentsData]
-  );
+      );
+
+      console.log(`WhatsApp sent to ${clientPhone} for ${clientName}`);
+      notificationSent = true;
+    } catch (whatsappError) {
+      console.error(`WhatsApp failed for ${clientPhone}:`, whatsappError);
+    }
+  }
+
+  // Fallback to email
+  if (!notificationSent && hasValidEmailAddress) {
+    try {
+      const duePaymentText = parseFloat(duePayment) > 0
+        ? `<p><strong>Total Due Payment:</strong> ₹${parseFloat(duePayment).toFixed(2)}</p>`
+        : "";
+      const emailContent = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333; border-bottom: 2px solid #007bff; padding-bottom: 10px;">
+            Payment Status Update
+          </h2>
+          <p>Dear <strong>${clientName}</strong>,</p>
+          <p>Your payment status for <strong>${type}</strong> has been updated for <strong>${year}</strong>:</p>
+          <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <thead>
+              <tr style="background-color: #f8f9fa;">
+                <th style="border: 1px solid #dee2e6; padding: 12px; text-align: left;">Month</th>
+                <th style="border: 1px solid #dee2e6; padding: 12px; text-align: left;">Status</th>
+                <th style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">Paid Amount</th>
+                <th style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">Expected Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${notifyStatuses
+                .map(({ month, status, paidAmount, expectedAmount }) => `
+                <tr>
+                  <td style="border: 1px solid #dee2e6; padding: 12px;">${
+                    month.charAt(0).toUpperCase() + month.slice(1)
+                  }</td>
+                  <td style="border: 1px solid #dee2e6; padding: 12px;">
+                    <span style="padding: 4px 8px; border-radius: 4px; color: white; background-color: ${status === 'Unpaid' ? '#dc3545' : '#ffc107'};">
+                      ${status === 'PartiallyPaid' ? 'Partially Paid' : status}
+                    </span>
+                  </td>
+                  <td style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">₹${paidAmount.toFixed(2)}</td>
+                  <td style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">₹${expectedAmount.toFixed(2)}</td>
+                </tr>
+                `)
+                .join("")}
+            </tbody>
+          </table>
+          ${duePaymentText}
+          <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <p style="margin: 0;"><strong>Note:</strong> Please review your account or contact us for any clarifications.</p>
+          </div>
+          <p>Best regards,<br><strong>Payment Tracker Team</strong></p>
+        </div>
+      `;
+
+      await axios.post(
+        `${BASE_URL}/send-email`,
+        {
+          to: clientEmail.trim(),
+          subject: `Payment Status Update - ${clientName} (${type}) - ${year}`,
+          html: emailContent,
+        },
+        {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+          timeout: 10000,
+        }
+      );
+
+      console.log(`Email sent to ${clientEmail} for ${clientName}`);
+    } catch (emailError) {
+      console.error(`Email failed for ${clientEmail}:`, emailError);
+      throw emailError;
+    }
+  }
+}, [sessionToken, hasValidEmail]);
+
+const debouncedUpdate = useCallback(
+  (rowIndex, month, value, year) => {
+    if (!paymentsData.length) {
+      console.warn("HomePage.jsx: Cannot queue update, paymentsData is empty");
+      setErrorMessage("Please wait for data to load before making updates.");
+      return;
+    }
+    if (!paymentsData[rowIndex]) {
+      console.warn("HomePage.jsx: Invalid rowIndex:", rowIndex);
+      setErrorMessage("Invalid row index.");
+      return;
+    }
+
+    const key = `${rowIndex}-${month}`;
+    
+    // Immediate UI update for responsiveness
+    setLocalInputValues((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+
+    // Clear existing timer
+    if (debounceTimersRef.current[key]) {
+      clearTimeout(debounceTimersRef.current[key]);
+    }
+
+    // Mark as pending
+    setPendingUpdates((prev) => ({
+      ...prev,
+      [key]: true,
+    }));
+
+    // Reduced debounce time for faster processing
+    debounceTimersRef.current[key] = setTimeout(() => {
+      // Remove duplicate updates for same cell
+      updateQueueRef.current = updateQueueRef.current.filter(
+        (update) => !(update.rowIndex === rowIndex && update.month === month)
+      );
+      
+      updateQueueRef.current.push({
+        rowIndex,
+        month,
+        value,
+        year,
+        timestamp: Date.now(),
+      });
+
+      console.log("HomePage.jsx: Queued update:", { rowIndex, month, value, year });
+
+      // Start batch processing sooner
+      if (!batchTimerRef.current) {
+        batchTimerRef.current = setTimeout(processBatchUpdates, 800); // Reduced from 1500ms
+      }
+
+      delete debounceTimersRef.current[key];
+    }, 800); // Reduced from 1500ms for faster response
+  },
+  [paymentsData, setErrorMessage]
+);
 
   const handleYearChangeDebounced = useCallback(
     (year) => {
