@@ -369,10 +369,12 @@ const importCsv = async (e) => {
   }
   setIsImporting(true);
   setErrorMessage("");
+  let capitalizedTypes = [];
+  let errors = [];
   try {
-    // Fetch types for the user
+    // Fetch types
     await fetchTypes(sessionToken);
-    const capitalizedTypes = types.map((type) => type.toUpperCase());
+    capitalizedTypes = types.map((type) => type.toUpperCase());
     console.log(`App.jsx: Valid types for ${currentUser}:`, capitalizedTypes);
 
     // Parse CSV
@@ -392,7 +394,6 @@ const importCsv = async (e) => {
 
     // Process rows
     const records = [];
-    const errors = [];
     rows.forEach((row, index) => {
       let clientName = "",
         type = "",
@@ -433,7 +434,7 @@ const importCsv = async (e) => {
       ]);
     });
 
-    // Check for types after parsing to provide detailed feedback
+    // Check for types after parsing
     if (!capitalizedTypes.length) {
       const errorMsg = `No payment types defined for user ${currentUser}. Please navigate to the dashboard and click 'Add Type' to add types (e.g., GST, IT RETURN) before importing.${
         errors.length > 0
@@ -458,6 +459,7 @@ const importCsv = async (e) => {
     console.log(
       `Importing ${records.length} valid records for user ${currentUser}...`
     );
+    let importedCount = 0;
     for (let i = 0; i < records.length; i += batchSize) {
       const batch = records.slice(i, i + batchSize);
       console.log(
@@ -466,17 +468,31 @@ const importCsv = async (e) => {
         )}...`
       );
       console.log("Batch data:", batch);
-      const response = await retryWithBackoff(
-        () =>
-          axios.post(`${BASE_URL}/import-csv`, batch, {
-            headers: { Authorization: `Bearer ${sessionToken}` },
-            params: { year: currentYear },
-            timeout: 45000,
-          }),
-        3, // Retry up to 3 times
-        1000 // 1-second delay between retries
-      );
-      console.log(`Batch response:`, response.data);
+      try {
+        const response = await retryWithBackoff(
+          () =>
+            axios.post(`${BASE_URL}/import-csv`, batch, {
+              headers: { Authorization: `Bearer ${sessionToken}` },
+              params: { year: currentYear },
+              timeout: 45000,
+            }),
+          3,
+          1000
+        );
+        console.log(`Batch response:`, response.data);
+        importedCount += response.data.imported || batch.length;
+      } catch (batchError) {
+        console.error(`Batch ${Math.floor(i / batchSize) + 1} failed:`, {
+          message: batchError.message,
+          response: batchError.response?.data,
+          status: batchError.response?.status,
+        });
+        errors.push(
+          `Batch ${Math.floor(i / batchSize) + 1} failed: ${
+            batchError.response?.data?.error || batchError.message
+          }`
+        );
+      }
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
 
@@ -487,18 +503,18 @@ const importCsv = async (e) => {
     delete apiCacheRef.current[cacheKeyClients];
     const message =
       errors.length > 0
-        ? `CSV imported successfully! ${
+        ? `CSV import partially completed! ${importedCount} of ${
             records.length
           } valid records imported for user ${currentUser}. ${
             errors.length
-          } row(s) skipped due to errors:\n${errors.join("\n")}`
-        : `CSV imported successfully! ${records.length} records imported for user ${currentUser}.`;
+          } error(s) occurred:\n${errors.join("\n")}`
+        : `CSV imported successfully! ${importedCount} records imported for user ${currentUser}.`;
     alert(message);
     setErrorMessage(
       errors.length > 0
-        ? `Imported ${records.length} records with ${
+        ? `Imported ${importedCount} of ${records.length} records with ${
             errors.length
-          } errors for user ${currentUser}:\n${errors.join("\n")}`
+          } error(s) for user ${currentUser}:\n${errors.join("\n")}`
         : ""
     );
     await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -515,19 +531,15 @@ const importCsv = async (e) => {
       errorMessage = `${errorMessage} Navigate to the dashboard and click 'Add Type' to add types (e.g., GST, IT RETURN).`;
     } else if (err.message.includes("timeout")) {
       errorMessage = `Request timed out while importing CSV for user ${currentUser}. Please check your connection and try again.`;
-    } else if (!capitalizedTypes.length) {
-      errorMessage = `No payment types defined for user ${currentUser}. Please navigate to the dashboard and click 'Add Type' to add types (e.g., GST, IT RETURN).${
-        errors.length > 0 ? `\n\nCSV Errors:\n${errors.join("\n")}` : ""
-      }`;
     } else {
-      errorMessage = `Failed to import CSV for user ${currentUser}. Ensure Type is one of: ${capitalizedTypes.join(
-        ", "
-      )} and Monthly Payment is a valid number.${
+      errorMessage = `Failed to import CSV for user ${currentUser}. Ensure Type is one of: ${
+        capitalizedTypes.length ? capitalizedTypes.join(", ") : "none"
+      } and Monthly Payment is a valid number.${
         errors.length > 0 ? `\n\nCSV Errors:\n${errors.join("\n")}` : ""
       }`;
     }
     setErrorMessage(errorMessage);
-    throw err; // Re-throw to let handleImportCsv catch it
+    throw err;
   } finally {
     setIsImporting(false);
   }
