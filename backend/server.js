@@ -1531,10 +1531,11 @@ app.post("/api/batch-save-payments", authenticateToken, paymentLimiter, async (r
     res.status(500).json({ error: `Failed to save batch payments: ${error.message}` });
   }
 });
-// Add case-insensitive routing
+
+// Simply duplicate the handler for uppercase route
 app.post("/api/BATCH-SAVE-PAYMENTS", authenticateToken, paymentLimiter, async (req, res) => {
-  req.url = '/api/batch-save-payments'; // Redirect to lowercase
-  app._router.handle(req, res);
+  // Call the same logic as lowercase route
+  return app._router.handle({...req, url: '/api/batch-save-payments'}, res);
 });
 
 // Get User Years
