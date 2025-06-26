@@ -231,20 +231,26 @@ const HomePage = ({
           setCachedData(cacheKey, years);
           console.log("HomePage.jsx: Fetched years:", years);
         } catch (error) {
-          if (error.name === "AbortError") {
-            console.log("HomePage.jsx: Year fetch aborted");
-            return;
-          }
-          console.error("HomePage.jsx: Error fetching user years:", error);
-          setLocalErrorMessage(
-            "Failed to fetch available years. Showing default year."
-          );
-          setAvailableYears(["2025"]);
-        } finally {
-          if (mountedRef.current) {
-            setIsLoadingYears(false);
-          }
-        }
+  if (error.name === 'AbortError') {
+    console.log('HomePage.jsx: Year fetch aborted');
+    return;
+  }
+  console.error('HomePage.jsx: Error fetching user years:', error);
+  const errorMsg = error.response?.data?.error || error.message;
+  let userMessage = 'Failed to fetch available years. Defaulting to current year.';
+  if (errorMsg.includes('Sheet not found')) {
+    userMessage = 'No payment data found. Defaulting to current year.';
+  } else if (errorMsg.includes('Quota exceeded')) {
+    userMessage = 'Server is busy. Defaulting to current year.';
+  }
+  setLocalErrorMessage(userMessage);
+  setErrorMessage(userMessage);
+  setAvailableYears([new Date().getFullYear().toString()]);
+} finally {
+  if (mountedRef.current) {
+    setIsLoadingYears(false);
+  }
+}
       });
     },
     [
@@ -288,27 +294,30 @@ const HomePage = ({
       localStorage.setItem("currentYear", newYear);
       window.location.reload();
     } catch (error) {
-      if (error.name === "AbortError") {
-        console.log("HomePage.jsx: Add new year request cancelled");
-        return;
-      }
-      console.error("HomePage.jsx: Error adding new year:", error);
-      alert(
-        `Failed to add new year: ${
-          error.response?.data?.error || "An unknown error occurred"
-        }`
-      );
-    } finally {
-      if (mountedRef.current) {
-        setIsLoadingYears(false);
-      }
-    }
+  if (error.name === 'AbortError') {
+    console.log('HomePage.jsx: Add new year request cancelled');
+    return;
+  }
+  console.error('HomePage.jsx: Error adding new year:', error);
+  const errorMsg = error.response?.data?.error || 'An unknown error occurred';
+  let userMessage = `Failed to add new year: ${errorMsg}`;
+  if (errorMsg.includes('Please add or import payment data')) {
+    userMessage = 'Please add or import payment data for the current year before adding a new year.';
+  } else if (errorMsg.includes('Sheet already exists')) {
+    userMessage = 'This year already exists for your account.';
+  }
+  alert(userMessage);
+} finally {
+  if (mountedRef.current) {
+    setIsLoadingYears(false);
+  }
+}
   }, [currentYear, sessionToken]);
 
 const hasValidEmail = useCallback((clientData) => {
-    const email = clientData?.Email_Address || clientData?.email_address || clientData?.Email || clientData?.email;
-    return email && email.trim() !== "" && email.includes("@");
-  }, []);
+  const email = clientData?.Email || '';
+  return email && email.trim() !== '' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}, []);
 
   const ErrorMessageDisplay = ({ message, onDismiss, type = "error" }) => {
     if (!message) return null;
@@ -634,13 +643,23 @@ const processBatchUpdates = useCallback(async () => {
       batchTimerRef.current = setTimeout(processBatchUpdates, 1500);
     }
   } catch (error) {
-    console.error("HomePage.jsx: Batch update error:", error);
-    setErrorMessage(`Batch update failed: ${error.message}`);
-    updateQueueRef.current = [...updates, ...updateQueueRef.current];
-    batchTimerRef.current = setTimeout(processBatchUpdates, 1500 * 2);
-  } finally {
-    setIsUpdating(false);
+  console.error('HomePage.jsx: Batch update error:', error);
+  const errorMsg = error.response?.data?.error || error.message;
+  let userMessage = 'Batch update failed. Please try again.';
+  if (errorMsg.includes('Sheet not found')) {
+    userMessage = 'Payment data not found. Please refresh and try again.';
+  } else if (errorMsg.includes('Quota exceeded')) {
+    userMessage = 'Server is busy. Please try again in a few minutes.';
+  } else if (errorMsg.includes('Payment record not found')) {
+    userMessage = 'Client payment data not found. Please add the client first.';
   }
+  setLocalErrorMessage(userMessage);
+  setErrorMessage(userMessage);
+  updateQueueRef.current = [...updates, ...updateQueueRef.current];
+  batchTimerRef.current = setTimeout(processBatchUpdates, 1500 * 2);
+} finally {
+  setIsUpdating(false);
+}
 }, [paymentsData, sessionToken, months, localInputValues, hasValidEmail, setErrorMessage]);
 
   const debouncedUpdate = useCallback(

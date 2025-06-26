@@ -99,7 +99,9 @@ const AddClientPage = ({
       console.log('Update client payload:', payload);
       await axios.put(`${BASE_URL}/update-client`, payload, {
         headers: { Authorization: `Bearer ${sessionToken}` },
+        timeout: 10000, // Add timeout
       });
+      setSuccess('Client updated successfully! Redirecting to clients page...');
     } else {
       await axios.post(`${BASE_URL}/add-client`, {
         clientName,
@@ -109,13 +111,15 @@ const AddClientPage = ({
         phoneNumber: phoneNumber || '',
       }, {
         headers: { Authorization: `Bearer ${sessionToken}` },
+        timeout: 10000, // Add timeout
       });
+      setSuccess('Client added successfully! Redirecting to clients page...');
     }
-    setSuccess(`${editClient ? 'Client updated' : 'Client added'} successfully! Redirecting to clients page...`);
+    
     await new Promise((resolve) => setTimeout(resolve, 1000));
     await Promise.all([
       fetchClients(sessionToken),
-      fetchPayments(sessionToken, new Date().getFullYear())
+      fetchPayments(sessionToken, new Date().getFullYear().toString()) // Ensure string year
     ]);
     setEditClient(null);
     setPage('clients');
@@ -126,7 +130,16 @@ const AddClientPage = ({
       message: err.message,
       fullError: err,
     });
-    setError(err.response?.data?.error || err.message || 'Failed to save client.');
+    const errorMsg = err.response?.data?.error || err.message || 'Failed to save client.';
+    let userMessage = errorMsg;
+    if (errorMsg.includes('Client already exists')) {
+      userMessage = 'This client name and type combination already exists.';
+    } else if (errorMsg.includes('Sheet not found')) {
+      userMessage = 'Client data sheet not found. Please try again or contact support.';
+    } else if (errorMsg.includes('Quota exceeded')) {
+      userMessage = 'Server is busy. Please try again later.';
+    }
+    setError(userMessage);
   }
 };
 

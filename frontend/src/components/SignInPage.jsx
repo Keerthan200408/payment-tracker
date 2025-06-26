@@ -108,14 +108,21 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
         timeout: 20000,
         withCredentials: true,
       });
-      
+      alert('Account created successfully! Your personalized data sheets have been set up.');
       await handleLogin(username, password);
     } catch (error) {
-      console.error('Signup error:', error.response?.data?.error || error.message);
-      setError(error.response?.data?.error || 'Error signing up. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
+  console.error('Signup error:', error.response?.data?.error || error.message);
+  const errorMsg = error.response?.data?.error || 'Error signing up. Please try again.';
+  let userMessage = errorMsg;
+  if (errorMsg.includes('Username already exists')) {
+    userMessage = 'This username is already taken. Please choose another.';
+  } else if (errorMsg.includes('Quota exceeded')) {
+    userMessage = 'Server is busy. Please try again later.';
+  }
+  setError(userMessage);
+} finally {
+  setIsLoading(false);
+}
   };
 
   const handleGoogleSignIn = async (response) => {
@@ -153,11 +160,18 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
         setPage('home');
       }
     } catch (error) {
-      console.error('Google sign-in error:', error);
-      setError(error.response?.data?.error || 'Error signing in with Google. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
+  console.error('Google sign-in error:', error);
+  const errorMsg = error.response?.data?.error || 'Error signing in with Google. Please try again.';
+  let userMessage = errorMsg;
+  if (errorMsg.includes('Google account already linked')) {
+    userMessage = 'This Google account is already linked to another username.';
+  } else if (errorMsg.includes('Quota exceeded')) {
+    userMessage = 'Server is busy. Please try again later.';
+  }
+  setError(userMessage);
+} finally {
+  setIsLoading(false);
+}
   };
 
   const handleUsernameSubmit = async () => {
@@ -193,15 +207,22 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
           fetchPayments(sessionToken, new Date().getFullYear().toString())
         ]);
       }
-      
+      alert('Account created successfully! Your personalized data sheets have been set up.');
       setShowUsernameModal(false);
       setPage('home');
     } catch (error) {
-      console.error('Username setup error:', error);
-      setError(error.response?.data?.error || 'Error setting up username. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
+  console.error('Username setup error:', error);
+  const errorMsg = error.response?.data?.error || 'Error setting up username. Please try again.';
+  let userMessage = errorMsg;
+  if (errorMsg.includes('Username already exists')) {
+    userMessage = 'This username is already taken. Please choose another.';
+  } else if (errorMsg.includes('Quota exceeded')) {
+    userMessage = 'Server is busy. Please try again later.';
+  }
+  setError(userMessage);
+} finally {
+  setIsLoading(false);
+}
   };
 
   return (

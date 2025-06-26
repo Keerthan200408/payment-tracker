@@ -23,85 +23,89 @@ const PaymentsPage = ({ paymentsData, setPaymentsData, fetchClients, fetchPaymen
   }, [currentYear]);
 
   // Function to search for user-specific years
-  const searchUserYears = async (forceFetch = false) => {
-    console.log('PaymentsPage.jsx: searchUserYears called with forceFetch:', forceFetch, 'sessionToken:', sessionToken);
-    
-    // Skip fetching if we have years in localStorage and not forcing a fetch
-    if (!forceFetch && localStorage.getItem('availableYears')) {
-      console.log('PaymentsPage.jsx: Using cached years from localStorage');
-      const storedYears = JSON.parse(localStorage.getItem('availableYears')) || ['2025'];
-      console.log('PaymentsPage.jsx: Stored years:', storedYears);
-      setAvailableYears(storedYears);
-      const storedYear = localStorage.getItem('currentYear') || '2025';
-      console.log('PaymentsPage.jsx: Stored currentYear:', storedYear);
-      if (storedYears.includes(storedYear) && storedYear !== currentYear) {
-        console.log('PaymentsPage.jsx: Setting currentYear from storedYear:', storedYear);
-        setCurrentYear(storedYear);
-        if (typeof handleYearChange === 'function') {
-          console.log('PaymentsPage.jsx: Calling handleYearChange with:', storedYear);
-          handleYearChange(storedYear);
-        }
+const searchUserYears = async (forceFetch = false) => {
+  console.log('PaymentsPage.jsx: searchUserYears called with forceFetch:', forceFetch, 'sessionToken:', sessionToken);
+  
+  if (!forceFetch && localStorage.getItem('availableYears')) {
+    console.log('PaymentsPage.jsx: Using cached years from localStorage');
+    const storedYears = JSON.parse(localStorage.getItem('availableYears')) || ['2025'];
+    console.log('PaymentsPage.jsx: Stored years:', storedYears);
+    setAvailableYears(storedYears);
+    const storedYear = localStorage.getItem('currentYear') || '2025';
+    console.log('PaymentsPage.jsx: Stored currentYear:', storedYear);
+    if (storedYears.includes(storedYear) && storedYear !== currentYear) {
+      console.log('PaymentsPage.jsx: Setting currentYear from storedYear:', storedYear);
+      setCurrentYear(storedYear);
+      if (typeof handleYearChange === 'function') {
+        console.log('PaymentsPage.jsx: Calling handleYearChange with:', storedYear);
+        await handleYearChange(storedYear);
       }
-      return;
     }
+    return;
+  }
 
-    console.log('PaymentsPage.jsx: Fetching years from API with sessionToken:', sessionToken);
-    try {
-      const response = await axios.get(`${BASE_URL}/get-user-years`, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      });
-      console.log('PaymentsPage.jsx: API response for user years:', response.data);
-      
-      const fetchedYears = (response.data || [])
-        .filter(year => parseInt(year) >= 2025)
-        .sort((a, b) => parseInt(a) - parseInt(b));
-      
-      // Always include 2025
-      const yearsToSet = [...new Set(['2025', ...fetchedYears])]
-        .filter(year => parseInt(year) >= 2025)
-        .sort((a, b) => parseInt(a) - parseInt(b));
-      
-      console.log('PaymentsPage.jsx: Processed years for dropdown:', yearsToSet);
-      setAvailableYears(yearsToSet);
-      console.log('PaymentsPage.jsx: Saving availableYears to localStorage:', yearsToSet);
-      localStorage.setItem('availableYears', JSON.stringify(yearsToSet));
-      
-      // Get stored year or default to 2025
-      const storedYear = localStorage.getItem('currentYear');
-      let yearToSet = storedYear && yearsToSet.includes(storedYear) ? storedYear : '2025';
-      console.log('PaymentsPage.jsx: Selected year to set:', yearToSet);
-      
-      if (yearToSet !== currentYear) {
-        console.log('PaymentsPage.jsx: Updating currentYear to:', yearToSet);
-        setCurrentYear(yearToSet);
-        localStorage.setItem('currentYear', yearToSet);
-        if (typeof handleYearChange === 'function') {
-          console.log('PaymentsPage.jsx: Calling handleYearChange with:', yearToSet);
-          await handleYearChange(yearToSet);
-        }
-      }
-    } catch (error) {
-      console.error('PaymentsPage.jsx: Error searching user years:', error, 'Response:', error.response?.data);
-      
-      const storedYears = JSON.parse(localStorage.getItem('availableYears')) || ['2025'];
-      console.log('PaymentsPage.jsx: Falling back to stored years:', storedYears);
-      setAvailableYears(storedYears);
-      
-      const storedYear = localStorage.getItem('currentYear');
-      const yearToSet = (storedYear && storedYears.includes(storedYear)) ? storedYear : '2025';
-      console.log('PaymentsPage.jsx: Fallback year to set:', yearToSet);
-      
-      if (yearToSet !== currentYear) {
-        console.log('PaymentsPage.jsx: Updating currentYear in fallback to:', yearToSet);
-        setCurrentYear(yearToSet);
-        localStorage.setItem('currentYear', yearToSet);
-        if (typeof handleYearChange === 'function') {
-          console.log('PaymentsPage.jsx: Calling handleYearChange in fallback with:', yearToSet);
-          await handleYearChange(yearToSet);
-        }
+  console.log('PaymentsPage.jsx: Fetching years from API with sessionToken:', sessionToken);
+  try {
+    const response = await axios.get(`${BASE_URL}/get-user-years`, {
+      headers: { Authorization: `Bearer ${sessionToken}` },
+      timeout: 10000, // Add timeout
+    });
+    console.log('PaymentsPage.jsx: API response for user years:', response.data);
+    
+    const fetchedYears = (response.data || [])
+      .filter(year => parseInt(year) >= 2025)
+      .sort((a, b) => parseInt(a) - parseInt(b));
+    
+    const yearsToSet = [...new Set(['2025', ...fetchedYears])]
+      .filter(year => parseInt(year) >= 2025)
+      .sort((a, b) => parseInt(a) - parseInt(b));
+    
+    console.log('PaymentsPage.jsx: Processed years for dropdown:', yearsToSet);
+    setAvailableYears(yearsToSet);
+    console.log('PaymentsPage.jsx: Saving availableYears to localStorage:', yearsToSet);
+    localStorage.setItem('availableYears', JSON.stringify(yearsToSet));
+    
+    const storedYear = localStorage.getItem('currentYear');
+    let yearToSet = storedYear && yearsToSet.includes(storedYear) ? storedYear : '2025';
+    console.log('PaymentsPage.jsx: Selected year to set:', yearToSet);
+    
+    if (yearToSet !== currentYear) {
+      console.log('PaymentsPage.jsx: Updating currentYear to:', yearToSet);
+      setCurrentYear(yearToSet);
+      localStorage.setItem('currentYear', yearToSet);
+      if (typeof handleYearChange === 'function') {
+        console.log('PaymentsPage.jsx: Calling handleYearChange with:', yearToSet);
+        await handleYearChange(yearToSet);
       }
     }
-  };
+  } catch (error) {
+    console.error('PaymentsPage.jsx: Error searching user years:', error, 'Response:', error.response?.data);
+    let userMessage = 'Failed to fetch available years. Defaulting to 2025.';
+    if (error.response?.data?.error?.includes('Sheet not found')) {
+      userMessage = 'No payment data found for your account. Defaulting to 2025.';
+    } else if (error.response?.data?.error?.includes('Quota exceeded')) {
+      userMessage = 'Server is busy. Please try again later.';
+    }
+    console.log('PaymentsPage.jsx: Setting error message:', userMessage);
+    const storedYears = JSON.parse(localStorage.getItem('availableYears')) || ['2025'];
+    console.log('PaymentsPage.jsx: Falling back to stored years:', storedYears);
+    setAvailableYears(storedYears);
+    
+    const storedYear = localStorage.getItem('currentYear');
+    const yearToSet = (storedYear && storedYears.includes(storedYear)) ? storedYear : '2025';
+    console.log('PaymentsPage.jsx: Fallback year to set:', yearToSet);
+    
+    if (yearToSet !== currentYear) {
+      console.log('PaymentsPage.jsx: Updating currentYear in fallback to:', yearToSet);
+      setCurrentYear(yearToSet);
+      localStorage.setItem('currentYear', yearToSet);
+      if (typeof handleYearChange === 'function') {
+        console.log('PaymentsPage.jsx: Calling handleYearChange in fallback with:', yearToSet);
+        await handleYearChange(yearToSet);
+      }
+    }
+  }
+};
 
   useEffect(() => {
     console.log('PaymentsPage.jsx: useEffect for sessionToken triggered. sessionToken:', sessionToken);
