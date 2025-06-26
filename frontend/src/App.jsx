@@ -487,6 +487,195 @@ const importCsv = async (e) => {
   }
 };
 
+// Add retryWithBackoff if not already defined
+const retryWithBackoff = async (fn, retries = 3, delay = 1000) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (i === retries - 1) throw err;
+      console.warn(`Retry ${i + 1}/${retries} failed: ${err.message}`);
+      await new Promise((resolve) => setTimeout(resolve, delay * Math.pow(2, i)));
+    }
+  }
+};
+
+const importCsv = async (e) => {
+  const file = e.target.files[0];
+  if (!file) {
+    setErrorMessage("No file selected. Please choose a CSV file to import.");
+    return;
+  }
+  if (!sessionToken || !currentUser) {
+    setErrorMessage("Please sign in to import CSV.");
+    return;
+  }
+  setIsImporting(true);
+  setErrorMessage("");
+  try {
+    // Fetch types for the user
+    await fetchTypes(sessionToken);
+    const capitalizedTypes = types.map((type) => type.toUpperCase());
+    console.log(`App.jsx: Valid types for ${currentUser}:`, capitalizedTypes);
+
+    // Parse CSV
+    const text = await file.text();
+    const rows = text
+      .split("\n")
+      .filter((row) => row.trim())
+      .map((row) => {
+        const cols = row
+          .split(",")
+          .map((cell) => cell.trim().replace(/^"|"$/g, ""));
+        return cols.filter((col) => col.trim());
+      });
+    if (rows.length === 0) {
+      throw new Error("CSV file is empty.");
+    }
+
+    // Process rows
+    const records = [];
+    const errors = [];
+    rows.forEach((row, index) => {
+      let clientName = "",
+        type = "",
+        amount = 0,
+        email = "",
+        phone = "";
+      row.forEach((cell) => {
+        if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cell)) {
+          email = cell;
+        } else if (/^\+?[\d\s-]{10,15}$/.test(cell)) {
+          phone = cell;
+        } else if (capitalizedTypes.includes(cell.trim().toUpperCase())) {
+          type = cell.trim().toUpperCase();
+        } else if (!isNaN(parseFloat(cell)) && parseFloat(cell) > 0) {
+          amount = parseFloat(cell);
+        } else if (cell.trim()) {
+          clientName = cell.trim();
+        }
+      });
+      if (!clientName || !type || !amount) {
+        console.warn(`Skipping invalid row at index ${index + 1}:`, row);
+        errors.push(
+          `Row ${
+            index + 1
+          }: Missing or invalid fields (Client Name, Type must be one of: ${
+            capitalizedTypes.length ? capitalizedTypes.join(", ") : "none"
+          } for user ${currentUser}, or Monthly Payment)`
+        );
+        return;
+      }
+      console.log(`Parsed row ${index + 1} Monthly Payment:`, amount);
+      records.push([
+        amount, // Amount_To_Be_Paid
+        type,   // Type
+        email,  // Email
+        clientName, // Client_Name
+        phone,  // Phone_Number
+      ]);
+    });
+
+    // Check for types after parsing to provide detailed feedback
+    if (!capitalizedTypes.length) {
+      const errorMsg = `No payment types defined for user ${currentUser}. Please navigate to the dashboard and click 'Add Type' to add types (e.g., GST, IT RETURN) before importing.${
+        errors.length > 0
+          ? `\n\nAdditionally, the CSV contains ${errors.length} invalid row(s):\n${errors.join("\n")}`
+          : ""
+      }`;
+      throw new Error(errorMsg);
+    }
+
+    if (records.length === 0) {
+      throw new Error(
+        `No valid rows found in CSV. All rows are missing required fields or contain invalid Type values for user ${currentUser}. Valid types are: ${capitalizedTypes.join(
+          ", "
+        )}.${
+          errors.length > 0 ? `\n\nErrors:\n${errors.join("\n")}` : ""
+        }`
+      );
+    }
+
+    // Import records in batches with retries
+    const batchSize = 50;
+    console.log(
+      `Importing ${records.length} valid records for user ${currentUser}...`
+    );
+    for (let i = 0; i < records.length; i += batchSize) {
+      const batch = records.slice(i, i + batchSize);
+      console.log(
+        `Sending batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(
+          records.length / batchSize
+        )}...`
+      );
+      console.log("Batch data:", batch);
+      const response = await retryWithBackoff(
+        () =>
+          axios.post(`${BASE_URL}/import-csv`, batch, {
+            headers: { Authorization: `Bearer ${sessionToken}` },
+            params: { year: currentYear },
+            timeout: 45000,
+          }),
+        3, // Retry up to 3 times
+        1000 // 1-second delay between retries
+      );
+      console.log(`Batch response:`, response.data);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+
+    // Clear cache and notify user
+    const cacheKeyPayments = `payments_${currentYear}_${sessionToken}`;
+    const cacheKeyClients = `clients_${currentYear}_${sessionToken}`;
+    delete apiCacheRef.current[cacheKeyPayments];
+    delete apiCacheRef.current[cacheKeyClients];
+    const message =
+      errors.length > 0
+        ? `CSV imported successfully! ${
+            records.length
+          } valid records imported for user ${currentUser}. ${
+            errors.length
+          } row(s) skipped due to errors:\n${errors.join("\n")}`
+        : `CSV imported successfully! ${records.length} records imported for user ${currentUser}.`;
+    alert(message);
+    setErrorMessage(
+      errors.length > 0
+        ? `Imported ${records.length} records with ${
+            errors.length
+          } errors for user ${currentUser}:\n${errors.join("\n")}`
+        : ""
+    );
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    window.location.reload();
+  } catch (err) {
+    console.error("CSV import error:", {
+      message: err.message,
+      response: err.response?.data,
+      status: err.response?.status,
+      user: currentUser,
+    });
+    let errorMessage = err.response?.data?.error || err.message;
+    if (errorMessage.includes("No payment types defined")) {
+      errorMessage = `${errorMessage} Navigate to the dashboard and click 'Add Type' to add types (e.g., GST, IT RETURN).`;
+    } else if (err.message.includes("timeout")) {
+      errorMessage = `Request timed out while importing CSV for user ${currentUser}. Please check your connection and try again.`;
+    } else if (!capitalizedTypes.length) {
+      errorMessage = `No payment types defined for user ${currentUser}. Please navigate to the dashboard and click 'Add Type' to add types (e.g., GST, IT RETURN).${
+        errors.length > 0 ? `\n\nCSV Errors:\n${errors.join("\n")}` : ""
+      }`;
+    } else {
+      errorMessage = `Failed to import CSV for user ${currentUser}. Ensure Type is one of: ${capitalizedTypes.join(
+        ", "
+      )} and Monthly Payment is a valid number.${
+        errors.length > 0 ? `\n\nCSV Errors:\n${errors.join("\n")}` : ""
+      }`;
+    }
+    setErrorMessage(errorMessage);
+    throw err; // Re-throw to let handleImportCsv catch it
+  } finally {
+    setIsImporting(false);
+  }
+};
+
 const updatePayment = async (
   rowIndex,
   month,

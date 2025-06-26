@@ -14,42 +14,44 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
   const [chosenUsername, setChosenUsername] = useState('');
   const buttonRef = useRef(null);
 
-  // Initialize Google Sign-In
-  useEffect(() => {
-    const initializeGoogleSignIn = () => {
-      if (window.google && buttonRef.current) {
-        window.google.accounts.id.initialize({
-          client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
-          callback: handleGoogleSignIn,
-          auto_select: false,
-          cancel_on_tap_outside: true,
-        });
-        window.google.accounts.id.renderButton(buttonRef.current, {
-          theme: 'outline',
-          size: 'large',
-          width: 300,
-        });
-      }
-    };
-
-    // Load Google Identity Services script
-    if (!window.google) {
-      const script = document.createElement('script');
-      script.src = 'https://accounts.google.com/gsi/client';
-      script.async = true;
-      script.defer = true;
-      script.onload = initializeGoogleSignIn;
-      document.head.appendChild(script);
-    } else {
-      initializeGoogleSignIn();
+useEffect(() => {
+  const initializeGoogleSignIn = () => {
+    if (window.google && buttonRef.current) {
+      window.google.accounts.id.initialize({
+        client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+        callback: handleGoogleSignIn,
+        auto_select: false,
+        cancel_on_tap_outside: true,
+        context: "signin",
+        ux_mode: "popup", // Use popup mode to avoid cross-origin issues
+      });
+      window.google.accounts.id.renderButton(buttonRef.current, {
+        theme: "outline",
+        size: "large",
+        width: 300,
+      });
+      // Prompt for Google Sign-In
+      window.google.accounts.id.prompt();
     }
+  };
 
-    return () => {
-      if (window.google) {
-        window.google.accounts.id.cancel();
-      }
-    };
-  }, []);
+  if (!window.google) {
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = initializeGoogleSignIn;
+    document.head.appendChild(script);
+  } else {
+    initializeGoogleSignIn();
+  }
+
+  return () => {
+    if (window.google) {
+      window.google.accounts.id.cancel();
+    }
+  };
+}, [handleGoogleSignIn]);
 
   const handleLogin = async (loginUsername, loginPassword) => {
     if (!loginUsername || !loginPassword) {

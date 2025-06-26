@@ -677,7 +677,7 @@ const handleNotifications = useCallback(async (clientName, clientEmail, clientPh
         )
         .join("\n")}${duePaymentText}\n\nPlease review your account or contact us for clarifications.\nBest regards,\nPayment Tracker Team`;
 
-      await axios.post(
+      const response = await axios.post(
         `${BASE_URL}/send-whatsapp`,
         {
           to: clientPhone.trim(),
@@ -689,14 +689,27 @@ const handleNotifications = useCallback(async (clientName, clientEmail, clientPh
         }
       );
 
-      console.log(`WhatsApp sent to ${clientPhone} for ${clientName}`);
+      console.log(`WhatsApp sent to ${clientPhone} for ${clientName}:`, {
+        messageId: response.data.messageId || "N/A",
+        clientName,
+        type,
+        year,
+      });
       notificationSent = true;
     } catch (whatsappError) {
-      console.error(`WhatsApp failed for ${clientPhone}:`, whatsappError);
+      console.error(`WhatsApp attempt for ${clientPhone} (${clientName}):`, {
+        message: whatsappError.message,
+        status: whatsappError.response?.status,
+        data: whatsappError.response?.data,
+      });
+      // Log error but don't set error message unless critical
+      if (whatsappError.response?.status === 429) {
+        console.warn(`Rate limit hit for WhatsApp to ${clientPhone}. Will fallback to email.`);
+      }
     }
   }
 
-  // Fallback to email
+  // Fallback to email if WhatsApp fails or no valid phone
   if (!notificationSent && hasValidEmailAddress) {
     try {
       const duePaymentText = parseFloat(duePayment) > 0
@@ -759,10 +772,15 @@ const handleNotifications = useCallback(async (clientName, clientEmail, clientPh
       );
 
       console.log(`Email sent to ${clientEmail} for ${clientName}`);
+      notificationSent = true;
     } catch (emailError) {
       console.error(`Email failed for ${clientEmail}:`, emailError);
       throw emailError;
     }
+  }
+
+  if (!notificationSent) {
+    console.warn(`No notification sent for ${clientName}: no valid phone or email`);
   }
 }, [sessionToken, hasValidEmail]);
 
@@ -953,44 +971,55 @@ const debouncedUpdate = useCallback(
     };
   }, []);
 
-  const handleAddType = async () => {
-    console.log(`HomePage.jsx: type: ${newType}, user: ${currentUser}`);
-    if (!newType.trim()) {
-      setLocalErrorMessage("Type name cannot be empty.");
-      return;
+const handleAddType = async () => {
+  console.log(`HomePage.jsx: type: ${newType}, user: ${currentUser}`);
+  if (!newType.trim()) {
+    setLocalErrorMessage("Type name cannot be empty.");
+    return;
+  }
+  if (newType.trim().length > 50) {
+    setLocalErrorMessage("Type name too long.");
+    return;
+  }
+  const capitalizedType = newType.trim().toUpperCase();
+  try {
+    const response = await retryWithBackoff(
+      () =>
+        axios.post(
+          `${BASE_URL}/add-type`,
+          { type: capitalizedType },
+          {
+            headers: { Authorization: `Bearer ${sessionToken}` },
+            timeout: 5000, // Increased timeout
+          }
+        ),
+      3,
+      1000
+    );
+    console.log(`HomePage.jsx: Added ${capitalizedType} for ${currentUser}`, response.data);
+    setIsTypeModalOpen(false);
+    setNewType("");
+    setSearchQuery("");
+    setLocalErrorMessage("");
+    const cacheKey = `types_${currentUser}_${sessionToken}`;
+    delete apiCacheRef.current[cacheKey];
+    await fetchTypes();
+    alert(`Type ${capitalizedType} added successfully.`);
+  } catch (error) {
+    console.error(`HomePage.jsx: Error adding type for ${currentUser}:`, error);
+    const errorMsg = error.response?.data?.error || error.message;
+    let userMessage = errorMsg;
+    if (errorMsg.includes("Type already exists")) {
+      userMessage = `The type "${capitalizedType}" already exists.`;
+    } else if (error.message.includes("timeout")) {
+      userMessage = "Request timed out. Please check your connection and try again.";
     }
-    if (newType.trim().length > 50) {
-      setLocalErrorMessage("Type name too long.");
-      return;
+    setLocalErrorMessage(userMessage);
+    if (error.response?.status === 401 || errorMsg.includes("Invalid token")) {
+      setPage("signIn");
     }
-    const capitalizedType = newType.trim().toUpperCase();
-    try {
-      const response = await axios.post(
-        `${BASE_URL}/add-type`,
-        { type: capitalizedType },
-        {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-          timeout: 2000,
-        }
-      );
-      console.log(`HomePage.jsx: Added ${capitalizedType} for ${currentUser}`, response.data);
-      setIsTypeModalOpen(false);
-      setNewType("");
-      setSearchQuery("");
-      setLocalErrorMessage("");
-      const cacheKey = `types_${currentUser}_${sessionToken}`;
-      delete apiCacheRef.current[cacheKey];
-      await fetchTypes();
-      alert(`Type ${capitalizedType} added successfully.`);
-    } catch (error) {
-      console.error(`HomePage.jsx: Error adding type for ${currentUser}:`, error);
-      const errorMsg = error.response?.data?.error || error.message;
-      setLocalErrorMessage(errorMsg === "Type already exists for this user" ? "This type already exists." : `Failed to add type: ${errorMsg}`);
-      if (error.response?.status === 401 || errorMsg.includes("Invalid token")) {
-        setPage("signIn");
-      }
-    }
-  };
+  }
+};
 
   useEffect(() => {
     const controller = new AbortController();

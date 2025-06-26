@@ -41,8 +41,13 @@ app.options("*", cors());
 
 // COOP/COEP headers for Google Sign-In
 app.use((req, res, next) => {
-  res.setHeader("Cross-Origin-Opener-Policy", "unsafe-none");
-  res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
+  if (req.path === "/api/google-signin" || req.path === "/api/google-signup") {
+    res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+    res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
+  } else {
+    res.setHeader("Cross-Origin-Opener-Policy", "unsafe-none");
+    res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
+  }
   next();
 });
 
@@ -877,11 +882,11 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
 
   // Validate input
   if (!Array.isArray(csvData) || csvData.length === 0) {
-    console.error("Invalid CSV data: not an array or empty", { csvData });
+    console.error("Invalid CSV data: not an array or empty", { csvData, username });
     return res.status(400).json({ error: "CSV data must be a non-empty array of records" });
   }
 
-  // Add sanitizeInput function if not defined elsewhere
+  // Sanitize input function (unchanged from your code)
   const sanitizeInput = (input) => {
     if (typeof input !== 'string') return '';
     return input.trim().replace(/[<>]/g, ''); // Basic sanitization
@@ -893,15 +898,15 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
     const clientsCollection = db.collection(`clients_${username}`);
     const paymentsCollection = db.collection(`payments_${username}`);
 
-    // Fetch user types - FIXED: Await toArray() first, then map
+    // Fetch user types with case-insensitive handling
     const userTypesData = await typesCollection.find({ User: username }).toArray();
-    const userTypes = userTypesData.map(t => t.Type);
-    
+    const userTypes = userTypesData.map(t => t.Type.toUpperCase()); // Normalize to uppercase
     if (!userTypes.length) {
       console.error("No types found for user", { username });
-      return res.status(400).json({ error: "No payment types defined for user. Add types first." });
+      return res.status(400).json({ 
+        error: `No payment types defined for user ${username}. Please navigate to the dashboard and click 'Add Type' to add types (e.g., GST, IT RETURN) before importing.` 
+      });
     }
-
     console.log("Available user types:", userTypes);
 
     // Validate and map headerless CSV records
@@ -913,7 +918,7 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
 
       // Expect record to be an array: [Amount_To_Be_Paid, Type, Email, Client_Name, Phone_Number]
       if (!Array.isArray(record) || record.length < 4) {
-        console.error(`Invalid record at index ${i}: must be an array with at least 4 values (Amount, Type, Email, Client_Name)`, { record });
+        console.error(`Invalid record at index ${i}: must be an array with at least 4 values (Amount, Type, Email, Client_Name)`, { record, username });
         return res.status(400).json({
           error: `Record at index ${i} must be an array with at least Amount, Type, Email, and Client_Name`,
           record,
@@ -924,16 +929,16 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
 
       // Validate Client_Name
       if (typeof clientName !== "string" || clientName.length > 100 || !clientName.trim()) {
-        console.error(`Invalid Client_Name at index ${i}`, { clientName });
+        console.error(`Invalid Client_Name at index ${i}`, { clientName, username });
         return res.status(400).json({
           error: `Client_Name at index ${i} must be a non-empty string with up to 100 characters`,
           record,
         });
       }
 
-      // Validate Type - IMPROVED: Better type validation
+      // Validate Type
       if (typeof type !== "string" || !type.trim()) {
-        console.error(`Invalid Type at index ${i}: type must be a non-empty string`, { type });
+        console.error(`Invalid Type at index ${i}: type must be a non-empty string`, { type, username });
         return res.status(400).json({
           error: `Type at index ${i} must be a non-empty string`,
           record,
@@ -942,7 +947,7 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
 
       const typeUpper = type.trim().toUpperCase();
       if (!userTypes.includes(typeUpper)) {
-        console.error(`Invalid Type at index ${i}`, { type, typeUpper, validTypes: userTypes });
+        console.error(`Invalid Type at index ${i}`, { type, typeUpper, validTypes: userTypes, username });
         return res.status(400).json({
           error: `Type "${type}" at index ${i} must be one of: ${userTypes.join(", ")}`,
           record,
@@ -952,14 +957,14 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
       // Validate Amount_To_Be_Paid
       const amount = parseFloat(amountToBePaid);
       if (isNaN(amount) || amount <= 0 || amount > 1e6) {
-        console.error(`Invalid Amount_To_Be_Paid at index ${i}`, { amountToBePaid, amount });
+        console.error(`Invalid Amount_To_Be_Paid at index ${i}`, { amountToBePaid, amount, username });
         return res.status(400).json({
           error: `Amount_To_Be_Paid at index ${i} must be a positive number up to 1,000,000`,
           record,
         });
       }
 
-      // Validate optional fields with better error handling
+      // Validate optional fields
       let sanitizedEmail = "";
       if (email && typeof email === "string") {
         if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -996,7 +1001,7 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
       });
     }
 
-    console.log(`Prepared ${clientsBatch.length} clients and ${paymentsBatch.length} payments for import`);
+    console.log(`Prepared ${clientsBatch.length} clients and ${paymentsBatch.length} payments for import`, { username });
 
     // Insert batches with error handling
     try {
@@ -1008,6 +1013,7 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
       if (existingClients.length > 0) {
         console.error("Duplicate clients found", {
           duplicates: existingClients.map(c => ({ Client_Name: c.Client_Name, Type: c.Type })),
+          username,
         });
         return res.status(400).json({
           error: "Duplicate clients found",
@@ -1064,7 +1070,7 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
       year,
       csvDataSummary: csvData.slice(0, 2).map(r => Array.isArray(r) ? { record: r } : r),
     });
-    res.status(500).json({ error: `Failed to import CSV: ${error.message}` });
+    return res.status(500).json({ error: `Failed to import CSV: ${error.message}` });
   }
 });
 
@@ -1127,10 +1133,14 @@ app.post("/api/add-type", authenticateToken, async (req, res) => {
   try {
     const db = await connectMongo();
     const typesCollection = db.collection("types");
-    const existingType = await typesCollection.findOne({ Type: type, User: username });
+    // Case-insensitive check for existing type
+    const existingType = await typesCollection.findOne({
+      Type: { $regex: `^${type}$`, $options: "i" },
+      User: username,
+    });
     if (existingType) {
       console.warn(`Type already exists for user: ${type}, ${username}`);
-      return res.status(400).json({ error: "Type already exists for this user" });
+      return res.status(400).json({ error: `Type "${type}" already exists for this user` });
     }
     await typesCollection.insertOne({ Type: type, User: username });
     console.log(`Type ${type} added successfully for user ${username}`);
@@ -1245,33 +1255,46 @@ app.post("/api/send-whatsapp", authenticateToken, whatsappLimiter, async (req, r
         new URLSearchParams(payload).toString(),
         {
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          timeout: 10000, // Added timeout to prevent hanging
         }
       )
     );
-    if (response.data.status === "success") {
+    // Log the full response for debugging
+    console.log("UltraMsg API response:", {
+      to: formattedPhone,
+      status: response.status,
+      data: response.data,
+      user: req.user.username,
+    });
+    // Check for successful message delivery more flexibly
+    if (response.status === 200 && (response.data.status === "success" || response.data.sent === "true" || response.data.messageId)) {
       console.log(`WhatsApp message sent successfully to ${formattedPhone}:`, {
-        messageId: response.data.messageId,
-        status: response.data.status,
+        messageId: response.data.messageId || "N/A",
+        status: response.data.status || response.status,
         user: req.user.username,
       });
-      res.json({ message: "WhatsApp message sent successfully" });
+      return res.json({ message: "WhatsApp message sent successfully", messageId: response.data.messageId || "N/A" });
     } else {
-      console.error("UltraMsg API error:", {
+      console.error("UltraMsg API unexpected response:", {
         response: response.data,
         to: formattedPhone,
         user: req.user.username,
       });
-      res.status(500).json({ error: `Failed to send WhatsApp message: ${response.data.error}` });
+      return res.status(500).json({ error: `Unexpected response from WhatsApp API: ${JSON.stringify(response.data)}` });
     }
   } catch (error) {
     console.error("Send WhatsApp error:", {
       message: error.message,
-      code: error.response?.data?.error?.code,
-      details: error.response?.data,
-      to: formattedPhone,
+      code: error.response?.data?.error?.code || error.code,
+      details: error.response?.data || error,
+      to,
       user: req.user.username,
     });
-    res.status(500).json({ error: `Failed to send WhatsApp message: ${error.message}` });
+    // Handle specific UltraMsg errors
+    if (error.response?.status === 429) {
+      return res.status(429).json({ error: "Rate limit exceeded for WhatsApp API. Please try again later." });
+    }
+    return res.status(500).json({ error: `Failed to send WhatsApp message: ${error.message}` });
   }
 });
 
