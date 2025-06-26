@@ -911,16 +911,16 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
       const record = csvData[i];
       console.log(`Validating record ${i + 1}/${csvData.length}`, { record });
 
-      // Expect record to be an array: [Client_Name, Type, Amount_To_Be_Paid, Email, Phone_Number]
-      if (!Array.isArray(record) || record.length < 3) {
-        console.error(`Invalid record at index ${i}: must be an array with at least 3 values (Client_Name, Type, Amount_To_Be_Paid)`, { record });
+      // Expect record to be an array: [Amount_To_Be_Paid, Type, Email, Client_Name, Phone_Number]
+      if (!Array.isArray(record) || record.length < 4) {
+        console.error(`Invalid record at index ${i}: must be an array with at least 4 values (Amount, Type, Email, Client_Name)`, { record });
         return res.status(400).json({
-          error: `Record at index ${i} must be an array with at least Client_Name, Type, and Amount_To_Be_Paid`,
+          error: `Record at index ${i} must be an array with at least Amount, Type, Email, and Client_Name`,
           record,
         });
       }
 
-      const [clientName, type, amountToBePaid, email = "", phoneNumber = ""] = record;
+      const [amountToBePaid, type, email = "", clientName, phoneNumber = ""] = record;
 
       // Validate Client_Name
       if (typeof clientName !== "string" || clientName.length > 100 || !clientName.trim()) {
