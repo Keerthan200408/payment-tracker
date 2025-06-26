@@ -409,13 +409,14 @@ const importCsv = async (e) => {
         return;
       }
       console.log(`Parsed row ${index + 1} Monthly Payment:`, amount);
-      records.push({
-        Client_Name: clientName,
-        Type: type,
-        monthly_payment: amount,
-        Email: email,
-        Phone_Number: phone,
-      });
+      // Create an array instead of an object
+      records.push([
+        amount, // Amount_To_Be_Paid
+        type,   // Type
+        email,  // Email
+        clientName, // Client_Name
+        phone,  // Phone_Number
+      ]);
     });
     if (records.length === 0) {
       throw new Error(
@@ -429,18 +430,13 @@ const importCsv = async (e) => {
       `Importing ${records.length} valid records for user ${currentUser}...`
     );
     for (let i = 0; i < records.length; i += batchSize) {
-      const batch = records.slice(i, i + batchSize).map((record) => ({
-        Client_Name: record.Client_Name,
-        Type: record.Type,
-        Amount_To_Be_Paid: record.monthly_payment,
-        Email: record.Email,
-        Phone_Number: record.Phone_Number,
-      }));
+      const batch = records.slice(i, i + batchSize); // Batch is already an array of arrays
       console.log(
         `Sending batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(
           records.length / batchSize
         )}...`
       );
+      console.log("Batch data:", batch); // Debug: Log the batch data
       const response = await axios.post(`${BASE_URL}/import-csv`, batch, {
         headers: { Authorization: `Bearer ${sessionToken}` },
         params: { year: currentYear },
@@ -488,7 +484,6 @@ const importCsv = async (e) => {
     throw err; // Re-throw to let handleImportCsv catch it
   } finally {
     setIsImporting(false);
-    // Remove csvFileInputRef reset since it's managed in ClientsPage.jsx
   }
 };
 
