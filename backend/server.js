@@ -874,73 +874,148 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
   const year = req.query.year || new Date().getFullYear().toString();
   const username = req.user.username;
   console.log(`Importing CSV for user: ${username}, year: ${year}, records: ${csvData?.length || 0}`);
+
+  // Validate input
   if (!Array.isArray(csvData) || csvData.length === 0) {
-    console.error("CSV import error: Invalid CSV data: not an array or empty");
+    console.error("Invalid CSV data: not an array or empty", { csvData });
     return res.status(400).json({ error: "CSV data must be a non-empty array of records" });
   }
+
   try {
     const db = await connectMongo();
     const typesCollection = db.collection("types");
     const clientsCollection = db.collection(`clients_${username}`);
     const paymentsCollection = db.collection(`payments_${username}`);
+
+    // Fetch user types
     const userTypes = await typesCollection.find({ User: username }).toArray().map(t => t.Type);
+    if (!userTypes.length) {
+      console.error("No types found for user", { username });
+      return res.status(400).json({ error: "No payment types defined for user. Add types first." });
+    }
+
+    // Validate and map headerless CSV records
+    const clientsBatch = [];
+    const paymentsBatch = [];
     for (let i = 0; i < csvData.length; i++) {
       const record = csvData[i];
-      if (!record.Client_Name || !record.Type || record.Amount_To_Be_Paid == null) {
-        console.error(`Invalid record at index ${i}: missing required fields`, record);
-        return res.status(400).json({ error: `Missing required fields (Client_Name, Type, or Amount_To_Be_Paid) in record at index ${i}` });
+      console.log(`Validating record ${i + 1}/${csvData.length}`, { record });
+
+      // Expect record to be an array: [Client_Name, Type, Amount_To_Be_Paid, Email, Phone_Number]
+      if (!Array.isArray(record) || record.length < 3) {
+        console.error(`Invalid record at index ${i}: must be an array with at least 3 values (Client_Name, Type, Amount_To_Be_Paid)`, { record });
+        return res.status(400).json({
+          error: `Record at index ${i} must be an array with at least Client_Name, Type, and Amount_To_Be_Paid`,
+          record,
+        });
       }
-      if (typeof record.Client_Name !== "string" || record.Client_Name.length > 100) {
-        console.error(`Invalid Client_Name at index ${i}:`, record.Client_Name);
-        return res.status(400).json({ error: `Client_Name at index ${i} must be a valid string with up to 100 characters` });
+
+      const [clientName, type, amountToBePaid, email = "", phoneNumber = ""] = record;
+
+      // Validate Client_Name
+      if (typeof clientName !== "string" || clientName.length > 100 || !clientName.trim()) {
+        console.error(`Invalid Client_Name at index ${i}`, { clientName });
+        return res.status(400).json({
+          error: `Client_Name at index ${i} must be a non-empty string with up to 100 characters`,
+          record,
+        });
       }
-      const typeUpper = record.Type.trim().toUpperCase();
-      if (typeof record.Type !== "string" || !userTypes.includes(typeUpper)) {
-        console.error(`Invalid Type at index ${i}:`, record.Type);
-        return res.status(400).json({ error: `Type at index ${i} must be one of: ${userTypes.join(", ")}` });
+
+      // Validate Type
+      const typeUpper = type.trim().toUpperCase();
+      if (typeof type !== "string" || !userTypes.includes(typeUpper)) {
+        console.error(`Invalid Type at index ${i}`, { type, validTypes: userTypes });
+        return res.status(400).json({
+          error: `Type at index ${i} must be one of: ${userTypes.join(", ")}`,
+          record,
+        });
       }
-      const amount = parseFloat(record.Amount_To_Be_Paid);
+
+      // Validate Amount_To_Be_Paid
+      const amount = parseFloat(amountToBePaid);
       if (isNaN(amount) || amount <= 0 || amount > 1e6) {
-        console.error(`Invalid Amount_To_Be_Paid at index ${i}:`, record.Amount_To_Be_Paid);
-        return res.status(400).json({ error: `Amount_To_Be_Paid at index ${i} must be a positive number up to 1,000,000` });
+        console.error(`Invalid Amount_To_Be_Paid at index ${i}`, { amountToBePaid });
+        return res.status(400).json({
+          error: `Amount_To_Be_Paid at index ${i} must be a positive number up to 1,000,000`,
+          record,
+        });
       }
-      if (record.Email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(record.Email)) {
-        console.warn(`Invalid Email at index ${i}, setting to empty:`, record.Email);
-        record.Email = "";
-      }
-      if (record.Phone_Number && !/^\+?[\d\s-]{10,15}$/.test(record.Phone_Number)) {
-        console.warn(`Invalid Phone_Number at index ${i}, setting to empty:`, record.Phone_Number);
-        record.Phone_Number = "";
-      }
+
+      // Validate optional fields
+      const sanitizedEmail = email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+        ? sanitizeInput(email)
+        : "";
+      const sanitizedPhoneNumber = phoneNumber && /^\+?[\d\s-]{10,15}$/.test(phoneNumber)
+        ? sanitizeInput(phoneNumber)
+        : "";
+
+      // Prepare batches
+      clientsBatch.push({
+        Client_Name: sanitizeInput(clientName),
+        Type: typeUpper,
+        Email: sanitizedEmail,
+        Monthly_Payment: amount,
+        Phone_Number: sanitizedPhoneNumber,
+      });
+
+      paymentsBatch.push({
+        Client_Name: sanitizeInput(clientName),
+        Type: typeUpper,
+        Amount_To_Be_Paid: amount,
+        Year: parseInt(year),
+        Payments: {
+          January: 0, February: 0, March: 0, April: 0, May: 0, June: 0,
+          July: 0, August: 0, September: 0, October: 0, November: 0, December: 0,
+        },
+        Due_Payment: amount,
+      });
     }
-    const clientsBatch = csvData.map(record => ({
-      Client_Name: sanitizeInput(record.Client_Name),
-      Type: sanitizeInput(record.Type.trim().toUpperCase()),
-      Email: record.Email ? sanitizeInput(record.Email) : "",
-      Monthly_Payment: parseFloat(record.Amount_To_Be_Paid),
-      Phone_Number: record.Phone_Number ? sanitizeInput(record.Phone_Number) : "",
-    }));
-    const paymentsBatch = csvData.map(record => ({
-      Client_Name: sanitizeInput(record.Client_Name),
-      Type: sanitizeInput(record.Type.trim().toUpperCase()),
-      Amount_To_Be_Paid: parseFloat(record.Amount_To_Be_Paid),
-      Year: parseInt(year),
-      Payments: {
-        January: 0, February: 0, March: 0, April: 0, May: 0, June: 0,
-        July: 0, August: 0, September: 0, October: 0, November: 0, December: 0,
-      },
-      Due_Payment: parseFloat(record.Amount_To_Be_Paid),
-    }));
-    await clientsCollection.insertMany(clientsBatch);
-    await paymentsCollection.insertMany(paymentsBatch);
-    console.log("CSV import completed successfully");
-    res.status(200).json({ message: "Clients and payments imported successfully", imported: csvData.length });
+
+    // Insert batches with error handling
+    try {
+      // Check for duplicates in clients
+      const existingClients = await clientsCollection.find({
+        $or: clientsBatch.map(c => ({ Client_Name: c.Client_Name, Type: c.Type })),
+      }).toArray();
+      if (existingClients.length > 0) {
+        console.error("Duplicate clients found", {
+          duplicates: existingClients.map(c => ({ Client_Name: c.Client_Name, Type: c.Type })),
+        });
+        return res.status(400).json({
+          error: "Duplicate clients found",
+          duplicates: existingClients.map(c => ({ Client_Name: c.Client_Name, Type: c.Type })),
+        });
+      }
+
+      await clientsCollection.insertMany(clientsBatch, { ordered: false });
+      console.log(`Inserted ${clientsBatch.length} clients for user ${username}`);
+      await paymentsCollection.insertMany(paymentsBatch, { ordered: false });
+      console.log(`Inserted ${paymentsBatch.length} payments for year ${year}, user ${username}`);
+
+      res.status(200).json({ message: "Clients and payments imported successfully", imported: csvData.length });
+    } catch (dbError) {
+      console.error("Database operation failed", {
+        error: dbError.message,
+        code: dbError.code,
+        details: dbError.write || dbError,
+        username,
+        year,
+      });
+      if (dbError.code === 11000) {
+        return res.status(400).json({
+          error: "Duplicate key error: some clients already exist",
+          details: dbError.write || dbError.message,
+        });
+      }
+      throw dbError;
+    }
   } catch (error) {
     console.error("Import CSV error:", {
       message: error.message,
       stack: error.stack,
       user: username,
       year,
+      csvDataSummary: csvData.slice(0, 2).map(r => Array.isArray(r) ? { record: r } : r),
     });
     res.status(500).json({ error: `Failed to import CSV: ${error.message}` });
   }
