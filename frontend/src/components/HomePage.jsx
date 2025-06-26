@@ -267,52 +267,99 @@ const HomePage = ({
     [searchUserYears]
   );
 
-  const handleAddNewYear = useCallback(async () => {
-    const newYear = (parseInt(currentYear) + 1).toString();
-    console.log(`HomePage.jsx: Attempting to add new year: ${newYear}`);
+const handleAddNewYear = useCallback(async () => {
+  const newYear = (parseInt(currentYear) + 1).toString();
+  console.log(`HomePage.jsx: Attempting to add new year: ${newYear}`);
 
-    if (mountedRef.current) {
-      setIsLoadingYears(true);
-    }
-
-    const controller = new AbortController();
-
-    try {
-      const response = await axios.post(
-        `${BASE_URL}/add-new-year`,
-        { year: newYear },
-        {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-          timeout: 10000,
-          signal: controller.signal,
-        }
-      );
-      console.log("HomePage.jsx: Add new year response:", response.data);
-
-      alert(response.data.message);
-
-      localStorage.setItem("currentYear", newYear);
-      window.location.reload();
-    } catch (error) {
-  if (error.name === 'AbortError') {
-    console.log('HomePage.jsx: Add new year request cancelled');
-    return;
-  }
-  console.error('HomePage.jsx: Error adding new year:', error);
-  const errorMsg = error.response?.data?.error || 'An unknown error occurred';
-  let userMessage = `Failed to add new year: ${errorMsg}`;
-  if (errorMsg.includes('Please add or import payment data')) {
-    userMessage = 'Please add or import payment data for the current year before adding a new year.';
-  } else if (errorMsg.includes('Sheet already exists')) {
-    userMessage = 'This year already exists for your account.';
-  }
-  alert(userMessage);
-} finally {
   if (mountedRef.current) {
-    setIsLoadingYears(false);
+    setIsLoadingYears(true);
   }
-}
-  }, [currentYear, sessionToken]);
+
+  const controller = new AbortController();
+
+  try {
+    // Add new year
+    const response = await axios.post(
+      `${BASE_URL}/add-new-year`,
+      { year: newYear },
+      {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+        timeout: 10000,
+        signal: controller.signal,
+      }
+    );
+    console.log("HomePage.jsx: Add new year response:", response.data);
+
+    // Clear cache for years and payments
+    const yearsCacheKey = getCacheKey("/get-user-years", { sessionToken });
+    const paymentsCacheKey = getCacheKey("/get-payments-by-year", { year: newYear, sessionToken });
+    delete apiCacheRef.current[yearsCacheKey];
+    delete apiCacheRef.current[paymentsCacheKey];
+
+    // Fetch updated years
+    await searchUserYears(controller.signal);
+
+    // Fetch clients to get expected count
+    const clientsResponse = await axios.get(`${BASE_URL}/get-clients`, {
+      headers: { Authorization: `Bearer ${sessionToken}` },
+      timeout: 10000,
+      signal: controller.signal,
+    });
+    const expectedClientCount = clientsResponse.data.length;
+
+    // Fetch payments for the new year
+    const paymentsResponse = await axios.get(`${BASE_URL}/get-payments-by-year`, {
+      headers: { Authorization: `Bearer ${sessionToken}` },
+      params: { year: newYear },
+      timeout: 10000,
+      signal: controller.signal,
+    });
+
+    const paymentsData = paymentsResponse.data || [];
+    setPaymentsData(paymentsData);
+    setCurrentYear(newYear);
+    localStorage.setItem("currentYear", newYear);
+
+    // Validate client count
+    if (paymentsData.length === 0 && expectedClientCount > 0) {
+      const errorMsg = `No clients found for ${newYear}. Please check the Clients sheet.`;
+      setLocalErrorMessage(errorMsg);
+      setErrorMessage(errorMsg);
+      alert(errorMsg);
+    } else if (paymentsData.length < expectedClientCount) {
+      const errorMsg = `Warning: Only ${paymentsData.length} client(s) found for ${newYear}. Expected ${expectedClientCount} clients from the Clients sheet.`;
+      setLocalErrorMessage(errorMsg);
+      setErrorMessage(errorMsg);
+      alert(errorMsg);
+    } else {
+      setLocalErrorMessage("");
+      setErrorMessage("");
+      alert(`Year ${newYear} added successfully with ${paymentsData.length} clients.`);
+    }
+  } catch (error) {
+    if (error.name === "AbortError") {
+      console.log("HomePage.jsx: Add new year request cancelled");
+      return;
+    }
+    console.error("HomePage.jsx: Error adding new year:", error);
+    let errorMsg = error.response?.data?.error || "An unknown error occurred";
+    let userMessage = `Failed to add new year: ${errorMsg}`;
+    if (errorMsg.includes("Please add or import payment data")) {
+      userMessage = "Please add or import payment data for the current year before adding a new year.";
+    } else if (errorMsg.includes("Sheet already exists")) {
+      userMessage = "This year already exists for your account.";
+    } else if (errorMsg.includes("No clients found")) {
+      userMessage = "No clients found in the Clients sheet. Please add clients before creating a new year.";
+    }
+    setLocalErrorMessage(userMessage);
+    setErrorMessage(userMessage);
+    alert(userMessage);
+  } finally {
+    if (mountedRef.current) {
+      setIsLoadingYears(false);
+    }
+  }
+}, [currentYear, sessionToken, getCacheKey, searchUserYears, setPaymentsData, setCurrentYear, setErrorMessage]);
 
 const hasValidEmail = useCallback((clientData) => {
   const email = clientData?.Email || '';

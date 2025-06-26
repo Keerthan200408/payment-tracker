@@ -1524,82 +1524,146 @@ app.get("/api/get-user-years", authenticateToken, async (req, res) => {
 // Add New Year
 app.post("/api/add-new-year", authenticateToken, async (req, res) => {
   const { year } = req.body;
+  const username = req.user.username;
   if (!year || isNaN(year) || parseInt(year) < 2025) {
+    console.error(`Invalid year provided: ${year}, user: ${username}`);
     return res.status(400).json({ error: "Valid year >= 2025 is required" });
   }
-  const username = req.user.username;
+  const sheetName = getPaymentSheetName(username, year);
+  const headers = [
+    "Client_Name",
+    "Type",
+    "Amount_To_Be_Paid",
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+    "Due_Payment",
+  ];
+  const sheets = google.sheets({ version: "v4", auth });
   try {
-    const headers = [
-      "Client_Name",
-      "Type",
-      "Amount_To_Be_Paid",
-      "January",
-      "February",
-      "March",
-      "April",
-      "May",
-      "June",
-      "July",
-      "August",
-      "September",
-      "October",
-      "November",
-      "December",
-      "Due_Payment",
-    ];
-    const sheetName = getPaymentSheetName(username, year);
-    const currentYear = new Date().getFullYear().toString();
-    const currentSheetName = getPaymentSheetName(username, currentYear);
-    await ensureSheet("Payments", headers, username, currentYear);
-    const currentPayments = await readSheet(currentSheetName, "A2:Q");
-    const hasCurrentData = currentPayments.some(
-      (payment) => payment[0] && payment[2] && parseFloat(payment[2]) > 0
+    // Ensure Clients sheet exists
+    await retryWithBackoff(() =>
+      ensureSheet("Clients", ["Client_Name", "Email", "Type", "Monthly_Payment", "Phone_Number"], username)
     );
-    if (!hasCurrentData) {
-      return res.status(400).json({
-        error: "Please add or import payment data for the current year before creating a new year",
-      });
+
+    // Read all clients from Clients_<username>
+    const clients = await retryWithBackoff(() =>
+      readSheet(getClientSheetName(username), "A2:E")
+    );
+    if (!clients || clients.length === 0) {
+      console.error(`No clients found in Clients_${username} for user ${username}`);
+      return res.status(400).json({ error: `No clients found in Clients sheet for user ${username}` });
     }
-    const sheets = google.sheets({ version: "v4", auth });
+
+    // Prepare payment rows for all clients
+    const newPayments = clients.map((client) => {
+      const monthlyPayment = parseFloat(client[3]) || 0;
+      return [
+        client[0] || "", // Client_Name
+        client[2] || "", // Type
+        monthlyPayment.toFixed(2), // Amount_To_Be_Paid
+        "", // January
+        "", // February
+        "", // March
+        "", // April
+        "", // May
+        "", // June
+        "", // July
+        "", // August
+        "", // September
+        "", // October
+        "", // November
+        "", // December
+        monthlyPayment.toFixed(2), // Due_Payment (initially set to Amount_To_Be_Paid)
+      ];
+    });
+
+    // Check if Payments_<username>_<year> sheet exists
     const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
     const sheetExists = spreadsheet.data.sheets.some(
       (sheet) => sheet.properties.title === sheetName
     );
+
     if (sheetExists) {
-      const payments = await readSheet(sheetName, "A2:Q");
-      const hasUserData = payments.some((payment) => payment[0]);
-      if (hasUserData) {
-        return res.status(200).json({ message: "Sheet already exists with user data" });
-      }
+      // Clear existing sheet to avoid duplicates or partial data
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          requests: [
+            {
+              deleteSheet: {
+                sheetId: spreadsheet.data.sheets.find(
+                  (s) => s.properties.title === sheetName
+                ).properties.sheetId,
+              },
+            },
+          ],
+        },
+      });
+      console.log(`Deleted existing ${sheetName} to ensure fresh data`);
     }
-    await ensureSheet("Payments", headers, username, year);
-    await ensureSheet("Clients", ["Client_Name", "Email", "Type", "Monthly_Payment", "Phone_Number"], username);
-    const clients = await readSheet(getClientSheetName(username), "A2:E");
-    const newPayments = clients.map((client) => [
-      client[0],
-      client[2],
-      parseFloat(client[3]) || 0,
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "0",
-    ]);
-    if (newPayments.length > 0) {
-      await appendSheet(sheetName, newPayments);
+
+    // Create new Payments_<username>_<year> sheet
+    await retryWithBackoff(() =>
+      ensureSheet("Payments", headers, username, year)
+    );
+
+    // Write headers and data in a single batch update
+    await retryWithBackoff(() =>
+      sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId,
+        resource: {
+          valueInputOption: "RAW",
+          data: [
+            {
+              range: `${sheetName}!A1:Q1`,
+              majorDimension: "ROWS",
+              values: [headers],
+            },
+            {
+              range: `${sheetName}!A2:Q${clients.length + 1}`,
+              majorDimension: "ROWS",
+              values: newPayments,
+            },
+          ],
+        },
+      })
+    );
+
+    // Verify the write operation
+    const writtenPayments = await retryWithBackoff(() =>
+      readSheet(sheetName, "A2:Q")
+    );
+    if (writtenPayments.length !== clients.length) {
+      console.error(
+        `Mismatch in written payments: expected ${clients.length}, got ${writtenPayments.length} for ${sheetName}`
+      );
+      return res.status(500).json({
+        error: `Failed to write all clients to ${sheetName}. Expected ${clients.length}, got ${writtenPayments.length}`,
+      });
     }
-    res.json({ message: `New year ${year} added successfully` });
+
+    console.log(
+      `Successfully created ${sheetName} with ${clients.length} clients for user ${username}`
+    );
+    res.json({
+      message: `Year ${year} added successfully with ${clients.length} clients`,
+    });
   } catch (error) {
-    console.error(`Error adding new year ${year}:`, error.message);
-    res.status(500).json({ error: "Failed to add new year" });
+    console.error(`Error adding new year ${year} for user ${username}:`, {
+      message: error.message,
+      stack: error.stack,
+    });
+    res.status(500).json({ error: `Failed to add new year: ${error.message}` });
   }
 });
 
