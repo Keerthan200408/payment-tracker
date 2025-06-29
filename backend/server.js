@@ -392,6 +392,7 @@ app.get("/api/get-clients", authenticateToken, async (req, res) => {
       Type: client.Type || "",
       Amount_To_Be_Paid: parseFloat(client.Monthly_Payment) || 0,
       Phone_Number: client.Phone_Number || "",
+      createdAt: client.createdAt || new Date(0).toISOString(), // Include createdAt
     }));
     console.log(`Returning ${processedClients.length} clients`);
     res.json(processedClients);
@@ -406,6 +407,7 @@ app.post("/api/add-client", authenticateToken, async (req, res) => {
   let { clientName, email, type, monthlyPayment, phoneNumber } = req.body;
   const username = req.user.username;
   const paymentValue = parseFloat(monthlyPayment);
+  const createdAt = new Date().toISOString(); // Add timestamp
   
   if (clientName.length > 100 || type.length > 50) {
     return res.status(400).json({ error: "Client name or type too long" });
@@ -449,13 +451,14 @@ app.post("/api/add-client", authenticateToken, async (req, res) => {
       return res.status(400).json({ error: "Client with this name and type already exists" });
     }
     
-    // Add client to clients collection
+    // Add client to clients collection with createdAt
     await clientsCollection.insertOne({
       Client_Name: clientName,
       Email: email,
       Type: type,
       Monthly_Payment: paymentValue,
       Phone_Number: phoneNumber,
+      createdAt: createdAt,
     });
     
     // Get all existing years for this user
@@ -464,7 +467,7 @@ app.post("/api/add-client", authenticateToken, async (req, res) => {
     // If no years exist, default to 2025
     const yearsToCreate = existingYears.length > 0 ? existingYears : [2025];
     
-    // Create payment records for all existing years
+    // Create payment records for all existing years with createdAt
     const paymentDocs = yearsToCreate.map(year => ({
       Client_Name: clientName,
       Type: type,
@@ -475,6 +478,7 @@ app.post("/api/add-client", authenticateToken, async (req, res) => {
         July: 0, August: 0, September: 0, October: 0, November: 0, December: 0,
       },
       Due_Payment: paymentValue,
+      createdAt: createdAt,
     }));
     
     await paymentsCollection.insertMany(paymentDocs);
@@ -532,9 +536,10 @@ app.put("/api/update-client", authenticateToken, async (req, res) => {
     if (!client) {
       return res.status(404).json({ error: "Client not found" });
     }
+    // Preserve createdAt from existing client
     await clientsCollection.updateOne(
       { Client_Name: oldClientName, Type: oldType },
-      { $set: { Client_Name, Type, Monthly_Payment: paymentValue, Email, Phone_Number } }
+      { $set: { Client_Name, Type, Monthly_Payment: paymentValue, Email, Phone_Number, createdAt: client.createdAt } }
     );
     const paymentDocs = await paymentsCollection.find({ Client_Name: oldClientName, Type: oldType }).toArray();
     for (const doc of paymentDocs) {
@@ -560,6 +565,7 @@ app.put("/api/update-client", authenticateToken, async (req, res) => {
             Type,
             Amount_To_Be_Paid: paymentValue,
             Due_Payment: currentYearDuePayment + prevYearCumulativeDue,
+            createdAt: doc.createdAt, // Preserve createdAt
           },
         }
       );
@@ -645,6 +651,7 @@ app.get("/api/get-payments-by-year", authenticateToken, async (req, res) => {
       Due_Payment: parseFloat(payment.Due_Payment) || 0,
       Email: clientEmailMap.get(`${payment.Client_Name}_${payment.Type}`) || "",
       Phone_Number: clientPhoneMap.get(`${payment.Client_Name}_${payment.Type}`) || "",
+      createdAt: payment.createdAt || new Date(0).toISOString(), // Include createdAt
     }));
     console.log(`Fetched ${processedPayments.length} payments for ${year} for user ${username}`);
     res.json(processedPayments);
@@ -887,6 +894,7 @@ app.post("/api/add-new-year", authenticateToken, async (req, res) => {
         July: 0, August: 0, September: 0, October: 0, November: 0, December: 0,
       },
       Due_Payment: parseFloat(client.Monthly_Payment) || 0,
+      createdAt: client.createdAt || new Date(0).toISOString(), // Use client's createdAt
     }));
     await paymentsCollection.insertMany(paymentDocs);
     console.log(`Successfully added ${paymentDocs.length} clients for year ${year} for user ${username}`);
@@ -955,6 +963,7 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
       }
 
       const [amountToBePaid, type, email = "", clientName, phoneNumber = ""] = record;
+      const createdAt = new Date().toISOString(); // Add timestamp for each record
 
       // Validate Client_Name
       if (typeof clientName !== "string" || clientName.length > 100 || !clientName.trim()) {
@@ -1004,6 +1013,7 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
         Email: sanitizedEmail,
         Monthly_Payment: amount,
         Phone_Number: sanitizedPhoneNumber,
+        createdAt: createdAt,
       });
 
       // Create payment records for all existing years
@@ -1017,6 +1027,7 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
           July: 0, August: 0, September: 0, October: 0, November: 0, December: 0,
         },
         Due_Payment: amount,
+        createdAt: createdAt,
       }));
 
       // Add all payment documents for this client to the batch
