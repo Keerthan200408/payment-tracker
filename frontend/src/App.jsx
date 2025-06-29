@@ -672,12 +672,7 @@ const updatePayment = async (
 
   return (
     <ErrorBoundary>
-      {errorMessage && (
-        <div className="mb-4 p-4 bg-red-50 text-red-800 rounded-lg text-center border border-red-200">
-          <i className="fas fa-exclamation-circle mr-2"></i>
-          {errorMessage}
-        </div>
-      )}
+      
       <div className="min-h-screen bg-gray-50">
         {page === "signIn" && (
           <SignInPage

@@ -366,29 +366,30 @@ const hasValidEmail = useCallback((clientData) => {
   return email && email.trim() !== '' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }, []);
 
-  const ErrorMessageDisplay = ({ message, onDismiss, type = "error" }) => {
-    if (!message) return null;
-    
-    const bgColor = type === "warning" ? "bg-yellow-50 border-yellow-200 text-yellow-800" : "bg-red-50 border-red-200 text-red-800";
-    const icon = type === "warning" ? "fas fa-exclamation-triangle" : "fas fa-exclamation-circle";
-    
-    return (
-      <div className={`mb-4 p-4 rounded-lg border ${bgColor}`}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <i className={`${icon} mr-2`}></i>
-            <span className="text-sm">{message}</span>
-          </div>
-          <button
-            onClick={onDismiss}
-            className="ml-2 hover:opacity-75 transition-opacity"
-          >
-            <i className="fas fa-times"></i>
-          </button>
+const ErrorMessageDisplay = ({ message, onDismiss, type = "error" }) => {
+  if (!message) return null;
+  
+  const bgColor = type === "warning" ? "bg-yellow-50 border-yellow-200 text-yellow-800" : "bg-red-50 border-red-200 text-red-800";
+  const icon = type === "warning" ? "fas fa-exclamation-triangle" : "fas fa-exclamation-circle";
+  
+  return (
+    <div className={`mb-4 p-4 rounded-lg border ${bgColor}`}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center">
+          <i className={`${icon} mr-2`}></i>
+          <span className="text-sm">{message}</span>
         </div>
+        <button
+          onClick={onDismiss}
+          className="ml-2 hover:opacity-75 transition-opacity"
+        >
+          <i className="fas fa-times"></i>
+        </button>
       </div>
-    );
-  };
+    </div>
+  );
+};
+
 const processBatchUpdates = useCallback(async () => {
   if (!updateQueueRef.current.length) {
     console.log("HomePage.jsx: No updates to process");
@@ -970,6 +971,17 @@ const debouncedUpdate = useCallback(
       }
     };
   }, []);
+
+  useEffect(() => {
+  if (localErrorMessage) {
+    const timer = setTimeout(() => {
+      if (mountedRef.current) {
+        setLocalErrorMessage("");
+      }
+    }, 5000);
+    return () => clearTimeout(timer);
+  }
+}, [localErrorMessage]);
 
 const handleAddType = async () => {
   console.log(`HomePage.jsx: type: ${newType}, user: ${currentUser}`);
@@ -1613,87 +1625,83 @@ const renderReports = () => {
 
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      {!isOnline && (
-        <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <i className="fas fa-exclamation-triangle"></i>
-            </div>
-            <div className="ml-3">
-              <p className="text-sm">
-                You're currently offline. Changes will be saved when connection
-                is restored.
-              </p>
-            </div>
+  <div className="p-6 bg-gray-50 min-h-screen">
+    {!isOnline && (
+      <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4">
+        <div className="flex">
+          <div className="flex-shrink-0">
+            <i className="fas fa-exclamation-triangle"></i>
+          </div>
+          <div className="ml-3">
+            <p className="text-sm">
+              You're currently offline. Changes will be saved when connection
+              is restored.
+            </p>
           </div>
         </div>
-      )}
-      {errorMessage && (
-  <ErrorMessageDisplay
-    message={errorMessage}
-    onDismiss={() => {
-      setLocalErrorMessage("");
-      setErrorMessage("");
-    }}
-    type="error"
-  />
-)}
-      
-      {isReportsPage ? renderReports() : renderDashboard()}
-      {isTypeModalOpen && (
+      </div>
+    )}
+    {localErrorMessage && (
+      <ErrorMessageDisplay
+        message={localErrorMessage}
+        onDismiss={() => setLocalErrorMessage("")}
+        type="error"
+      />
+    )}
+    {isReportsPage ? renderReports() : renderDashboard()}
+    {isTypeModalOpen && (
+      <div
+        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+        onClick={() => console.log("HomePage.jsx: Modal background rendered")}
+      >
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          onClick={() => console.log("HomePage.jsx: Modal background rendered")}
+          className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md"
+          onClick={(e) => e.stopPropagation()}
         >
-          <div
-            className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-lg font-semibold mb-4">Add New Type</h2>
-            {errorMessage && (
-              <p className="text-red-500 mb-4 text-sm">{errorMessage}</p>
-            )}
-            <input
-              type="text"
-              value={newType}
-              onChange={(e) => {
-                console.log(
-                  "HomePage.jsx: Typing in newType input:",
-                  e.target.value
-                );
-                setNewType(e.target.value);
+          <h2 className="text-lg font-semibold mb-4">Add New Type</h2>
+          {localErrorMessage && (
+            <p className="text-red-500 mb-4 text-sm">{localErrorMessage}</p>
+          )}
+          <input
+            type="text"
+            value={newType}
+            onChange={(e) => {
+              console.log(
+                "HomePage.jsx: Typing in newType input:",
+                e.target.value
+              );
+              setNewType(e.target.value);
+            }}
+            placeholder="Enter new type"
+            className="w-full p-2 border border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => {
+                console.log("HomePage.jsx: Cancel button clicked");
+                setIsTypeModalOpen(false);
+                setNewType("");
+                setLocalErrorMessage("");
               }}
-              placeholder="Enter new type"
-              className="w-full p-2 border border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => {
-                  console.log("HomePage.jsx: Cancel button clicked");
-                  setIsTypeModalOpen(false);
-                  setNewType("");
-                  setLocalErrorMessage("");
-                }}
-                className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  console.log("HomePage.jsx: Add Type submit button clicked");
-                  handleAddType();
-                }}
-                className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700"
-              >
-                Add Type
-              </button>
-            </div>
+              className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                console.log("HomePage.jsx: Add Type submit button clicked");
+                handleAddType();
+              }}
+              className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700"
+            >
+              Add Type
+            </button>
           </div>
         </div>
-      )}
-    </div>
-  );
+      </div>
+    )}
+  </div>
+);
 };
 
 export default HomePage;
