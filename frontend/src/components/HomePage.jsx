@@ -367,10 +367,20 @@ const hasValidEmail = useCallback((clientData) => {
 
 const ErrorMessageDisplay = ({ message, onDismiss, type = "error" }) => {
   if (!message) return null;
-  
-  const bgColor = type === "warning" ? "bg-yellow-50 border-yellow-200 text-yellow-800" : "bg-red-50 border-red-200 text-red-800";
-  const icon = type === "warning" ? "fas fa-exclamation-triangle" : "fas fa-exclamation-circle";
-  
+
+  const bgColor =
+    type === "warning"
+      ? "bg-yellow-50 border-yellow-200 text-yellow-800"
+      : type === "success"
+      ? "bg-green-50 border-green-200 text-green-800"
+      : "bg-red-50 border-red-200 text-red-800";
+  const icon =
+    type === "warning"
+      ? "fas fa-exclamation-triangle"
+      : type === "success"
+      ? "fas fa-check-circle"
+      : "fas fa-exclamation-circle";
+
   return (
     <div className={`mb-4 p-4 rounded-lg border ${bgColor}`}>
       <div className="flex items-center justify-between">
@@ -389,336 +399,447 @@ const ErrorMessageDisplay = ({ message, onDismiss, type = "error" }) => {
   );
 };
 
-const processBatchUpdates = useCallback(async () => {
-  if (!updateQueueRef.current.length) {
-    console.log("HomePage.jsx: No updates to process");
+const processBatchUpdates = useCallback(
+  async () => {
+    if (!updateQueueRef.current.length) {
+      console.log("HomePage.jsx: No updates to process");
+      batchTimerRef.current = null;
+      return;
+    }
+
+    const updates = [...updateQueueRef.current];
+    updateQueueRef.current = [];
     batchTimerRef.current = null;
-    return;
-  }
+    console.log(`HomePage.jsx: Processing batch of ${updates.length} updates`, updates);
+    setIsUpdating(true);
 
-  const updates = [...updateQueueRef.current];
-  updateQueueRef.current = [];
-  batchTimerRef.current = null;
-  console.log(`HomePage.jsx: Processing batch of ${updates.length} updates`, updates);
-  setIsUpdating(true);
+    const updatedLocalValues = { ...localInputValues };
+    const missingContactClients = [];
 
-  const updatedLocalValues = { ...localInputValues };
-  const missingContactClients = [];
-
-  // Pre-calculate row data to avoid repeated lookups
-  const rowDataCache = new Map();
-  updates.forEach(({ rowIndex }) => {
-    if (!rowDataCache.has(rowIndex) && paymentsData[rowIndex]) {
-      rowDataCache.set(rowIndex, paymentsData[rowIndex]);
-    }
-  });
-
-  const updatesByRow = updates.reduce((acc, update) => {
-    const { rowIndex, month, value, year } = update;
-    if (!acc[rowIndex]) {
-      const rowData = rowDataCache.get(rowIndex);
-      if (!rowData) {
-        console.warn(`HomePage.jsx: Invalid rowIndex ${rowIndex}`);
-        return acc;
+    // Pre-calculate row data to avoid repeated lookups
+    const rowDataCache = new Map();
+    updates.forEach(({ rowIndex }) => {
+      const actualIndex = rowIndex; // Use the raw rowIndex from updateQueue
+      if (!rowDataCache.has(actualIndex) && paymentsData[actualIndex]) {
+        rowDataCache.set(actualIndex, paymentsData[actualIndex]);
       }
-      
-      console.log(`DEBUG: Row ${rowIndex} data:`, {
-        Client_Name: rowData.Client_Name,
-        Type: rowData.Type,
-        Email: rowData.Email,
-        Phone_Number: rowData.Phone_Number,
+    });
+
+    const updatesByRow = updates.reduce((acc, update) => {
+      const { rowIndex, month, value, year } = update;
+      const actualIndex = rowIndex; // Use the raw rowIndex
+      if (!acc[actualIndex]) {
+        const rowData = rowDataCache.get(actualIndex);
+        if (!rowData) {
+          console.warn(`HomePage.jsx: Invalid rowIndex ${actualIndex}`);
+          return acc;
+        }
+
+        console.log(`HomePage.jsx: Row ${actualIndex} data`, {
+          Client_Name: rowData.Client_Name,
+          Type: rowData.Type,
+          Email: rowData.Email,
+          Phone_Number: rowData.Phone_Number,
+        });
+
+        acc[actualIndex] = {
+          rowIndex: actualIndex,
+          year,
+          updates: [],
+          clientName: rowData.Client_Name,
+          type: rowData.Type,
+          clientEmail: rowData.Email || "",
+          clientPhone: rowData.Phone_Number || "",
+          duePayment: rowData.Due_Payment || "0.00",
+          rowData,
+        };
+      }
+      acc[actualIndex].updates.push({ month, value });
+      return acc;
+    }, {});
+
+    // Batch state updates to reduce re-renders
+    const stateUpdates = {
+      paymentsData: [],
+      pendingUpdates: {},
+      localValues: { ...updatedLocalValues },
+    };
+
+    try {
+      // Process all updates in parallel where possible
+      const updatePromises = Object.values(updatesByRow).map(async (rowUpdate) => {
+        const { rowIndex, year, updates, clientName, type, clientEmail, clientPhone, duePayment, rowData } = rowUpdate;
+
+        if (!rowData) {
+          console.warn(`HomePage.jsx: Invalid rowIndex ${rowIndex}`);
+          return { success: false, rowIndex, error: `Invalid row index ${rowIndex}` };
+        }
+
+        // Pre-calculate statuses for notifications
+        const statuses = updates.map(({ month, value }) => {
+          const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
+          const paidInMonth = parseFloat(value) || 0;
+          let status;
+          if (paidInMonth === 0) status = "Unpaid";
+          else if (paidInMonth >= amountToBePaid) status = "Paid";
+          else status = "PartiallyPaid";
+          return { month, status, paidAmount: paidInMonth, expectedAmount: amountToBePaid };
+        });
+
+        // Prepare optimistic updates
+        const optimisticRowData = { ...rowData };
+        updates.forEach(({ month, value }) => {
+          optimisticRowData[month] = value || "";
+        });
+
+        // Calculate due payment
+        const amountToBePaid = parseFloat(optimisticRowData.Amount_To_Be_Paid) || 0;
+        const activeMonths = months.filter(
+          (m) => optimisticRowData[m] && parseFloat(optimisticRowData[m]) >= 0
+        ).length;
+        const expectedPayment = amountToBePaid * activeMonths;
+        const totalPayments = months.reduce(
+          (sum, m) => sum + (parseFloat(optimisticRowData[m]) || 0),
+          0
+        );
+        const currentYearDuePayment = Math.max(expectedPayment - totalPayments, 0);
+        optimisticRowData.Due_Payment = currentYearDuePayment.toFixed(2);
+
+        // Store optimistic update for batch state update
+        stateUpdates.paymentsData.push({ rowIndex, data: optimisticRowData });
+
+        try {
+          // Make API call
+          const response = await axios.post(
+            `${BASE_URL}/batch-save-payments`,
+            { clientName, type, updates },
+            {
+              headers: { Authorization: `Bearer ${sessionToken}` },
+              params: { year },
+              timeout: 8000,
+            }
+          );
+
+          const { updatedRow } = response.data;
+
+          // Prepare local values update
+          updates.forEach(({ month }) => {
+            const key = `${rowIndex}-${month}`;
+            stateUpdates.localValues[key] = updatedRow[month] || "";
+            stateUpdates.pendingUpdates[key] = false;
+          });
+
+          // Handle notifications asynchronously
+          const notifyStatuses = statuses.filter(
+            ({ status }) => status === "PartiallyPaid" || status === "Unpaid"
+          );
+
+          if (notifyStatuses.length > 0) {
+            console.log(`HomePage.jsx: Triggering notification for ${clientName}`, {
+              notifyStatuses,
+            });
+            handleNotifications(clientName, clientEmail, clientPhone, type, year, notifyStatuses, duePayment)
+              .catch((error) => {
+                console.error(`HomePage.jsx: Notification failed for ${clientName}`, error);
+                setLocalErrorMessage(
+                  `Notification failed for ${clientName}: ${error.message}`
+                );
+              });
+          } else {
+            console.log(`HomePage.jsx: No notifications needed for ${clientName}`);
+          }
+
+          return {
+            success: true,
+            row寇
+rowIndex,
+            updatedRow,
+            updates,
+            hasNotificationContact: !!(clientEmail || clientPhone),
+          };
+        } catch (error) {
+          console.error(`HomePage.jsx: Failed to batch update row ${rowIndex}:`, error);
+          return {
+            success: false,
+            rowIndex,
+            error: error.response?.data?.error || error.message,
+            updates,
+          };
+        }
       });
-      
-      acc[rowIndex] = {
-        rowIndex,
-        year,
-        updates: [],
-        clientName: rowData.Client_Name,
-        type: rowData.Type,
-        clientEmail: rowData.Email || "",
-        clientPhone: rowData.Phone_Number || "",
-        duePayment: rowData.Due_Payment || "0.00",
-        rowData // Cache the row data
-      };
-    }
-    acc[rowIndex].updates.push({ month, value });
-    return acc;
-  }, {});
 
-  // Batch state updates to reduce re-renders
-  const stateUpdates = {
-    paymentsData: [],
-    pendingUpdates: {},
-    localValues: { ...updatedLocalValues }
-  };
+      // Wait for all updates to complete
+      const results = await Promise.all(updatePromises);
 
-  try {
-    // Process all updates in parallel where possible
-    const updatePromises = Object.values(updatesByRow).map(async (rowUpdate) => {
-      const { rowIndex, year, updates, clientName, type, clientEmail, clientPhone, duePayment, rowData } = rowUpdate;
-      
-      if (!rowData) {
-        console.warn(`HomePage.jsx: Invalid rowIndex ${rowIndex}`);
-        return { success: false, rowIndex, error: `Invalid row index ${rowIndex}` };
+      // Process results and batch state updates
+      const failedUpdates = [];
+      const successfulUpdates = [];
+      const clientsWithoutContact = [];
+
+      results.forEach((result) => {
+        if (result.success) {
+          successfulUpdates.push(result);
+          if (!result.hasNotificationContact) {
+            const rowData = rowDataCache.get(result.rowIndex);
+            if (rowData) clientsWithoutContact.push(rowData.Client_Name);
+          }
+        } else {
+          failedUpdates.push(result);
+        }
+      });
+
+      // Single batch state update for payments data
+      setPaymentsData((prev) => {
+        const updated = [...prev];
+        successfulUpdates.forEach(({ rowIndex, updatedRow }) => {
+          if (updatedRow) {
+            updated[rowIndex] = { ...updated[rowIndex], ...updatedRow };
+          }
+        });
+        return updated;
+      });
+
+      // Single batch update for pending updates
+      setPendingUpdates((prev) => {
+        const newPending = { ...prev };
+        successfulUpdates.forEach(({ updates, rowIndex }) => {
+          updates.forEach(({ month }) => {
+            const key = `${rowIndex}-${month}`;
+            delete newPending[key];
+          });
+        });
+        return newPending;
+      });
+
+      // Single update for local input values
+      setLocalInputValues(stateUpdates.localValues);
+
+      // Handle errors and retries
+      if (failedUpdates.length > 0) {
+        const retryUpdates = [];
+        failedUpdates.forEach(({ rowIndex, updates, error }) => {
+          const rowData = rowDataCache.get(rowIndex);
+          setLocalErrorMessage(`Failed to update ${rowData?.Client_Name || "unknown"}: ${error}`);
+          setErrorMessage(`Failed to update ${rowData?.Client_Name || "unknown"}: ${error}`);
+
+          // Revert optimistic updates for failed rows
+          setPaymentsData((prev) =>
+            prev.map((row, idx) =>
+              idx === rowIndex ? rowDataCache.get(rowIndex) : row
+            )
+          );
+
+          updates.forEach((update) => retryUpdates.push({ ...update, rowIndex }));
+        });
+
+        updateQueueRef.current.push(...retryUpdates);
       }
 
-      // Pre-calculate statuses for notifications
-      const statuses = updates.map(({ month, value }) => {
-        const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
-        const paidInMonth = parseFloat(value) || 0;
-        let status;
-        if (paidInMonth === 0) status = "Unpaid";
-        else if (paidInMonth >= amountToBePaid) status = "Paid";
-        else status = "PartiallyPaid";
-        return { month, status, paidAmount: paidInMonth, expectedAmount: amountToBePaid };
-      });
+      // Handle missing contact warnings
+      if (clientsWithoutContact.length > 0) {
+        const errorMsg = `Payments updated, but notifications could not be sent to: ${clientsWithoutContact.join(
+          ", "
+        )} (missing valid phone number or email address).`;
+        setLocalErrorMessage(errorMsg);
+        setErrorMessage(errorMsg);
+      } else if (failedUpdates.length === 0) {
+        setLocalErrorMessage("");
+        setErrorMessage("");
+      }
 
-      // Prepare optimistic updates
-      const optimisticRowData = { ...rowData };
-      updates.forEach(({ month, value }) => {
-        optimisticRowData[month] = value || "";
-      });
+      // Schedule retry for failed updates
+      if (updateQueueRef.current.length > 0) {
+        console.log("HomePage.jsx: Scheduling retry for failed updates");
+        batchTimerRef.current = setTimeout(processBatchUpdates, 1000);
+      }
+    } catch (error) {
+      console.error("HomePage.jsx: Batch update error:", error);
+      const errorMsg = error.response?.data?.error || error.message;
+      let userMessage = "Batch update failed. Please try again.";
 
-      // Calculate due payment
-      const amountToBePaid = parseFloat(optimisticRowData.Amount_To_Be_Paid) || 0;
-      const activeMonths = months.filter(
-        (m) => optimisticRowData[m] && parseFloat(optimisticRowData[m]) >= 0
-      ).length;
-      const expectedPayment = amountToBePaid * activeMonths;
-      const totalPayments = months.reduce(
-        (sum, m) => sum + (parseFloat(optimisticRowData[m]) || 0),
-        0
-      );
-      const currentYearDuePayment = Math.max(expectedPayment - totalPayments, 0);
-      optimisticRowData.Due_Payment = currentYearDuePayment.toFixed(2);
+      if (errorMsg.includes("Sheet not found")) {
+        userMessage = "Payment data not found. Please refresh and try again.";
+      } else if (errorMsg.includes("Quota exceeded")) {
+        userMessage = "Server is busy. Please try again in a few minutes.";
+      } else if (errorMsg.includes("Payment record not found")) {
+        userMessage = "Client payment data not found. Please add the client first.";
+      }
 
-      // Store optimistic update for batch state update
-      stateUpdates.paymentsData.push({ rowIndex, data: optimisticRowData });
+      setLocalErrorMessage(userMessage);
+      setErrorMessage(userMessage);
+      updateQueueRef.current = [...updates, ...updateQueueRef.current];
+      batchTimerRef.current = setTimeout(processBatchUpdates, 2000);
+    } finally {
+      setIsUpdating(false);
+    }
+  },
+  [paymentsData, sessionToken, months, localInputValues, hasValidEmail, setErrorMessage]
+);
+
+// Separate notification handler to avoid blocking main updates
+const handleNotifications = useCallback(
+  async (clientName, clientEmail, clientPhone, type, year, notifyStatuses, duePayment) => {
+    console.log(`HomePage.jsx: Starting notification for ${clientName}`, {
+      clientEmail,
+      clientPhone,
+      type,
+      year,
+      notifyStatuses,
+    });
+
+    const hasValidPhone = clientPhone && /^\+?[\d\s-]{10,15}$/.test(clientPhone.trim());
+    const hasValidEmailAddress = hasValidEmail({ Email: clientEmail, email: clientEmail });
+
+    console.log(`HomePage.jsx: Notification checks`, {
+      hasValidPhone,
+      hasValidEmailAddress,
+      clientName,
+    });
+
+    let notificationSent = false;
+
+    // Try WhatsApp first
+    if (hasValidPhone) {
+      let isValidWhatsApp = true;
 
       try {
-        // Make API call
-        const response = await axios.post(
-          `${BASE_URL}/batch-save-payments`,
-          { clientName, type, updates },
+        console.log(`HomePage.jsx: Verifying WhatsApp for ${clientPhone}`);
+        const verifyResponse = await axios.post(
+          `${BASE_URL}/verify-whatsapp-contact`,
+          { phone: clientPhone.trim() },
           {
             headers: { Authorization: `Bearer ${sessionToken}` },
-            params: { year },
-            timeout: 8000, // Reduced timeout for faster response
+            timeout: 5000,
           }
         );
 
-        const { updatedRow } = response.data;
-        
-        // Prepare local values update
-        updates.forEach(({ month }) => {
-          const key = `${rowIndex}-${month}`;
-          stateUpdates.localValues[key] = updatedRow[month] || "";
-          stateUpdates.pendingUpdates[key] = false; // Mark as not pending
+        if (!verifyResponse.data.isValidWhatsApp) {
+          console.log(`HomePage.jsx: ${clientPhone} is not registered with WhatsApp`);
+          setLocalErrorMessage(
+            `Cannot send WhatsApp message to ${clientName}: Phone number is not registered with WhatsApp.`
+          );
+          isValidWhatsApp = false;
+        }
+      } catch (verifyError) {
+        console.error(`HomePage.jsx: WhatsApp verification failed for ${clientPhone} (${clientName})`, {
+          message: verifyError.message,
+          status: verifyError.response?.status,
+          data: verifyError.response?.data,
         });
-
-        // Handle notifications asynchronously (don't block UI updates)
-        const notifyStatuses = statuses.filter(
-          ({ status }) => status === "PartiallyPaid" || status === "Unpaid"
+        setLocalErrorMessage(
+          `Failed to verify WhatsApp status for ${clientName}: ${
+            verifyError.response?.data?.error || verifyError.message
+          }`
         );
-
-        // Fire and forget notifications to avoid blocking
-        if (notifyStatuses.length > 0) {
-          handleNotifications(clientName, clientEmail, clientPhone, type, year, notifyStatuses, duePayment)
-            .catch(error => {
-              console.error(`Notification failed for ${clientName}:`, error);
-              // Handle notification errors separately without blocking main flow
-              setLocalErrorMessage(prev => 
-                prev ? `${prev}; Notification failed for ${clientName}` 
-                     : `Notification failed for ${clientName}`
-              );
-            });
-        }
-
-        return { 
-          success: true, 
-          rowIndex, 
-          updatedRow, 
-          updates,
-          hasNotificationContact: !!(clientEmail || clientPhone)
-        };
-
-      } catch (error) {
-        console.error(`HomePage.jsx: Failed to batch update row ${rowIndex}:`, error);
-        return { 
-          success: false, 
-          rowIndex, 
-          error: error.response?.data?.error || error.message,
-          updates 
-        };
-      }
-    });
-
-    // Wait for all updates to complete
-    const results = await Promise.all(updatePromises);
-
-    // Process results and batch state updates
-    const failedUpdates = [];
-    const successfulUpdates = [];
-    const clientsWithoutContact = [];
-
-    results.forEach(result => {
-      if (result.success) {
-        successfulUpdates.push(result);
-        if (!result.hasNotificationContact) {
-          const rowData = rowDataCache.get(result.rowIndex);
-          if (rowData) clientsWithoutContact.push(rowData.Client_Name);
-        }
-      } else {
-        failedUpdates.push(result);
-      }
-    });
-
-    // Single batch state update for payments data
-    setPaymentsData(prev => {
-      const updated = [...prev];
-      successfulUpdates.forEach(({ rowIndex, updatedRow }) => {
-        if (updatedRow) {
-          updated[rowIndex] = { ...updated[rowIndex], ...updatedRow };
-        }
-      });
-      return updated;
-    });
-
-    // Single batch update for pending updates
-    setPendingUpdates(prev => {
-      const newPending = { ...prev };
-      successfulUpdates.forEach(({ updates, rowIndex }) => {
-        updates.forEach(({ month }) => {
-          const key = `${rowIndex}-${month}`;
-          delete newPending[key];
-        });
-      });
-      return newPending;
-    });
-
-    // Single update for local input values
-    setLocalInputValues(stateUpdates.localValues);
-
-    // Handle errors and retries
-    if (failedUpdates.length > 0) {
-      const retryUpdates = [];
-      failedUpdates.forEach(({ rowIndex, updates, error }) => {
-        const rowData = rowDataCache.get(rowIndex);
-        setLocalErrorMessage(`Failed to update ${rowData?.Client_Name || 'unknown'}: ${error}`);
-        setErrorMessage(`Failed to update ${rowData?.Client_Name || 'unknown'}: ${error}`);
-        
-        // Revert optimistic updates for failed rows
-        setPaymentsData(prev => 
-          prev.map((row, idx) => 
-            idx === rowIndex ? rowDataCache.get(rowIndex) : row
-          )
-        );
-        
-        updates.forEach(update => retryUpdates.push({ ...update, rowIndex }));
-      });
-      
-      updateQueueRef.current.push(...retryUpdates);
-    }
-
-    // Handle missing contact warnings
-    if (clientsWithoutContact.length > 0) {
-      const errorMsg = `Payments updated, but notifications could not be sent to: ${clientsWithoutContact.join(", ")} (missing valid phone number or email address).`;
-      setLocalErrorMessage(errorMsg);
-      setErrorMessage(errorMsg);
-    } else if (failedUpdates.length === 0) {
-      setLocalErrorMessage("");
-      setErrorMessage("");
-    }
-
-    // Schedule retry for failed updates
-    if (updateQueueRef.current.length > 0) {
-      console.log("HomePage.jsx: Scheduling retry for failed updates");
-      batchTimerRef.current = setTimeout(processBatchUpdates, 1000); // Faster retry
-    }
-
-  } catch (error) {
-    console.error('HomePage.jsx: Batch update error:', error);
-    const errorMsg = error.response?.data?.error || error.message;
-    let userMessage = 'Batch update failed. Please try again.';
-    
-    if (errorMsg.includes('Sheet not found')) {
-      userMessage = 'Payment data not found. Please refresh and try again.';
-    } else if (errorMsg.includes('Quota exceeded')) {
-      userMessage = 'Server is busy. Please try again in a few minutes.';
-    } else if (errorMsg.includes('Payment record not found')) {
-      userMessage = 'Client payment data not found. Please add the client first.';
-    }
-    
-    setLocalErrorMessage(userMessage);
-    setErrorMessage(userMessage);
-    updateQueueRef.current = [...updates, ...updateQueueRef.current];
-    batchTimerRef.current = setTimeout(processBatchUpdates, 2000);
-  } finally {
-    setIsUpdating(false);
-  }
-}, [paymentsData, sessionToken, months, localInputValues, hasValidEmail, setErrorMessage]);
-
-// Separate notification handler to avoid blocking main updates
-const handleNotifications = useCallback(async (clientName, clientEmail, clientPhone, type, year, notifyStatuses, duePayment) => {
-  const hasValidPhone = clientPhone && /^\+?[\d\s-]{10,15}$/.test(clientPhone);
-  const hasValidEmailAddress = hasValidEmail({ Email: clientEmail, email: clientEmail });
-
-  let notificationSent = false;
-
-  // Try WhatsApp first
-  if (hasValidPhone) {
-    let isValidWhatsApp = true;
-
-    // Attempt to verify WhatsApp status
-    try {
-      const verifyResponse = await axios.post(
-        `${BASE_URL}/verify-whatsapp-contact`,
-        { phone: clientPhone.trim() },
-        {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-          timeout: 5000,
-        }
-      );
-
-      if (!verifyResponse.data.isValidWhatsApp) {
-        setLocalErrorMessage(`Cannot send WhatsApp message to ${clientName}: Phone number is not registered with WhatsApp.`);
         isValidWhatsApp = false;
       }
-    } catch (verifyError) {
-      console.error(`WhatsApp verification failed for ${clientPhone} (${clientName}):`, {
-        message: verifyError.message,
-        status: verifyError.response?.status,
-        data: verifyError.response?.data,
-      });
-      if (verifyError.response?.status === 404) {
-        console.warn(`WhatsApp verification endpoint not found. Attempting to send WhatsApp message directly.`);
-        setLocalErrorMessage(`Warning: Unable to verify WhatsApp status for ${clientName}. Attempting to send message anyway.`);
-      } else if (verifyError.response?.status === 500) {
-        console.warn(`WhatsApp verification server error. Attempting to send WhatsApp message directly.`);
-        setLocalErrorMessage(`Warning: Server error while verifying WhatsApp status for ${clientName}. Attempting to send message anyway.`);
-      } else {
-        setLocalErrorMessage(`Failed to verify WhatsApp status for ${clientName}: ${verifyError.response?.data?.error || verifyError.message}`);
-        isValidWhatsApp = false;
+
+      if (isValidWhatsApp) {
+        try {
+          const duePaymentText = parseFloat(duePayment) > 0
+            ? `\n\nTotal Due Payment: ₹${parseFloat(duePayment).toFixed(2)}`
+            : "";
+          const messageContent = `Dear ${clientName},\n\nYour payment status for ${type} (${year}) has been updated:\n\n${notifyStatuses
+            .map(
+              ({ month, status, paidAmount, expectedAmount }) =>
+                `- ${month.charAt(0).toUpperCase() + month.slice(1)}: ${status} (Paid: ₹${paidAmount.toFixed(2)}, Expected: ₹${expectedAmount.toFixed(2)})`
+            )
+            .join("\n")}${duePaymentText}\n\nPlease review your account or contact us for clarifications.\nBest regards,\nPayment Tracker Team`;
+
+          console.log(`HomePage.jsx: Sending WhatsApp to ${clientPhone}`);
+          const response = await axios.post(
+            `${BASE_URL}/send-whatsapp`,
+            {
+              to: clientPhone.trim(),
+              message: messageContent,
+            },
+            {
+              headers: { Authorization: `Bearer ${sessionToken}` },
+              timeout: 10000,
+            }
+          );
+
+          console.log(`HomePage.jsx: WhatsApp sent successfully to ${clientPhone} for ${clientName}`, {
+            messageId: response.data.messageId || "N/A",
+          });
+          notificationSent = true;
+        } catch (whatsappError) {
+          console.error(`HomePage.jsx: WhatsApp attempt failed for ${clientPhone} (${clientName})`, {
+            message: whatsappError.message,
+            status: whatsappError.response?.status,
+            data: whatsappError.response?.data,
+          });
+          setLocalErrorMessage(
+            `Failed to send WhatsApp message to ${clientName}: ${
+              whatsappError.response?.data?.error || whatsappError.message
+            }. Attempting email.`
+          );
+        }
       }
+    } else {
+      console.log(`HomePage.jsx: No valid phone number for ${clientName}, checking email`);
     }
 
-    // Proceed with WhatsApp message if verification passed or failed with server error
-    if (isValidWhatsApp) {
+    // Fallback to email if WhatsApp fails or no valid phone
+    if (!notificationSent && hasValidEmailAddress) {
       try {
         const duePaymentText = parseFloat(duePayment) > 0
-          ? `\n\nTotal Due Payment: ₹${parseFloat(duePayment).toFixed(2)}`
+          ? `<p><strong>Total Due Payment:</strong> ₹${parseFloat(duePayment).toFixed(2)}</p>`
           : "";
-        const messageContent = `Dear ${clientName},\n\nYour payment status for ${type} (${year}) has been updated:\n\n${notifyStatuses
-          .map(({ month, status, paidAmount, expectedAmount }) =>
-            `- ${month.charAt(0).toUpperCase() + month.slice(1)}: ${status} (Paid: ₹${paidAmount.toFixed(2)}, Expected: ₹${expectedAmount.toFixed(2)})`
-          )
-          .join("\n")}${duePaymentText}\n\nPlease review your account or contact us for clarifications.\nBest regards,\nPayment Tracker Team`;
+        const emailContent = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #333; border-bottom: 2px solid #007bff; padding-bottom: 10px;">
+              Payment Status Update
+            </h2>
+            <p>Dear <strong>${clientName}</strong>,</p>
+            <p>Your payment status for <strong>${type}</strong> has been updated for <strong>${year}</strong>:</p>
+            <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+              <thead>
+                <tr style="background-color: #f8f9fa;">
+                  <th style="border: 1px solid #dee2e6; padding: 12px; text-align: left;">Month</th>
+                  <th style="border: 1px solid #dee2e6; padding: 12px; text-align: left;">Status</th>
+                  <th style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">Paid Amount</th>
+                  <th style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">Expected Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${notifyStatuses
+                  .map(
+                    ({ month, status, paidAmount, expectedAmount }) => `
+                    <tr>
+                      <td style="border: 1px solid #dee2e6; padding: 12px;">${
+                        month.charAt(0).toUpperCase() + month.slice(1)
+                      }</td>
+                      <td style="border: 1px solid #dee2e6; padding: 12px;">
+                        <span style="padding: 4px 8px; border-radius: 4px; color: white; background-color: ${
+                          status === "Unpaid" ? "#dc3545" : "#ffc107"
+                        };">
+                          ${status === "PartiallyPaid" ? "Partially Paid" : status}
+                        </span>
+                      </td>
+                      <td style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">₹${paidAmount.toFixed(2)}</td>
+                      <td style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">₹${expectedAmount.toFixed(2)}</td>
+                    </tr>
+                    `
+                  )
+                  .join("")}
+              </tbody>
+            </table>
+            ${duePaymentText}
+            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+              <p style="margin: 0;"><strong>Note:</strong> Please review your account or contact us for any clarifications.</p>
+            </div>
+            <p>Best regards,<br><strong>Payment Tracker Team</strong></p>
+          </div>
+        `;
 
+        console.log(`HomePage.jsx: Sending email to ${clientEmail} for ${clientName}`);
         const response = await axios.post(
-          `${BASE_URL}/send-whatsapp`,
+          `${BASE_URL}/send-email`,
           {
-            to: clientPhone.trim(),
-            message: messageContent,
+            to: clientEmail.trim(),
+            subject: `Payment Status Update - ${clientName} (${type}) - ${year}`,
+            html: emailContent,
           },
           {
             headers: { Authorization: `Bearer ${sessionToken}` },
@@ -726,102 +847,40 @@ const handleNotifications = useCallback(async (clientName, clientEmail, clientPh
           }
         );
 
-        console.log(`WhatsApp sent to ${clientPhone} for ${clientName}:`, {
+        console.log(`HomePage.jsx: Email sent successfully to ${clientEmail} for ${clientName}`, {
           messageId: response.data.messageId || "N/A",
-          clientName,
-          type,
-          year,
         });
         notificationSent = true;
-      } catch (whatsappError) {
-        console.error(`WhatsApp attempt for ${clientPhone} (${clientName}):`, {
-          message: whatsappError.message,
-          status: whatsappError.response?.status,
-          data: whatsappError.response?.data,
+        setLocalErrorMessage(`Email notification sent successfully to ${clientName}`);
+      } catch (emailError) {
+        console.error(`HomePage.jsx: Email failed for ${clientEmail} (${clientName})`, {
+          message: emailError.message,
+          status: emailError.response?.status,
+          data: emailError.response?.data,
         });
-        if (whatsappError.response?.status === 429) {
-          setLocalErrorMessage(`WhatsApp rate limit exceeded for ${clientName}. Trying email notification.`);
-        } else {
-          setLocalErrorMessage(`Failed to send WhatsApp message to ${clientName}: ${whatsappError.response?.data?.error || whatsappError.message}`);
-        }
+        setLocalErrorMessage(
+          `Failed to send email notification to ${clientName}: ${
+            emailError.response?.data?.error || emailError.message
+          }`
+        );
       }
-    }
-  }
-
-  // Fallback to email if WhatsApp fails or no valid phone
-  if (!notificationSent && hasValidEmailAddress) {
-    try {
-      const duePaymentText = parseFloat(duePayment) > 0
-        ? `<p><strong>Total Due Payment:</strong> ₹${parseFloat(duePayment).toFixed(2)}</p>`
-        : "";
-      const emailContent = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #333; border-bottom: 2px solid #007bff; padding-bottom: 10px;">
-            Payment Status Update
-          </h2>
-          <p>Dear <strong>${clientName}</strong>,</p>
-          <p>Your payment status for <strong>${type}</strong> has been updated for <strong>${year}</strong>:</p>
-          <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-            <thead>
-              <tr style="background-color: #f8f9fa;">
-                <th style="border: 1px solid #dee2e6; padding: 12px; text-align: left;">Month</th>
-                <th style="border: 1px solid #dee2e6; padding: 12px; text-align: left;">Status</th>
-                <th style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">Paid Amount</th>
-                <th style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">Expected Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${notifyStatuses
-                .map(({ month, status, paidAmount, expectedAmount }) => `
-                <tr>
-                  <td style="border: 1px solid #dee2e6; padding: 12px;">${
-                    month.charAt(0).toUpperCase() + month.slice(1)
-                  }</td>
-                  <td style="border: 1px solid #dee2e6; padding: 12px;">
-                    <span style="padding: 4px 8px; border-radius: 4px; color: white; background-color: ${status === 'Unpaid' ? '#dc3545' : '#ffc107'};">
-                      ${status === 'PartiallyPaid' ? 'Partially Paid' : status}
-                    </span>
-                  </td>
-                  <td style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">₹${paidAmount.toFixed(2)}</td>
-                  <td style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">₹${expectedAmount.toFixed(2)}</td>
-                </tr>
-                `)
-                .join("")}
-            </tbody>
-          </table>
-          ${duePaymentText}
-          <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
-            <p style="margin: 0;"><strong>Note:</strong> Please review your account or contact us for any clarifications.</p>
-          </div>
-          <p>Best regards,<br><strong>Payment Tracker Team</strong></p>
-        </div>
-      `;
-
-      await axios.post(
-        `${BASE_URL}/send-email`,
-        {
-          to: clientEmail.trim(),
-          subject: `Payment Status Update - ${clientName} (${type}) - ${year}`,
-          html: emailContent,
-        },
-        {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-          timeout: 10000,
-        }
+    } else if (!hasValidPhone && !hasValidEmailAddress) {
+      console.log(`HomePage.jsx: No valid contact for ${clientName}`);
+      setLocalErrorMessage(
+        `No notification sent for ${clientName}: No valid phone or email provided.`
       );
-
-      console.log(`Email sent to ${clientEmail} for ${clientName}`);
-      notificationSent = true;
-    } catch (emailError) {
-      console.error(`Email failed for ${clientEmail}:`, emailError);
-      setLocalErrorMessage(`Failed to send email notification to ${clientName}: ${emailError.response?.data?.error || emailError.message}`);
+    } else if (!notificationSent) {
+      console.log(`HomePage.jsx: Email not attempted for ${clientName} due to invalid email`);
+      setLocalErrorMessage(
+        `No notification sent for ${clientName}: Email address invalid or missing.`
+      );
     }
-  }
 
-  if (!notificationSent) {
-    setLocalErrorMessage(`No notification sent for ${clientName}: No valid phone or email provided.`);
-  }
-}, [sessionToken, hasValidEmail, setLocalErrorMessage]);
+    return notificationSent;
+  },
+  [sessionToken, hasValidEmail, setLocalErrorMessage]
+);
+
 
 const debouncedUpdate = useCallback(
   (rowIndex, month, value, year) => {
@@ -893,48 +952,52 @@ const debouncedUpdate = useCallback(
     [setCurrentYear]
   );
 
-  const handleInputChange = useCallback(
-    (rowIndex, month, value) => {
-      const parsedValue = value.trim() === "" ? "" : parseFloat(value);
-      if (value !== "" && (isNaN(parsedValue) || parsedValue < 0)) {
-        setErrorMessage("Please enter a valid non-negative number.");
-        return;
+const handleInputChange = useCallback(
+  (rowIndex, month, value) => {
+    const parsedValue = value.trim() === "" ? "" : parseFloat(value);
+    if (value !== "" && (isNaN(parsedValue) || parsedValue < 0)) {
+      setErrorMessage("Please enter a valid non-negative number.");
+      return;
+    }
+
+    const actualIndex = rowIndex; // Use raw rowIndex
+    const key = `${actualIndex}-${month}`;
+    setLocalInputValues((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+
+    const rowData = paymentsData[actualIndex];
+    let lastPaidMonthIndex = -1;
+    months.forEach((m, index) => {
+      const monthValue = parseFloat(rowData?.[m] || 0);
+      if (monthValue > 0 && index > lastPaidMonthIndex) {
+        lastPaidMonthIndex = index;
       }
+    });
 
-      const key = `${rowIndex}-${month}`;
-      setLocalInputValues((prev) => ({
-        ...prev,
-        [key]: value,
-      }));
-
-      const rowData = paymentsData[rowIndex];
-      let lastPaidMonthIndex = -1;
-      months.forEach((m, index) => {
-        const monthValue = parseFloat(rowData?.[m] || 0);
-        if (monthValue > 0 && index > lastPaidMonthIndex) {
-          lastPaidMonthIndex = index;
-        }
-      });
-
-      const currentMonthIndex = months.indexOf(month);
-      if (lastPaidMonthIndex >= 0 && currentMonthIndex > lastPaidMonthIndex + 1) {
-        for (let i = lastPaidMonthIndex + 1; i < currentMonthIndex; i++) {
-          const intermediateMonth = months[i];
-          const intermediateKey = `${rowIndex}-${intermediateMonth}`;
-          if (localInputValues[intermediateKey] === undefined || localInputValues[intermediateKey] === rowData?.[intermediateMonth]) {
-            setLocalInputValues((prev) => ({
-              ...prev,
-              [intermediateKey]: "0",
-            }));
-            debouncedUpdate(rowIndex, intermediateMonth, "0", currentYear);
-          }
+    const currentMonthIndex = months.indexOf(month);
+    if (lastPaidMonthIndex >= 0 && currentMonthIndex > lastPaidMonthIndex + 1) {
+      for (let i = lastPaidMonthIndex + 1; i < currentMonthIndex; i++) {
+        const intermediateMonth = months[i];
+        const intermediateKey = `${actualIndex}-${intermediateMonth}`;
+        if (
+          localInputValues[intermediateKey] === undefined ||
+          localInputValues[intermediateKey] === rowData?.[intermediateMonth]
+        ) {
+          setLocalInputValues((prev) => ({
+            ...prev,
+            [intermediateKey]: "0",
+          }));
+          debouncedUpdate(actualIndex, intermediateMonth, "0", currentYear);
         }
       }
+    }
 
-      debouncedUpdate(rowIndex, month, value, currentYear);
-    },
-    [debouncedUpdate, currentYear, paymentsData, localInputValues]
-  );
+    debouncedUpdate(actualIndex, month, value, currentYear);
+  },
+  [debouncedUpdate, currentYear, paymentsData, localInputValues]
+);
 
   useEffect(() => {
     onMount();
