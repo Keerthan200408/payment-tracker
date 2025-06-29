@@ -401,11 +401,12 @@ app.get("/api/get-clients", authenticateToken, async (req, res) => {
   }
 });
 
-// Add Client
+// Add Client (Modified to create payments for all existing years)
 app.post("/api/add-client", authenticateToken, async (req, res) => {
   let { clientName, email, type, monthlyPayment, phoneNumber } = req.body;
   const username = req.user.username;
   const paymentValue = parseFloat(monthlyPayment);
+  
   if (clientName.length > 100 || type.length > 50) {
     return res.status(400).json({ error: "Client name or type too long" });
   }
@@ -415,10 +416,12 @@ app.post("/api/add-client", authenticateToken, async (req, res) => {
   if (!clientName || !type || !monthlyPayment) {
     return res.status(400).json({ error: "Client name, type, and monthly payment are required" });
   }
+  
   clientName = sanitizeInput(clientName);
   type = sanitizeInput(type.trim().toUpperCase());
   email = email ? sanitizeInput(email) : "";
   phoneNumber = phoneNumber ? sanitizeInput(phoneNumber) : "";
+  
   if (isNaN(paymentValue) || paymentValue <= 0) {
     return res.status(400).json({ error: "Monthly payment must be a positive number" });
   }
@@ -428,19 +431,25 @@ app.post("/api/add-client", authenticateToken, async (req, res) => {
   if (phoneNumber && !/^\+?[\d\s-]{10,15}$/.test(phoneNumber)) {
     return res.status(400).json({ error: "Invalid phone number format" });
   }
+  
   try {
     const db = await connectMongo();
     const types = await db.collection("types").find({ User: username }).toArray();
     const userTypes = types.map(t => t.Type);
+    
     if (!userTypes.includes(type)) {
       return res.status(400).json({ error: `Type must be one of: ${userTypes.join(", ")}` });
     }
+    
     const clientsCollection = db.collection(`clients_${username}`);
     const paymentsCollection = db.collection(`payments_${username}`);
+    
     const existingClient = await clientsCollection.findOne({ Client_Name: clientName, Type: type });
     if (existingClient) {
       return res.status(400).json({ error: "Client with this name and type already exists" });
     }
+    
+    // Add client to clients collection
     await clientsCollection.insertOne({
       Client_Name: clientName,
       Email: email,
@@ -448,18 +457,33 @@ app.post("/api/add-client", authenticateToken, async (req, res) => {
       Monthly_Payment: paymentValue,
       Phone_Number: phoneNumber,
     });
-    await paymentsCollection.insertOne({
+    
+    // Get all existing years for this user
+    const existingYears = await paymentsCollection.distinct("Year");
+    
+    // If no years exist, default to 2025
+    const yearsToCreate = existingYears.length > 0 ? existingYears : [2025];
+    
+    // Create payment records for all existing years
+    const paymentDocs = yearsToCreate.map(year => ({
       Client_Name: clientName,
       Type: type,
       Amount_To_Be_Paid: paymentValue,
-      Year: 2025,
+      Year: year,
       Payments: {
         January: 0, February: 0, March: 0, April: 0, May: 0, June: 0,
         July: 0, August: 0, September: 0, October: 0, November: 0, December: 0,
       },
       Due_Payment: paymentValue,
+    }));
+    
+    await paymentsCollection.insertMany(paymentDocs);
+    
+    console.log(`Client added successfully with payment records for years: ${yearsToCreate.join(', ')}`);
+    res.status(201).json({ 
+      message: "Client added successfully", 
+      yearsCreated: yearsToCreate 
     });
-    res.status(201).json({ message: "Client added successfully" });
   } catch (error) {
     console.error("Add client error:", {
       message: error.message,
@@ -911,10 +935,16 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
     }
     console.log("Available user types:", userTypes);
 
+    // Get all existing years for this user
+    const existingYears = await paymentsCollection.distinct("Year");
+    const yearsToCreate = existingYears.length > 0 ? existingYears : [2025];
+    console.log(`Will create payment records for years: ${yearsToCreate.join(', ')}`);
+
     // Validate and map records
     const clientsBatch = [];
     const paymentsBatch = [];
     const errors = [];
+    
     for (let i = 0; i < csvData.length; i++) {
       const record = csvData[i];
       console.log(`Validating record ${i + 1}/${csvData.length}`, { record });
@@ -966,7 +996,7 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
         }
       }
 
-      // Add to batches
+      // Add to clients batch
       const sanitizedClientName = sanitizeInput(clientName);
       clientsBatch.push({
         Client_Name: sanitizedClientName,
@@ -976,17 +1006,21 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
         Phone_Number: sanitizedPhoneNumber,
       });
 
-      paymentsBatch.push({
+      // Create payment records for all existing years
+      const clientPaymentDocs = yearsToCreate.map(year => ({
         Client_Name: sanitizedClientName,
         Type: typeUpper,
         Amount_To_Be_Paid: amount,
-        Year: 2025,
+        Year: year,
         Payments: {
           January: 0, February: 0, March: 0, April: 0, May: 0, June: 0,
           July: 0, August: 0, September: 0, October: 0, November: 0, December: 0,
         },
         Due_Payment: amount,
-      });
+      }));
+
+      // Add all payment documents for this client to the batch
+      paymentsBatch.push(...clientPaymentDocs);
     }
 
     if (clientsBatch.length === 0) {
@@ -997,7 +1031,7 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
       });
     }
 
-    console.log(`Prepared ${clientsBatch.length} clients and ${paymentsBatch.length} payments for import`, { username });
+    console.log(`Prepared ${clientsBatch.length} clients and ${paymentsBatch.length} payments for import across ${yearsToCreate.length} years`, { username });
 
     // Insert batches
     try {
@@ -1025,13 +1059,15 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
       if (paymentsBatch.length > 0) {
         const result = await paymentsCollection.insertMany(paymentsBatch, { ordered: false });
         insertedPayments = result.insertedCount;
-        console.log(`Inserted ${insertedPayments} payments for year 2025, user ${username}`);
+        console.log(`Inserted ${insertedPayments} payments across years ${yearsToCreate.join(', ')} for user ${username}`);
       }
 
       // Return response
       const response = {
-        message: `Imported ${insertedClients} clients and ${insertedPayments} payments successfully`,
+        message: `Imported ${insertedClients} clients and ${insertedPayments} payments successfully across ${yearsToCreate.length} years (${yearsToCreate.join(', ')})`,
         imported: insertedClients,
+        yearsCreated: yearsToCreate,
+        paymentRecordsCreated: insertedPayments,
         errors: errors.length > 0 ? errors : undefined,
       };
       console.log("Import response:", response);
