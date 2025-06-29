@@ -1185,40 +1185,68 @@ app.get("/api/test-smtp", async (req, res) => {
 app.post("/api/send-email", authenticateToken, async (req, res) => {
   const { to, subject, html } = req.body;
   if (!to || !subject || !html) {
-    console.error("Missing required fields:", { to, subject, html, user: req.user.username });
+    console.error("Missing required fields for email:", {
+      to,
+      subject,
+      htmlProvided: !!html,
+      user: req.user?.username || "unknown",
+    });
     return res.status(400).json({ error: "Recipient email, subject, and HTML content are required" });
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
-    console.error("Invalid email address:", { to, user: req.user.username });
+    console.error("Invalid email address:", { to, user: req.user?.username || "unknown" });
     return res.status(400).json({ error: "Invalid recipient email address" });
   }
+
+  // Verify environment variables
+  if (!process.env.EMAIL_FROM) {
+    console.error("Missing EMAIL_FROM environment variable", {
+      user: req.user?.username || "unknown",
+    });
+    return res.status(500).json({ error: "Server configuration error: Missing email sender address" });
+  }
+
   try {
     const sanitizedHtml = sanitizeInput(html);
     if (!sanitizedHtml.trim()) {
-      console.error("Sanitized HTML is empty:", { originalHtml: html, user: req.user.username });
+      console.error("Sanitized HTML is empty:", {
+        originalHtmlLength: html.length,
+        user: req.user?.username || "unknown",
+      });
       return res.status(400).json({ error: "HTML content is invalid or empty after sanitization" });
     }
+
+    console.log("Attempting to send email:", {
+      to,
+      subject,
+      htmlLength: sanitizedHtml.length,
+      from: process.env.EMAIL_FROM,
+      user: req.user?.username || "unknown",
+    });
+
     const info = await transporter.sendMail({
       from: `"Payment Tracker" <${process.env.EMAIL_FROM}>`,
       to: to.trim(),
       subject,
       html: sanitizedHtml,
     });
-    console.log(`Email sent successfully to ${to}:`, {
+
+    console.log("Email sent successfully:", {
+      to,
       messageId: info.messageId,
       response: info.response,
-      user: req.user.username,
+      user: req.user?.username || "unknown",
     });
-    res.json({ message: "Email sent successfully" });
+    return res.json({ message: "Email sent successfully", messageId: info.messageId });
   } catch (error) {
     console.error("Send email error:", {
       message: error.message,
       code: error.code,
-      stack: error.stack,
+      details: JSON.stringify(error.response || error, null, 2),
       to,
-      user: req.user.username,
+      user: req.user?.username || "unknown",
     });
-    res.status(500).json({ error: `Failed to send email: ${error.message}` });
+    return res.status(500).json({ error: `Failed to send email: ${error.message}` });
   }
 });
 
