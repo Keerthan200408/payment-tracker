@@ -22,18 +22,19 @@ const AddClientPage = ({
   const [monthlyPayment, setMonthlyPayment] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false); // Add loading state
 
   useEffect(() => {
-  if (sessionToken && currentUser) {
-    console.log(`AddClientPage.jsx: Checking types for ${currentUser}`);
-    const cacheKey = `types_${currentUser}_${sessionToken}`;
-    // Only fetch if types are not already loaded
-    if (!types.length) {
-      console.log(`AddClientPage.jsx: Fetching types for ${currentUser}`);
-      fetchTypes(sessionToken);
+    if (sessionToken && currentUser) {
+      console.log(`AddClientPage.jsx: Checking types for ${currentUser}`);
+      const cacheKey = `types_${currentUser}_${sessionToken}`;
+      // Only fetch if types are not already loaded
+      if (!types.length) {
+        console.log(`AddClientPage.jsx: Fetching types for ${currentUser}`);
+        fetchTypes(sessionToken);
+      }
     }
-  }
-}, [sessionToken, currentUser, types, fetchTypes]);
+  }, [sessionToken, currentUser, types, fetchTypes]);
 
   useEffect(() => {
     if (editClient) {
@@ -46,102 +47,138 @@ const AddClientPage = ({
     }
   }, [editClient]);
 
-  
-
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  setError('');
-  setSuccess('');
+    e.preventDefault();
+    
+    // Prevent double submission
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    
+    setError('');
+    setSuccess('');
 
-  // Validate required fields
-  if (!clientName || !type || !monthlyPayment) {
-    setError('Client name, type, and monthly payment are required.');
-    return;
-  }
-  if (clientName.length > 100) {
-    setError('Client name must be 100 characters or less.');
-    return;
-  }
-  if (!types.includes(type)) {
-    setError(`Type must be one of: ${types.join(", ")}`);
-    return;
-  }
-  const paymentValue = parseFloat(monthlyPayment);
-  if (isNaN(paymentValue) || paymentValue <= 0) {
-    setError('Monthly payment must be a positive number.');
-    return;
-  }
-  if (paymentValue > 1000000) {
-    setError('Monthly payment exceeds maximum limit of 1,000,000.');
-    return;
-  }
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    setError('Please enter a valid email address.');
-    return;
-  }
-  if (phoneNumber && !/^\+?[\d\s-]{10,15}$/.test(phoneNumber)) {
-    setError('Please enter a valid phone number (10-15 digits, optional + or -).');
-    return;
-  }
+    // Get the actual current value from the input field directly
+    const monthlyPaymentInput = e.target.querySelector('input[type="number"]');
+    const actualMonthlyPayment = monthlyPaymentInput ? monthlyPaymentInput.value : monthlyPayment;
+    
+    console.log('Form submission values:', {
+      stateValue: monthlyPayment,
+      inputValue: actualMonthlyPayment,
+      clientName,
+      type
+    });
 
-  try {
-    if (editClient) {
-      const payload = {
-        oldClient: { Client_Name: editClient.Client_Name, Type: editClient.Type },
-        newClient: {
-          Client_Name: clientName,
-          Type: type,
-          Amount_To_Be_Paid: paymentValue,
-          Email: email || '',
-          Phone_Number: phoneNumber || '',
-        },
-      };
-      console.log('Update client payload:', payload);
-      await axios.put(`${BASE_URL}/update-client`, payload, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-        timeout: 10000, // Add timeout
-      });
-      setSuccess('Client updated successfully! Redirecting to clients page...');
-    } else {
-      await axios.post(`${BASE_URL}/add-client`, {
-        clientName,
-        email: email || '',
-        type,
-        monthlyPayment: paymentValue,
-        phoneNumber: phoneNumber || '',
-      }, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-        timeout: 10000, // Add timeout
-      });
-      setSuccess('Client added successfully! Redirecting to clients page...');
+    // Validate required fields
+    if (!clientName || !type || !actualMonthlyPayment) {
+      setError('Client name, type, and monthly payment are required.');
+      setIsSubmitting(false);
+      return;
+    }
+    if (clientName.length > 100) {
+      setError('Client name must be 100 characters or less.');
+      setIsSubmitting(false);
+      return;
+    }
+    if (!types.includes(type)) {
+      setError(`Type must be one of: ${types.join(", ")}`);
+      setIsSubmitting(false);
+      return;
     }
     
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    await Promise.all([
-      fetchClients(sessionToken),
-      fetchPayments(sessionToken, new Date().getFullYear().toString()) // Ensure string year
-    ]);
-    setEditClient(null);
-    setPage('clients');
-  } catch (err) {
-    console.error('Add/Edit client error:', {
-      status: err.response?.status,
-      data: err.response?.data,
-      message: err.message,
-      fullError: err,
-    });
-    const errorMsg = err.response?.data?.error || err.message || 'Failed to save client.';
-    let userMessage = errorMsg;
-    if (errorMsg.includes('Client already exists')) {
-      userMessage = 'This client name and type combination already exists.';
-    } else if (errorMsg.includes('Sheet not found')) {
-      userMessage = 'Client data sheet not found. Please try again or contact support.';
-    } else if (errorMsg.includes('Quota exceeded')) {
-      userMessage = 'Server is busy. Please try again later.';
+    const paymentValue = parseFloat(actualMonthlyPayment);
+    console.log('Parsed payment value:', paymentValue, 'from input:', actualMonthlyPayment);
+    
+    if (isNaN(paymentValue) || paymentValue <= 0) {
+      setError('Monthly payment must be a positive number.');
+      setIsSubmitting(false);
+      return;
     }
-    setError(userMessage);
-  }
-};
+    if (paymentValue > 1000000) {
+      setError('Monthly payment exceeds maximum limit of 1,000,000.');
+      setIsSubmitting(false);
+      return;
+    }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError('Please enter a valid email address.');
+      setIsSubmitting(false);
+      return;
+    }
+    if (phoneNumber && !/^\+?[\d\s-]{10,15}$/.test(phoneNumber)) {
+      setError('Please enter a valid phone number (10-15 digits, optional + or -).');
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      if (editClient) {
+        const payload = {
+          oldClient: { Client_Name: editClient.Client_Name, Type: editClient.Type },
+          newClient: {
+            Client_Name: clientName,
+            Type: type,
+            Amount_To_Be_Paid: paymentValue,
+            Email: email || '',
+            Phone_Number: phoneNumber || '',
+          },
+        };
+        console.log('Update client payload:', payload);
+        await axios.put(`${BASE_URL}/update-client`, payload, {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+          timeout: 10000,
+        });
+        setSuccess('Client updated successfully! Redirecting to clients page...');
+      } else {
+        const payload = {
+          clientName,
+          email: email || '',
+          type,
+          monthlyPayment: paymentValue,
+          phoneNumber: phoneNumber || '',
+        };
+        console.log('Add client payload:', payload);
+        
+        await axios.post(`${BASE_URL}/add-client`, payload, {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+          timeout: 10000,
+        });
+        setSuccess('Client added successfully! Redirecting to clients page...');
+      }
+      
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await Promise.all([
+        fetchClients(sessionToken),
+        fetchPayments(sessionToken, new Date().getFullYear().toString())
+      ]);
+      setEditClient(null);
+      setPage('clients');
+    } catch (err) {
+      console.error('Add/Edit client error:', {
+        status: err.response?.status,
+        data: err.response?.data,
+        message: err.message,
+        fullError: err,
+      });
+      const errorMsg = err.response?.data?.error || err.message || 'Failed to save client.';
+      let userMessage = errorMsg;
+      if (errorMsg.includes('Client already exists')) {
+        userMessage = 'This client name and type combination already exists.';
+      } else if (errorMsg.includes('Sheet not found')) {
+        userMessage = 'Client data sheet not found. Please try again or contact support.';
+      } else if (errorMsg.includes('Quota exceeded')) {
+        userMessage = 'Server is busy. Please try again later.';
+      }
+      setError(userMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Handle input change with debouncing for monthly payment
+  const handleMonthlyPaymentChange = (e) => {
+    const value = e.target.value;
+    console.log('Monthly payment input changed to:', value);
+    setMonthlyPayment(value);
+  };
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen flex justify-center items-center">
@@ -151,7 +188,7 @@ const AddClientPage = ({
         </h2>
         {error && <p className="text-red-500 mb-4 text-sm">{error}</p>}
         {success && <p className="text-green-500 mb-4 text-sm">{success}</p>}
-        <div className="bg-white p-6 rounded-lg shadow-sm">
+        <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow-sm">
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-medium mb-2">Client Name</label>
             <input
@@ -160,6 +197,7 @@ const AddClientPage = ({
               onChange={(e) => setClientName(e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base placeholder-gray-400"
               placeholder="Enter client name"
+              disabled={isSubmitting}
             />
           </div>
           <div className="mb-4">
@@ -170,6 +208,7 @@ const AddClientPage = ({
               onChange={(e) => setEmail(e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base placeholder-gray-400"
               placeholder="Enter email (optional)"
+              disabled={isSubmitting}
             />
           </div>
           <div className="mb-4">
@@ -180,54 +219,68 @@ const AddClientPage = ({
               onChange={(e) => setPhoneNumber(e.target.value)}
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base placeholder-gray-400"
               placeholder="Enter phone number (e.g., +1234567890)"
+              disabled={isSubmitting}
             />
           </div>
           <div className="mb-4">
             <label className="block text-gray-700 text-sm font-medium mb-2">Type</label>
             <select
-  value={type}
-  onChange={(e) => setType(e.target.value)}
-  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base"
->
-  <option value="">Select Type</option>
-  {types.map((typeOption) => (
-    <option key={typeOption} value={typeOption}>
-      {typeOption}
-    </option>
-  ))}
-</select>
+              value={type}
+              onChange={(e) => setType(e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base"
+              disabled={isSubmitting}
+            >
+              <option value="">Select Type</option>
+              {types.map((typeOption) => (
+                <option key={typeOption} value={typeOption}>
+                  {typeOption}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="mb-6">
             <label className="block text-gray-700 text-sm font-medium mb-2">Monthly Payment</label>
             <input
               type="number"
               value={monthlyPayment}
-              onChange={(e) => setMonthlyPayment(e.target.value)}
+              onChange={handleMonthlyPaymentChange}
+              onBlur={(e) => {
+                console.log('Monthly payment field blurred with value:', e.target.value);
+              }}
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base placeholder-gray-400"
               placeholder="Enter monthly payment"
               min="0"
               step="100"
               max="1000000"
+              disabled={isSubmitting}
             />
           </div>
           <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">
             <button
-              onClick={handleSubmit}
-              className="bg-gray-800 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition duration-200 flex items-center justify-center w-full sm:w-auto"
+              type="submit"
+              disabled={isSubmitting}
+              className={`${
+                isSubmitting 
+                  ? 'bg-gray-400 cursor-not-allowed' 
+                  : 'bg-gray-800 hover:bg-gray-700'
+              } text-white px-4 py-2 rounded-md transition duration-200 flex items-center justify-center w-full sm:w-auto`}
             >
-              <i className="fas fa-save mr-2"></i> {editClient ? 'Update' : 'Save'}
+              <i className={`fas ${isSubmitting ? 'fa-spinner fa-spin' : 'fa-save'} mr-2`}></i> 
+              {isSubmitting ? 'Saving...' : (editClient ? 'Update' : 'Save')}
             </button>
             <button
+              type="button"
               onClick={() => {
                 setEditClient(null);
                 setPage('clients');
               }}
-              className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-500 transition duration-200 flex items-center justify-center w-full sm:w-auto"
+              disabled={isSubmitting}
+              className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-500 transition duration-200 flex items-center justify-center w-full sm:w-auto disabled:opacity-50"
             >
               <i className="fas fa-times mr-2"></i> Cancel
             </button>
           </div>
-        </div>
+        </form>
       </div>
     </div>
   );
