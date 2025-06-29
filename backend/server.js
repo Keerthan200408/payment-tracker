@@ -1225,18 +1225,40 @@ app.post("/api/send-email", authenticateToken, async (req, res) => {
 app.post("/api/verify-whatsapp-contact", authenticateToken, async (req, res) => {
   const { phone } = req.body;
   if (!phone || !/^\+?[\d\s-]{10,15}$/.test(phone)) {
-    console.error("Invalid phone number for verification:", { phone, user: req.user.username });
+    console.error("Invalid phone number for verification:", {
+      phone,
+      user: req.user?.username || "unknown",
+    });
     return res.status(400).json({ error: "Invalid phone number" });
   }
+
+  // Verify environment variables
+  if (!process.env.ULTRAMSG_TOKEN || !process.env.ULTRAMSG_INSTANCE_ID) {
+    console.error("Missing UltraMsg environment variables:", {
+      token: process.env.ULTRAMSG_TOKEN ? "Set" : "Missing",
+      instanceId: process.env.ULTRAMSG_INSTANCE_ID ? "Set" : "Missing",
+      user: req.user?.username || "unknown",
+    });
+    return res.status(500).json({ error: "Server configuration error: Missing WhatsApp API credentials" });
+  }
+
   try {
     let formattedPhone = phone.trim().replace(/[\s-]/g, "");
     if (!formattedPhone.startsWith("+")) {
       formattedPhone = `+91${formattedPhone.replace(/\D/g, "")}`;
     }
+    const chatId = `${formattedPhone}@c.us`;
     const payload = {
       token: process.env.ULTRAMSG_TOKEN,
-      chatId: `${formattedPhone}@c.us`,
+      chatId,
     };
+
+    console.log("Attempting UltraMsg contact check:", {
+      phone: formattedPhone,
+      chatId,
+      user: req.user?.username || "unknown",
+    });
+
     const response = await axios.get(
       `https://api.ultramsg.com/${process.env.ULTRAMSG_INSTANCE_ID}/contacts/check`,
       {
@@ -1244,12 +1266,14 @@ app.post("/api/verify-whatsapp-contact", authenticateToken, async (req, res) => 
         timeout: 5000,
       }
     );
+
     console.log("UltraMsg contact check response:", {
       phone: formattedPhone,
       status: response.status,
       data: response.data,
-      user: req.user.username,
+      user: req.user?.username || "unknown",
     });
+
     const isValidWhatsApp = response.data.status === "valid";
     return res.json({ isValidWhatsApp });
   } catch (error) {
@@ -1258,10 +1282,14 @@ app.post("/api/verify-whatsapp-contact", authenticateToken, async (req, res) => 
       code: error.response?.data?.error?.code || error.code,
       details: JSON.stringify(error.response?.data || error, null, 2),
       phone,
-      user: req.user.username,
+      user: req.user?.username || "unknown",
     });
+
     if (error.response?.status === 429) {
       return res.status(429).json({ error: "Rate limit exceeded for WhatsApp API. Please try again later." });
+    }
+    if (error.response?.data?.error?.code === 1006) {
+      return res.status(400).json({ error: "Phone number is not registered with WhatsApp", isValidWhatsApp: false });
     }
     return res.status(500).json({ error: `Failed to verify WhatsApp contact: ${error.message}` });
   }

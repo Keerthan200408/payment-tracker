@@ -693,13 +693,16 @@ const handleNotifications = useCallback(async (clientName, clientEmail, clientPh
       if (verifyError.response?.status === 404) {
         console.warn(`WhatsApp verification endpoint not found. Attempting to send WhatsApp message directly.`);
         setLocalErrorMessage(`Warning: Unable to verify WhatsApp status for ${clientName}. Attempting to send message anyway.`);
+      } else if (verifyError.response?.status === 500) {
+        console.warn(`WhatsApp verification server error. Attempting to send WhatsApp message directly.`);
+        setLocalErrorMessage(`Warning: Server error while verifying WhatsApp status for ${clientName}. Attempting to send message anyway.`);
       } else {
         setLocalErrorMessage(`Failed to verify WhatsApp status for ${clientName}: ${verifyError.response?.data?.error || verifyError.message}`);
         isValidWhatsApp = false;
       }
     }
 
-    // Proceed with WhatsApp message if verification passed or endpoint is unavailable
+    // Proceed with WhatsApp message if verification passed or failed with server error
     if (isValidWhatsApp) {
       try {
         const duePaymentText = parseFloat(duePayment) > 0
