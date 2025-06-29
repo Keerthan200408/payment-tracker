@@ -668,43 +668,58 @@ const handleNotifications = useCallback(async (clientName, clientEmail, clientPh
   // Try WhatsApp first
   if (hasValidPhone) {
     try {
-      const duePaymentText = parseFloat(duePayment) > 0
-        ? `\n\nTotal Due Payment: ₹${parseFloat(duePayment).toFixed(2)}`
-        : "";
-      const messageContent = `Dear ${clientName},\n\nYour payment status for ${type} (${year}) has been updated:\n\n${notifyStatuses
-        .map(({ month, status, paidAmount, expectedAmount }) =>
-          `- ${month.charAt(0).toUpperCase() + month.slice(1)}: ${status} (Paid: ₹${paidAmount.toFixed(2)}, Expected: ₹${expectedAmount.toFixed(2)})`
-        )
-        .join("\n")}${duePaymentText}\n\nPlease review your account or contact us for clarifications.\nBest regards,\nPayment Tracker Team`;
-
-      const response = await axios.post(
-        `${BASE_URL}/send-whatsapp`,
-        {
-          to: clientPhone.trim(),
-          message: messageContent,
-        },
+      // Verify WhatsApp status
+      const verifyResponse = await axios.post(
+        `${BASE_URL}/verify-whatsapp-contact`,
+        { phone: clientPhone.trim() },
         {
           headers: { Authorization: `Bearer ${sessionToken}` },
-          timeout: 10000,
+          timeout: 5000,
         }
       );
 
-      console.log(`WhatsApp sent to ${clientPhone} for ${clientName}:`, {
-        messageId: response.data.messageId || "N/A",
-        clientName,
-        type,
-        year,
-      });
-      notificationSent = true;
+      if (!verifyResponse.data.isValidWhatsApp) {
+        setLocalErrorMessage(`Cannot send WhatsApp message to ${clientName}: Phone number is not registered with WhatsApp.`);
+      } else {
+        const duePaymentText = parseFloat(duePayment) > 0
+          ? `\n\nTotal Due Payment: ₹${parseFloat(duePayment).toFixed(2)}`
+          : "";
+        const messageContent = `Dear ${clientName},\n\nYour payment status for ${type} (${year}) has been updated:\n\n${notifyStatuses
+          .map(({ month, status, paidAmount, expectedAmount }) =>
+            `- ${month.charAt(0).toUpperCase() + month.slice(1)}: ${status} (Paid: ₹${paidAmount.toFixed(2)}, Expected: ₹${expectedAmount.toFixed(2)})`
+          )
+          .join("\n")}${duePaymentText}\n\nPlease review your account or contact us for clarifications.\nBest regards,\nPayment Tracker Team`;
+
+        const response = await axios.post(
+          `${BASE_URL}/send-whatsapp`,
+          {
+            to: clientPhone.trim(),
+            message: messageContent,
+          },
+          {
+            headers: { Authorization: `Bearer ${sessionToken}` },
+            timeout: 10000,
+          }
+        );
+
+        console.log(`WhatsApp sent to ${clientPhone} for ${clientName}:`, {
+          messageId: response.data.messageId || "N/A",
+          clientName,
+          type,
+          year,
+        });
+        notificationSent = true;
+      }
     } catch (whatsappError) {
       console.error(`WhatsApp attempt for ${clientPhone} (${clientName}):`, {
         message: whatsappError.message,
         status: whatsappError.response?.status,
         data: whatsappError.response?.data,
       });
-      // Log error but don't set error message unless critical
       if (whatsappError.response?.status === 429) {
-        console.warn(`Rate limit hit for WhatsApp to ${clientPhone}. Will fallback to email.`);
+        setLocalErrorMessage(`WhatsApp rate limit exceeded for ${clientName}. Trying email notification.`);
+      } else {
+        setLocalErrorMessage(`Failed to send WhatsApp message to ${clientName}: ${whatsappError.response?.data?.error || whatsappError.message}`);
       }
     }
   }
@@ -775,14 +790,14 @@ const handleNotifications = useCallback(async (clientName, clientEmail, clientPh
       notificationSent = true;
     } catch (emailError) {
       console.error(`Email failed for ${clientEmail}:`, emailError);
-      throw emailError;
+      setLocalErrorMessage(`Failed to send email notification to ${clientName}: ${emailError.response?.data?.error || emailError.message}`);
     }
   }
 
   if (!notificationSent) {
-    console.warn(`No notification sent for ${clientName}: no valid phone or email`);
+    setLocalErrorMessage(`No notification sent for ${clientName}: No valid phone or email provided.`);
   }
-}, [sessionToken, hasValidEmail]);
+}, [sessionToken, hasValidEmail, setLocalErrorMessage]);
 
 const debouncedUpdate = useCallback(
   (rowIndex, month, value, year) => {
