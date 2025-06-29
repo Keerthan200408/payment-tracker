@@ -404,7 +404,6 @@ app.get("/api/get-clients", authenticateToken, async (req, res) => {
 // Add Client
 app.post("/api/add-client", authenticateToken, async (req, res) => {
   let { clientName, email, type, monthlyPayment, phoneNumber } = req.body;
-  const year = new Date().getFullYear().toString();
   const username = req.user.username;
   const paymentValue = parseFloat(monthlyPayment);
   if (clientName.length > 100 || type.length > 50) {
@@ -438,6 +437,10 @@ app.post("/api/add-client", authenticateToken, async (req, res) => {
     }
     const clientsCollection = db.collection(`clients_${username}`);
     const paymentsCollection = db.collection(`payments_${username}`);
+    const existingClient = await clientsCollection.findOne({ Client_Name: clientName, Type: type });
+    if (existingClient) {
+      return res.status(400).json({ error: "Client with this name and type already exists" });
+    }
     await clientsCollection.insertOne({
       Client_Name: clientName,
       Email: email,
@@ -449,7 +452,7 @@ app.post("/api/add-client", authenticateToken, async (req, res) => {
       Client_Name: clientName,
       Type: type,
       Amount_To_Be_Paid: paymentValue,
-      Year: parseInt(year),
+      Year: 2025,
       Payments: {
         January: 0, February: 0, March: 0, April: 0, May: 0, June: 0,
         July: 0, August: 0, September: 0, October: 0, November: 0, December: 0,
@@ -832,9 +835,9 @@ app.get("/api/get-user-years", authenticateToken, async (req, res) => {
 app.post("/api/add-new-year", authenticateToken, async (req, res) => {
   const { year } = req.body;
   const username = req.user.username;
-  if (!year || isNaN(year) || parseInt(year) < 2025) {
+  if (!year || isNaN(year) || parseInt(year) <= 2025) {
     console.error(`Invalid year provided: ${year}, user: ${username}`);
-    return res.status(400).json({ error: "Valid year >= 2025 is required" });
+    return res.status(400).json({ error: "Valid year > 2025 is required" });
   }
   try {
     const db = await connectMongo();
@@ -875,9 +878,8 @@ app.post("/api/add-new-year", authenticateToken, async (req, res) => {
 
 app.post("/api/import-csv", authenticateToken, async (req, res) => {
   const csvData = req.body;
-  const year = req.query.year || new Date().getFullYear().toString();
   const username = req.user.username;
-  console.log(`Importing CSV for user: ${username}, year: ${year}, records: ${csvData?.length || 0}`);
+  console.log(`Importing CSV for user: ${username}, records: ${csvData?.length || 0}`);
 
   // Validate input
   if (!Array.isArray(csvData) || csvData.length === 0) {
@@ -976,7 +978,7 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
         Client_Name: sanitizeInput(clientName),
         Type: typeUpper,
         Amount_To_Be_Paid: amount,
-        Year: parseInt(year),
+        Year: 2025,
         Payments: {
           January: 0, February: 0, March: 0, April: 0, May: 0, June: 0,
           July: 0, August: 0, September: 0, October: 0, November: 0, December: 0,
@@ -1021,7 +1023,7 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
       if (paymentsBatch.length > 0) {
         const result = await paymentsCollection.insertMany(paymentsBatch, { ordered: false });
         insertedPayments = result.insertedCount;
-        console.log(`Inserted ${insertedPayments} payments for year ${year}, user ${username}`);
+        console.log(`Inserted ${insertedPayments} payments for year 2025, user ${username}`);
       }
 
       // Return response
@@ -1034,14 +1036,7 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
       return res.status(200).json(response);
 
     } catch (dbError) {
-      console.error("Database operation failed", {
-        error: dbError.message,
-        code: dbError.code,
-        details: dbError.writeErrors || dbError.result || dbError,
-        username,
-        year,
-      });
-      if (dbError.code === 11000) {
+      console.error省份: if (dbError.code === 11000) {
         errors.push(`Duplicate key error: some clients already exist: ${dbError.message}`);
         return res.status(400).json({
           error: "Import partially failed due to duplicate clients",
@@ -1059,7 +1054,6 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
       message: error.message,
       stack: error.stack,
       user: username,
-      year,
       csvDataSummary: csvData.slice(0, 2).map(r => Array.isArray(r) ? { record: r } : r),
     });
     return res.status(500).json({ error: `Failed to import CSV: ${error.message}`, errors });
