@@ -876,6 +876,7 @@ app.post("/api/add-new-year", authenticateToken, async (req, res) => {
   }
 });
 
+// Import CSV
 app.post("/api/import-csv", authenticateToken, async (req, res) => {
   const csvData = req.body;
   const username = req.user.username;
@@ -966,8 +967,9 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
       }
 
       // Add to batches
+      const sanitizedClientName = sanitizeInput(clientName);
       clientsBatch.push({
-        Client_Name: sanitizeInput(clientName),
+        Client_Name: sanitizedClientName,
         Type: typeUpper,
         Email: sanitizedEmail,
         Monthly_Payment: amount,
@@ -975,7 +977,7 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
       });
 
       paymentsBatch.push({
-        Client_Name: sanitizeInput(clientName),
+        Client_Name: sanitizedClientName,
         Type: typeUpper,
         Amount_To_Be_Paid: amount,
         Year: 2025,
@@ -1036,7 +1038,13 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
       return res.status(200).json(response);
 
     } catch (dbError) {
-      console.error省份: if (dbError.code === 11000) {
+      console.error("Database operation failed", {
+        error: dbError.message,
+        code: dbError.code,
+        details: dbError.writeErrors || dbError.result || dbError,
+        username,
+      });
+      if (dbError.code === 11000) {
         errors.push(`Duplicate key error: some clients already exist: ${dbError.message}`);
         return res.status(400).json({
           error: "Import partially failed due to duplicate clients",
