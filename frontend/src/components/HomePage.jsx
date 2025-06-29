@@ -537,22 +537,29 @@ const processBatchUpdates = useCallback(
           if (notifyStatuses.length > 0) {
             console.log(`HomePage.jsx: Triggering notification for ${clientName}`, {
               notifyStatuses,
+              clientEmail,
+              clientPhone,
             });
-            handleNotifications(clientName, clientEmail, clientPhone, type, year, notifyStatuses, duePayment)
-              .catch((error) => {
-                console.error(`HomePage.jsx: Notification failed for ${clientName}`, error);
-                setLocalErrorMessage(
-                  `Notification failed for ${clientName}: ${error.message}`
-                );
-              });
+            const notificationSent = await handleNotifications(
+              clientName,
+              clientEmail,
+              clientPhone,
+              type,
+              year,
+              notifyStatuses,
+              duePayment
+            );
+            if (!notificationSent) {
+              console.log(`HomePage.jsx: Notification not sent for ${clientName}`);
+              missingContactClients.push(clientName);
+            }
           } else {
             console.log(`HomePage.jsx: No notifications needed for ${clientName}`);
           }
 
           return {
             success: true,
-            row寇
-rowIndex,
+            rowIndex,
             updatedRow,
             updates,
             hasNotificationContact: !!(clientEmail || clientPhone),
@@ -574,15 +581,10 @@ rowIndex,
       // Process results and batch state updates
       const failedUpdates = [];
       const successfulUpdates = [];
-      const clientsWithoutContact = [];
 
       results.forEach((result) => {
         if (result.success) {
           successfulUpdates.push(result);
-          if (!result.hasNotificationContact) {
-            const rowData = rowDataCache.get(result.rowIndex);
-            if (rowData) clientsWithoutContact.push(rowData.Client_Name);
-          }
         } else {
           failedUpdates.push(result);
         }
@@ -636,8 +638,8 @@ rowIndex,
       }
 
       // Handle missing contact warnings
-      if (clientsWithoutContact.length > 0) {
-        const errorMsg = `Payments updated, but notifications could not be sent to: ${clientsWithoutContact.join(
+      if (missingContactClients.length > 0) {
+        const errorMsg = `Payments updated, but notifications could not be sent to: ${missingContactClients.join(
           ", "
         )} (missing valid phone number or email address).`;
         setLocalErrorMessage(errorMsg);
