@@ -53,7 +53,7 @@ const HomePage = ({
   const activeRequestsRef = useRef(new Set());
   const tableRef = useRef(null);
   const csvFileInputRef = useRef(null);
-  const [errorMessage, setLocalErrorMessage] = useState("");
+  const [localErrorMessage, setLocalErrorMessage] = useState("");
   const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
   const [newType, setNewType] = useState("");
   const [currentPage, setCurrentPage] = useState(1); // Added for pagination
@@ -1624,7 +1624,7 @@ const renderReports = () => {
 };
 
 
-  return (
+return (
   <div className="p-6 bg-gray-50 min-h-screen">
     {!isOnline && (
       <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4">
