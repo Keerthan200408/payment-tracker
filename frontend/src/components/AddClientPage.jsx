@@ -57,19 +57,26 @@ const AddClientPage = ({
     setError('');
     setSuccess('');
 
+    // Force a small delay to ensure all state updates are complete
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
     // Get the actual current value from the input field directly
-    const monthlyPaymentInput = e.target.querySelector('input[type="number"]');
+    const monthlyPaymentInput = document.querySelector('input[inputMode="decimal"]');
     const actualMonthlyPayment = monthlyPaymentInput ? monthlyPaymentInput.value : monthlyPayment;
+    
+    // Also check the React state value
+    const finalMonthlyPayment = actualMonthlyPayment || monthlyPayment;
     
     console.log('Form submission values:', {
       stateValue: monthlyPayment,
       inputValue: actualMonthlyPayment,
+      finalValue: finalMonthlyPayment,
       clientName,
       type
     });
 
     // Validate required fields
-    if (!clientName || !type || !actualMonthlyPayment) {
+    if (!clientName || !type || !finalMonthlyPayment) {
       setError('Client name, type, and monthly payment are required.');
       setIsSubmitting(false);
       return;
@@ -85,8 +92,8 @@ const AddClientPage = ({
       return;
     }
     
-    const paymentValue = parseFloat(actualMonthlyPayment);
-    console.log('Parsed payment value:', paymentValue, 'from input:', actualMonthlyPayment);
+    const paymentValue = parseFloat(finalMonthlyPayment);
+    console.log('Parsed payment value:', paymentValue, 'from input:', finalMonthlyPayment);
     
     if (isNaN(paymentValue) || paymentValue <= 0) {
       setError('Monthly payment must be a positive number.');
@@ -173,11 +180,15 @@ const AddClientPage = ({
     }
   };
 
-  // Handle input change with debouncing for monthly payment
+  // Handle input change with proper validation
   const handleMonthlyPaymentChange = (e) => {
     const value = e.target.value;
     console.log('Monthly payment input changed to:', value);
-    setMonthlyPayment(value);
+    
+    // Only update if it's a valid number or empty string
+    if (value === '' || (!isNaN(value) && parseFloat(value) >= 0)) {
+      setMonthlyPayment(value);
+    }
   };
 
   return (
@@ -241,18 +252,21 @@ const AddClientPage = ({
           <div className="mb-6">
             <label className="block text-gray-700 text-sm font-medium mb-2">Monthly Payment</label>
             <input
-              type="number"
+              type="text"
+              inputMode="decimal"
               value={monthlyPayment}
               onChange={handleMonthlyPaymentChange}
               onBlur={(e) => {
                 console.log('Monthly payment field blurred with value:', e.target.value);
+                // Ensure the state is synced on blur
+                if (e.target.value !== monthlyPayment) {
+                  setMonthlyPayment(e.target.value);
+                }
               }}
               className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base placeholder-gray-400"
               placeholder="Enter monthly payment"
-              min="0"
-              step="100"
-              max="1000000"
               disabled={isSubmitting}
+              pattern="[0-9]*\.?[0-9]*"
             />
           </div>
           <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">
