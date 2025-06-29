@@ -53,7 +53,7 @@ const HomePage = ({
   const activeRequestsRef = useRef(new Set());
   const tableRef = useRef(null);
   const csvFileInputRef = useRef(null);
-  const [localErrorMessage, setLocalErrorMessage] = useState("");
+  const [errorMessage, setLocalErrorMessage] = useState("");
   const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
   const [newType, setNewType] = useState("");
   const [currentPage, setCurrentPage] = useState(1); // Added for pagination
@@ -244,7 +244,6 @@ const HomePage = ({
     userMessage = 'Server is busy. Defaulting to current year.';
   }
   setLocalErrorMessage(userMessage);
-  setErrorMessage(userMessage);
   setAvailableYears([new Date().getFullYear().toString()]);
 } finally {
   if (mountedRef.current) {
@@ -972,8 +971,8 @@ const debouncedUpdate = useCallback(
     };
   }, []);
 
-  useEffect(() => {
-  if (localErrorMessage) {
+useEffect(() => {
+  if (errorMessage) {
     const timer = setTimeout(() => {
       if (mountedRef.current) {
         setLocalErrorMessage("");
@@ -981,7 +980,7 @@ const debouncedUpdate = useCallback(
     }, 5000);
     return () => clearTimeout(timer);
   }
-}, [localErrorMessage]);
+}, [errorMessage]);
 
 const handleAddType = async () => {
   console.log(`HomePage.jsx: type: ${newType}, user: ${currentUser}`);
@@ -1624,7 +1623,7 @@ const renderReports = () => {
 };
 
 
-return (
+  return (
   <div className="p-6 bg-gray-50 min-h-screen">
     {!isOnline && (
       <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4">
@@ -1641,9 +1640,9 @@ return (
         </div>
       </div>
     )}
-    {localErrorMessage && (
+    {errorMessage && (
       <ErrorMessageDisplay
-        message={localErrorMessage}
+        message={errorMessage}
         onDismiss={() => setLocalErrorMessage("")}
         type="error"
       />
@@ -1659,8 +1658,8 @@ return (
           onClick={(e) => e.stopPropagation()}
         >
           <h2 className="text-lg font-semibold mb-4">Add New Type</h2>
-          {localErrorMessage && (
-            <p className="text-red-500 mb-4 text-sm">{localErrorMessage}</p>
+          {errorMessage && (
+            <p className="text-red-500 mb-4 text-sm">{errorMessage}</p>
           )}
           <input
             type="text"
