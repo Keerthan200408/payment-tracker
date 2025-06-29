@@ -1222,6 +1222,51 @@ app.post("/api/send-email", authenticateToken, async (req, res) => {
   }
 });
 
+app.post("/api/verify-whatsapp-contact", authenticateToken, async (req, res) => {
+  const { phone } = req.body;
+  if (!phone || !/^\+?[\d\s-]{10,15}$/.test(phone)) {
+    console.error("Invalid phone number for verification:", { phone, user: req.user.username });
+    return res.status(400).json({ error: "Invalid phone number" });
+  }
+  try {
+    let formattedPhone = phone.trim().replace(/[\s-]/g, "");
+    if (!formattedPhone.startsWith("+")) {
+      formattedPhone = `+91${formattedPhone.replace(/\D/g, "")}`;
+    }
+    const payload = {
+      token: process.env.ULTRAMSG_TOKEN,
+      chatId: `${formattedPhone}@c.us`,
+    };
+    const response = await axios.get(
+      `https://api.ultramsg.com/${process.env.ULTRAMSG_INSTANCE_ID}/contacts/check`,
+      {
+        params: payload,
+        timeout: 5000,
+      }
+    );
+    console.log("UltraMsg contact check response:", {
+      phone: formattedPhone,
+      status: response.status,
+      data: response.data,
+      user: req.user.username,
+    });
+    const isValidWhatsApp = response.data.status === "valid";
+    return res.json({ isValidWhatsApp });
+  } catch (error) {
+    console.error("Verify WhatsApp contact error:", {
+      message: error.message,
+      code: error.response?.data?.error?.code || error.code,
+      details: JSON.stringify(error.response?.data || error, null, 2),
+      phone,
+      user: req.user.username,
+    });
+    if (error.response?.status === 429) {
+      return res.status(429).json({ error: "Rate limit exceeded for WhatsApp API. Please try again later." });
+    }
+    return res.status(500).json({ error: `Failed to verify WhatsApp contact: ${error.message}` });
+  }
+});
+
 // Send WhatsApp
 app.post("/api/send-whatsapp", authenticateToken, whatsappLimiter, async (req, res) => {
   const { to, message } = req.body;

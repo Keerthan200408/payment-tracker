@@ -667,8 +667,10 @@ const handleNotifications = useCallback(async (clientName, clientEmail, clientPh
 
   // Try WhatsApp first
   if (hasValidPhone) {
+    let isValidWhatsApp = true;
+
+    // Attempt to verify WhatsApp status
     try {
-      // Verify WhatsApp status
       const verifyResponse = await axios.post(
         `${BASE_URL}/verify-whatsapp-contact`,
         { phone: clientPhone.trim() },
@@ -680,7 +682,26 @@ const handleNotifications = useCallback(async (clientName, clientEmail, clientPh
 
       if (!verifyResponse.data.isValidWhatsApp) {
         setLocalErrorMessage(`Cannot send WhatsApp message to ${clientName}: Phone number is not registered with WhatsApp.`);
+        isValidWhatsApp = false;
+      }
+    } catch (verifyError) {
+      console.error(`WhatsApp verification failed for ${clientPhone} (${clientName}):`, {
+        message: verifyError.message,
+        status: verifyError.response?.status,
+        data: verifyError.response?.data,
+      });
+      if (verifyError.response?.status === 404) {
+        console.warn(`WhatsApp verification endpoint not found. Attempting to send WhatsApp message directly.`);
+        setLocalErrorMessage(`Warning: Unable to verify WhatsApp status for ${clientName}. Attempting to send message anyway.`);
       } else {
+        setLocalErrorMessage(`Failed to verify WhatsApp status for ${clientName}: ${verifyError.response?.data?.error || verifyError.message}`);
+        isValidWhatsApp = false;
+      }
+    }
+
+    // Proceed with WhatsApp message if verification passed or endpoint is unavailable
+    if (isValidWhatsApp) {
+      try {
         const duePaymentText = parseFloat(duePayment) > 0
           ? `\n\nTotal Due Payment: ₹${parseFloat(duePayment).toFixed(2)}`
           : "";
@@ -709,17 +730,17 @@ const handleNotifications = useCallback(async (clientName, clientEmail, clientPh
           year,
         });
         notificationSent = true;
-      }
-    } catch (whatsappError) {
-      console.error(`WhatsApp attempt for ${clientPhone} (${clientName}):`, {
-        message: whatsappError.message,
-        status: whatsappError.response?.status,
-        data: whatsappError.response?.data,
-      });
-      if (whatsappError.response?.status === 429) {
-        setLocalErrorMessage(`WhatsApp rate limit exceeded for ${clientName}. Trying email notification.`);
-      } else {
-        setLocalErrorMessage(`Failed to send WhatsApp message to ${clientName}: ${whatsappError.response?.data?.error || whatsappError.message}`);
+      } catch (whatsappError) {
+        console.error(`WhatsApp attempt for ${clientPhone} (${clientName}):`, {
+          message: whatsappError.message,
+          status: whatsappError.response?.status,
+          data: whatsappError.response?.data,
+        });
+        if (whatsappError.response?.status === 429) {
+          setLocalErrorMessage(`WhatsApp rate limit exceeded for ${clientName}. Trying email notification.`);
+        } else {
+          setLocalErrorMessage(`Failed to send WhatsApp message to ${clientName}: ${whatsappError.response?.data?.error || whatsappError.message}`);
+        }
       }
     }
   }
