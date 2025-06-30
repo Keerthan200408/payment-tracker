@@ -1107,7 +1107,7 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
     const yearsToCreate = existingYears.length > 0 ? existingYears : [2025];
     console.log(`Will create payment records for years: ${yearsToCreate.join(', ')}`);
 
-    // Pre-fetch existing clients for duplicate checking - OPTIMIZATION
+    // Pre-fetch existing clients for duplicate checking
     const existingClients = await clientsCollection.find({}, { 
       projection: { Client_Name: 1, Type: 1, _id: 0 } 
     }).toArray();
@@ -1116,6 +1116,9 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
     );
     console.log(`Found ${existingClients.length} existing clients for duplicate checking`);
 
+    // Base timestamp for imports
+    const baseTimestamp = new Date().getTime();
+    
     // Validate and map records
     const validClients = [];
     const validPayments = [];
@@ -1133,7 +1136,8 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
       }
 
       const [amountToBePaid, type, email = "", clientName, phoneNumber = ""] = record;
-      const createdAt = new Date().toISOString();
+      // Assign incremental createdAt timestamp (base + index * 1ms)
+      const createdAt = new Date(baseTimestamp + i).toISOString();
 
       // Validate Client_Name
       if (typeof clientName !== "string" || clientName.length > 100 || !clientName.trim()) {
@@ -1163,8 +1167,7 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
       const sanitizedClientName = sanitizeInput(clientName);
       const clientKey = `${sanitizedClientName.toLowerCase()}|${typeUpper}`;
 
-      // Check for duplicates - ENHANCED DUPLICATE HANDLING
-      // 1. Check against existing database records
+      // Check for duplicates
       if (existingClientsSet.has(clientKey)) {
         skippedDuplicates.push({
           index: i + 1,
@@ -1175,7 +1178,6 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
         continue;
       }
 
-      // 2. Check for duplicates within the current batch
       if (processedInBatch.has(clientKey)) {
         skippedDuplicates.push({
           index: i + 1,
@@ -1189,13 +1191,12 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
       // Mark as processed in current batch
       processedInBatch.add(clientKey);
 
-      // Validate optional fields - don't fail validation for optional fields
+      // Validate optional fields
       let sanitizedEmail = "";
       if (email && typeof email === "string" && email.trim()) {
         if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
           sanitizedEmail = sanitizeInput(email);
         }
-        // Note: Don't continue/fail for invalid email, just skip it
       }
 
       let sanitizedPhoneNumber = "";
@@ -1203,7 +1204,6 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
         if (/^\+?[\d\s-]{10,15}$/.test(phoneNumber)) {
           sanitizedPhoneNumber = sanitizeInput(phoneNumber);
         }
-        // Note: Don't continue/fail for invalid phone, just skip it
       }
 
       // Add to valid clients batch
@@ -1246,7 +1246,6 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
       duplicates: duplicateRecords
     });
 
-    // If no valid records, return detailed error response
     if (validClients.length === 0) {
       console.error("No valid records to import", { username, errors, duplicates: skippedDuplicates });
       return res.status(400).json({
@@ -1262,7 +1261,6 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
       });
     }
 
-    // OPTIMIZED BATCH INSERTION
     try {
       let insertedClients = 0;
       let insertedPayments = 0;
@@ -1284,7 +1282,7 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
       // Prepare comprehensive response
       const response = {
         message: `Import completed successfully! Processed ${totalRecords} records.`,
-        imported: insertedClients, // Keep this for frontend compatibility
+        imported: insertedClients,
         summary: {
           totalRecords,
           validRecords,
@@ -1295,7 +1293,6 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
           yearsProcessed: yearsToCreate.length,
           yearsCreated: yearsToCreate,
         },
-        // Include details only if there are issues to report
         ...(errors.length > 0 && { errors }),
         ...(skippedDuplicates.length > 0 && { duplicatesSkipped: skippedDuplicates }),
       };
@@ -1311,7 +1308,6 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
         username,
       });
 
-      // Handle specific database errors
       if (dbError.code === 11000) {
         return res.status(400).json({
           error: "Import failed due to unexpected duplicate key constraint",
