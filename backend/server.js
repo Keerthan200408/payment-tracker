@@ -948,53 +948,96 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
     const yearsToCreate = existingYears.length > 0 ? existingYears : [2025];
     console.log(`Will create payment records for years: ${yearsToCreate.join(', ')}`);
 
+    // Pre-fetch existing clients for duplicate checking - OPTIMIZATION
+    const existingClients = await clientsCollection.find({}, { 
+      projection: { Client_Name: 1, Type: 1, _id: 0 } 
+    }).toArray();
+    const existingClientsSet = new Set(
+      existingClients.map(c => `${c.Client_Name.toLowerCase()}|${c.Type.toUpperCase()}`)
+    );
+    console.log(`Found ${existingClients.length} existing clients for duplicate checking`);
+
     // Validate and map records
-    const clientsBatch = [];
-    const paymentsBatch = [];
+    const validClients = [];
+    const validPayments = [];
     const errors = [];
+    const skippedDuplicates = [];
+    const processedInBatch = new Set(); // Track duplicates within the current batch
     
     for (let i = 0; i < csvData.length; i++) {
       const record = csvData[i];
-      console.log(`Validating record ${i + 1}/${csvData.length}`, { record });
+      console.log(`Validating record ${i + 1}/${csvData.length}`);
 
       if (!Array.isArray(record) || record.length < 4) {
-        errors.push(`Record at index ${i} must be an array with at least Amount, Type, Email, and Client_Name`);
+        errors.push(`Record at index ${i + 1}: Must be an array with at least Amount, Type, Email, and Client_Name`);
         continue;
       }
 
       const [amountToBePaid, type, email = "", clientName, phoneNumber = ""] = record;
-      const createdAt = new Date().toISOString(); // Add timestamp for each record
+      const createdAt = new Date().toISOString();
 
       // Validate Client_Name
       if (typeof clientName !== "string" || clientName.length > 100 || !clientName.trim()) {
-        errors.push(`Client_Name at index ${i} must be a non-empty string with up to 100 characters`);
+        errors.push(`Record at index ${i + 1}: Client_Name must be a non-empty string with up to 100 characters`);
         continue;
       }
 
       // Validate Type
       if (typeof type !== "string" || !type.trim()) {
-        errors.push(`Type at index ${i} must be a non-empty string`);
+        errors.push(`Record at index ${i + 1}: Type must be a non-empty string`);
         continue;
       }
 
       const typeUpper = type.trim().toUpperCase();
       if (!userTypes.includes(typeUpper)) {
-        errors.push(`Type "${type}" at index ${i} must be one of: ${userTypes.join(", ")}`);
+        errors.push(`Record at index ${i + 1}: Type "${type}" must be one of: ${userTypes.join(", ")}`);
         continue;
       }
 
       // Validate Amount_To_Be_Paid
       const amount = parseFloat(amountToBePaid);
       if (isNaN(amount) || amount <= 0 || amount > 1e6) {
-        errors.push(`Amount_To_Be_Paid at index ${i} must be a positive number up to 1,000,000`);
+        errors.push(`Record at index ${i + 1}: Amount_To_Be_Paid must be a positive number up to 1,000,000`);
         continue;
       }
+
+      const sanitizedClientName = sanitizeInput(clientName);
+      const clientKey = `${sanitizedClientName.toLowerCase()}|${typeUpper}`;
+
+      // Check for duplicates - ENHANCED DUPLICATE HANDLING
+      // 1. Check against existing database records
+      if (existingClientsSet.has(clientKey)) {
+        skippedDuplicates.push({
+          index: i + 1,
+          clientName: sanitizedClientName,
+          type: typeUpper,
+          reason: "Already exists in database"
+        });
+        continue;
+      }
+
+      // 2. Check for duplicates within the current batch
+      if (processedInBatch.has(clientKey)) {
+        skippedDuplicates.push({
+          index: i + 1,
+          clientName: sanitizedClientName,
+          type: typeUpper,
+          reason: "Duplicate within CSV file"
+        });
+        continue;
+      }
+
+      // Mark as processed in current batch
+      processedInBatch.add(clientKey);
 
       // Validate optional fields
       let sanitizedEmail = "";
       if (email && typeof email === "string") {
         if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
           sanitizedEmail = sanitizeInput(email);
+        } else {
+          errors.push(`Record at index ${i + 1}: Invalid email format "${email}"`);
+          continue;
         }
       }
 
@@ -1002,12 +1045,14 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
       if (phoneNumber && typeof phoneNumber === "string") {
         if (/^\+?[\d\s-]{10,15}$/.test(phoneNumber)) {
           sanitizedPhoneNumber = sanitizeInput(phoneNumber);
+        } else {
+          errors.push(`Record at index ${i + 1}: Invalid phone number format "${phoneNumber}"`);
+          continue;
         }
       }
 
-      // Add to clients batch
-      const sanitizedClientName = sanitizeInput(clientName);
-      clientsBatch.push({
+      // Add to valid clients batch
+      validClients.push({
         Client_Name: sanitizedClientName,
         Type: typeUpper,
         Email: sanitizedEmail,
@@ -1030,57 +1075,75 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
         createdAt: createdAt,
       }));
 
-      // Add all payment documents for this client to the batch
-      paymentsBatch.push(...clientPaymentDocs);
+      validPayments.push(...clientPaymentDocs);
     }
 
-    if (clientsBatch.length === 0) {
-      console.error("No valid records to import", { username, errors });
+    // Prepare response summary
+    const totalRecords = csvData.length;
+    const validRecords = validClients.length;
+    const errorRecords = errors.length;
+    const duplicateRecords = skippedDuplicates.length;
+
+    console.log(`Import summary for ${username}:`, {
+      total: totalRecords,
+      valid: validRecords,
+      errors: errorRecords,
+      duplicates: duplicateRecords
+    });
+
+    // If no valid records, return detailed error response
+    if (validClients.length === 0) {
+      console.error("No valid records to import", { username, errors, duplicates: skippedDuplicates });
       return res.status(400).json({
         error: "No valid records found in CSV",
+        summary: {
+          totalRecords,
+          validRecords: 0,
+          errorRecords,
+          duplicateRecords,
+        },
         errors,
+        duplicatesSkipped: skippedDuplicates,
       });
     }
 
-    console.log(`Prepared ${clientsBatch.length} clients and ${paymentsBatch.length} payments for import across ${yearsToCreate.length} years`, { username });
-
-    // Insert batches
+    // OPTIMIZED BATCH INSERTION
     try {
-      // Check for duplicates
-      const existingClients = await clientsCollection.find({
-        $or: clientsBatch.map(c => ({ Client_Name: c.Client_Name, Type: c.Type })),
-      }).toArray();
-
-      if (existingClients.length > 0) {
-        const duplicates = existingClients.map(c => ({ Client_Name: c.Client_Name, Type: c.Type }));
-        console.error("Duplicate clients found", { duplicates, username });
-        errors.push(`Duplicate clients found: ${JSON.stringify(duplicates)}`);
-      }
-
-      // Insert valid clients
       let insertedClients = 0;
-      if (clientsBatch.length > 0) {
-        const result = await clientsCollection.insertMany(clientsBatch, { ordered: false });
-        insertedClients = result.insertedCount;
+      let insertedPayments = 0;
+
+      // Insert clients in batch
+      if (validClients.length > 0) {
+        const clientResult = await clientsCollection.insertMany(validClients, { ordered: false });
+        insertedClients = clientResult.insertedCount;
         console.log(`Inserted ${insertedClients} clients for user ${username}`);
       }
 
-      // Insert valid payments
-      let insertedPayments = 0;
-      if (paymentsBatch.length > 0) {
-        const result = await paymentsCollection.insertMany(paymentsBatch, { ordered: false });
-        insertedPayments = result.insertedCount;
+      // Insert payments in batch
+      if (validPayments.length > 0) {
+        const paymentResult = await paymentsCollection.insertMany(validPayments, { ordered: false });
+        insertedPayments = paymentResult.insertedCount;
         console.log(`Inserted ${insertedPayments} payments across years ${yearsToCreate.join(', ')} for user ${username}`);
       }
 
-      // Return response
+      // Prepare comprehensive response
       const response = {
-        message: `Imported ${insertedClients} clients and ${insertedPayments} payments successfully across ${yearsToCreate.length} years (${yearsToCreate.join(', ')})`,
-        imported: insertedClients,
-        yearsCreated: yearsToCreate,
-        paymentRecordsCreated: insertedPayments,
-        errors: errors.length > 0 ? errors : undefined,
+        message: `Import completed successfully! Processed ${totalRecords} records.`,
+        summary: {
+          totalRecords,
+          validRecords,
+          errorRecords,
+          duplicateRecords,
+          clientsImported: insertedClients,
+          paymentRecordsCreated: insertedPayments,
+          yearsProcessed: yearsToCreate.length,
+          yearsCreated: yearsToCreate,
+        },
+        // Include details only if there are issues to report
+        ...(errors.length > 0 && { errors }),
+        ...(skippedDuplicates.length > 0 && { duplicatesSkipped: skippedDuplicates }),
       };
+
       console.log("Import response:", response);
       return res.status(200).json(response);
 
@@ -1091,16 +1154,36 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
         details: dbError.writeErrors || dbError.result || dbError,
         username,
       });
+
+      // Handle specific database errors
       if (dbError.code === 11000) {
-        errors.push(`Duplicate key error: some clients already exist: ${dbError.message}`);
         return res.status(400).json({
-          error: "Import partially failed due to duplicate clients",
-          errors,
+          error: "Import failed due to unexpected duplicate key constraint",
+          summary: {
+            totalRecords,
+            validRecords,
+            errorRecords,
+            duplicateRecords,
+            clientsImported: 0,
+            paymentRecordsCreated: 0,
+          },
+          errors: [...errors, `Database constraint error: ${dbError.message}`],
+          duplicatesSkipped: skippedDuplicates,
         });
       }
+
       return res.status(500).json({
-        error: "Database operation failed",
+        error: "Database operation failed during import",
+        summary: {
+          totalRecords,
+          validRecords,
+          errorRecords,
+          duplicateRecords,
+          clientsImported: 0,
+          paymentRecordsCreated: 0,
+        },
         errors: [...errors, dbError.message],
+        duplicatesSkipped: skippedDuplicates,
       });
     }
 
@@ -1111,7 +1194,17 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
       user: username,
       csvDataSummary: csvData.slice(0, 2).map(r => Array.isArray(r) ? { record: r } : r),
     });
-    return res.status(500).json({ error: `Failed to import CSV: ${error.message}`, errors });
+    return res.status(500).json({ 
+      error: `Failed to import CSV: ${error.message}`, 
+      summary: {
+        totalRecords: csvData.length,
+        validRecords: 0,
+        errorRecords: 0,
+        duplicateRecords: 0,
+        clientsImported: 0,
+        paymentRecordsCreated: 0,
+      }
+    });
   }
 });
 
