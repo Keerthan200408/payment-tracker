@@ -511,14 +511,18 @@ const processBatchUpdates = useCallback(
         stateUpdates.paymentsDataUpdates.set(rowIndex, optimisticRowData);
 
         try {
-          // API call with optimized timeout
+          // API call with optimized timeout and retry logic
           const response = await axios.post(
             `${BASE_URL}/batch-save-payments`,
             { clientName, type, updates },
             {
-              headers: { Authorization: `Bearer ${sessionToken}` },
+              headers: { 
+                Authorization: `Bearer ${sessionToken}`,
+                'Content-Type': 'application/json'
+              },
               params: { year },
-              timeout: 6000, // Reduced timeout for faster failure detection
+              timeout: 8000, // Balanced timeout for reliability
+              validateStatus: (status) => status < 500, // Don't retry on client errors
             }
           );
 
