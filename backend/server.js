@@ -966,10 +966,10 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
     
     for (let i = 0; i < csvData.length; i++) {
       const record = csvData[i];
-      console.log(`Validating record ${i + 1}/${csvData.length}`);
+      console.log(`Validating record ${i + 1}/${csvData.length}`, { record });
 
       if (!Array.isArray(record) || record.length < 4) {
-        errors.push(`Record at index ${i + 1}: Must be an array with at least Amount, Type, Email, and Client_Name`);
+        errors.push(`Record at index ${i + 1}: Must be an array with at least [Amount, Type, Email, Client_Name, Phone]`);
         continue;
       }
 
@@ -1030,25 +1030,21 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
       // Mark as processed in current batch
       processedInBatch.add(clientKey);
 
-      // Validate optional fields
+      // Validate optional fields - don't fail validation for optional fields
       let sanitizedEmail = "";
-      if (email && typeof email === "string") {
+      if (email && typeof email === "string" && email.trim()) {
         if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
           sanitizedEmail = sanitizeInput(email);
-        } else {
-          errors.push(`Record at index ${i + 1}: Invalid email format "${email}"`);
-          continue;
         }
+        // Note: Don't continue/fail for invalid email, just skip it
       }
 
       let sanitizedPhoneNumber = "";
-      if (phoneNumber && typeof phoneNumber === "string") {
+      if (phoneNumber && typeof phoneNumber === "string" && phoneNumber.trim()) {
         if (/^\+?[\d\s-]{10,15}$/.test(phoneNumber)) {
           sanitizedPhoneNumber = sanitizeInput(phoneNumber);
-        } else {
-          errors.push(`Record at index ${i + 1}: Invalid phone number format "${phoneNumber}"`);
-          continue;
         }
+        // Note: Don't continue/fail for invalid phone, just skip it
       }
 
       // Add to valid clients batch
@@ -1129,6 +1125,7 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
       // Prepare comprehensive response
       const response = {
         message: `Import completed successfully! Processed ${totalRecords} records.`,
+        imported: insertedClients, // Keep this for frontend compatibility
         summary: {
           totalRecords,
           validRecords,

@@ -367,12 +367,14 @@ const importCsv = async (e) => {
     setErrorMessage("Please sign in to import CSV.");
     return;
   }
+  
   setIsImporting(true);
   setErrorMessage("");
   let capitalizedTypes = [];
-  let errors = [];
+  let parseErrors = [];
+  
   try {
-    // Fetch types
+    // Fetch types first
     await fetchTypes(sessionToken);
     capitalizedTypes = types.map((type) => type.toUpperCase());
     console.log(`App.jsx: Valid types for ${currentUser}:`, capitalizedTypes);
@@ -388,11 +390,12 @@ const importCsv = async (e) => {
           .map((cell) => cell.trim().replace(/^"|"$/g, ""));
         return cols.filter((col) => col.trim());
       });
+      
     if (rows.length === 0) {
       throw new Error("CSV file is empty.");
     }
 
-    // Process rows
+    // Process rows into the format expected by backend: [amount, type, email, clientName, phone]
     const records = [];
     rows.forEach((row, index) => {
       let clientName = "",
@@ -400,6 +403,8 @@ const importCsv = async (e) => {
         amount = 0,
         email = "",
         phone = "";
+        
+      // Parse each cell in the row
       row.forEach((cell) => {
         if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cell)) {
           email = cell;
@@ -413,32 +418,33 @@ const importCsv = async (e) => {
           clientName = cell.trim();
         }
       });
+      
+      // Validate required fields
       if (!clientName || !type || !amount) {
         console.warn(`Skipping invalid row at index ${index + 1}:`, row);
-        errors.push(
-          `Row ${
-            index + 1
-          }: Missing or invalid fields (Client Name, Type must be one of: ${
-            capitalizedTypes.length ? capitalizedTypes.join(", ") : "none"
-          } for user ${currentUser}, or Monthly Payment)`
+        parseErrors.push(
+          `Row ${index + 1}: Missing required fields (Client Name: "${clientName}", Type: "${type}", Amount: ${amount}). Valid types: ${capitalizedTypes.join(", ")}`
         );
         return;
       }
-      console.log(`Parsed row ${index + 1} Monthly Payment:`, amount);
+      
+      console.log(`Parsed row ${index + 1}:`, { clientName, type, amount, email, phone });
+      
+      // Format as expected by backend: [amount, type, email, clientName, phone]
       records.push([
-        amount, // Amount_To_Be_Paid
-        type,   // Type
-        email,  // Email
-        clientName, // Client_Name
-        phone,  // Phone_Number
+        amount,      // Amount_To_Be_Paid
+        type,        // Type
+        email,       // Email (can be empty)
+        clientName,  // Client_Name
+        phone        // Phone_Number (can be empty)
       ]);
     });
 
-    // Check for types after parsing
+    // Check if we have valid types
     if (!capitalizedTypes.length) {
       const errorMsg = `No payment types defined for user ${currentUser}. Please navigate to the dashboard and click 'Add Type' to add types (e.g., GST, IT RETURN) before importing.${
-        errors.length > 0
-          ? `\n\nAdditionally, the CSV contains ${errors.length} invalid row(s):\n${errors.join("\n")}`
+        parseErrors.length > 0
+          ? `\n\nAdditionally, the CSV contains ${parseErrors.length} invalid row(s):\n${parseErrors.join("\n")}`
           : ""
       }`;
       throw new Error(errorMsg);
@@ -446,79 +452,130 @@ const importCsv = async (e) => {
 
     if (records.length === 0) {
       throw new Error(
-        `No valid rows found in CSV. All rows are missing required fields or contain invalid Type values for user ${currentUser}. Valid types are: ${capitalizedTypes.join(
-          ", "
-        )}.${
-          errors.length > 0 ? `\n\nErrors:\n${errors.join("\n")}` : ""
+        `No valid rows found in CSV. All rows are missing required fields or contain invalid data.${
+          parseErrors.length > 0 ? `\n\nParsing errors:\n${parseErrors.join("\n")}` : ""
         }`
       );
     }
 
-    // Import records in batches with retries
-    const batchSize = 50;
-    console.log(
-      `Importing ${records.length} valid records for user ${currentUser}...`
-    );
-    let importedCount = 0;
-    for (let i = 0; i < records.length; i += batchSize) {
-      const batch = records.slice(i, i + batchSize);
-      console.log(
-        `Sending batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(
-          records.length / batchSize
-        )}...`
+    // Import records - send all at once to take advantage of optimized backend
+    console.log(`Importing ${records.length} valid records for user ${currentUser}...`);
+    console.log("Records to import:", records.slice(0, 3)); // Log first 3 for debugging
+    
+    try {
+      const response = await retryWithBackoff(
+        () =>
+          axios.post(`${BASE_URL}/import-csv`, records, {
+            headers: { Authorization: `Bearer ${sessionToken}` },
+            params: { year: currentYear },
+            timeout: 60000, // Increased timeout for large imports
+          }),
+        3,
+        1000
       );
-      console.log("Batch data:", batch);
-      try {
-        const response = await retryWithBackoff(
-          () =>
-            axios.post(`${BASE_URL}/import-csv`, batch, {
-              headers: { Authorization: `Bearer ${sessionToken}` },
-              params: { year: currentYear },
-              timeout: 45000,
-            }),
-          3,
-          1000
-        );
-        console.log(`Batch response:`, response.data);
-        importedCount += response.data.imported || batch.length;
-      } catch (batchError) {
-        console.error(`Batch ${Math.floor(i / batchSize) + 1} failed:`, {
-          message: batchError.message,
-          response: batchError.response?.data,
-          status: batchError.response?.status,
-        });
-        errors.push(
-          `Batch ${Math.floor(i / batchSize) + 1} failed: ${
-            batchError.response?.data?.error || batchError.message
-          }`
-        );
+      
+      console.log(`Import response:`, response.data);
+      
+      // Parse response
+      const {
+        message,
+        imported = 0,
+        summary = {},
+        errors = [],
+        duplicatesSkipped = []
+      } = response.data;
+      
+      // Clear cache
+      const cacheKeyPayments = `payments_${currentYear}_${sessionToken}`;
+      const cacheKeyClients = `clients_${currentYear}_${sessionToken}`;
+      delete apiCacheRef.current[cacheKeyPayments];
+      delete apiCacheRef.current[cacheKeyClients];
+      
+      // Prepare user message
+      let userMessage = message || `Import completed!`;
+      let hasIssues = false;
+      
+      if (summary.totalRecords) {
+        userMessage = `Import Summary:
+• Total records processed: ${summary.totalRecords}
+• Successfully imported: ${summary.clientsImported || imported}
+• Payment records created: ${summary.paymentRecordsCreated || 0}
+• Years processed: ${(summary.yearsCreated || []).join(', ')}`;
+        
+        if (summary.duplicateRecords > 0) {
+          userMessage += `\n• Duplicates skipped: ${summary.duplicateRecords}`;
+          hasIssues = true;
+        }
+        
+        if (summary.errorRecords > 0) {
+          userMessage += `\n• Records with errors: ${summary.errorRecords}`;
+          hasIssues = true;
+        }
       }
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      
+      // Add details if there are issues
+      if (duplicatesSkipped.length > 0) {
+        userMessage += `\n\nDuplicates skipped:\n${duplicatesSkipped.map(d => 
+          `• Row ${d.index}: ${d.clientName} (${d.type}) - ${d.reason}`
+        ).join('\n')}`;
+      }
+      
+      if (errors.length > 0) {
+        userMessage += `\n\nErrors:\n${errors.join('\n')}`;
+      }
+      
+      // Add parsing errors if any
+      if (parseErrors.length > 0) {
+        userMessage += `\n\nCSV parsing issues:\n${parseErrors.join('\n')}`;
+        hasIssues = true;
+      }
+      
+      alert(userMessage);
+      
+      // Set error message only if there are issues
+      if (hasIssues) {
+        setErrorMessage(`Import completed with some issues. Check the details above.`);
+      } else {
+        setErrorMessage("");
+      }
+      
+      // Reload page after successful import
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      window.location.reload();
+      
+    } catch (importError) {
+      console.error(`Import request failed:`, {
+        message: importError.message,
+        response: importError.response?.data,
+        status: importError.response?.status,
+      });
+      
+      // Handle specific server errors
+      const serverError = importError.response?.data;
+      if (serverError) {
+        let errorMessage = serverError.error || importError.message;
+        
+        // Add details from server response
+        if (serverError.errors && serverError.errors.length > 0) {
+          errorMessage += `\n\nServer validation errors:\n${serverError.errors.join('\n')}`;
+        }
+        
+        if (serverError.duplicatesSkipped && serverError.duplicatesSkipped.length > 0) {
+          errorMessage += `\n\nDuplicates found:\n${serverError.duplicatesSkipped.map(d => 
+            `• ${d.clientName} (${d.type}) - ${d.reason}`
+          ).join('\n')}`;
+        }
+        
+        if (serverError.summary) {
+          errorMessage += `\n\nSummary: ${serverError.summary.totalRecords || 0} records processed, ${serverError.summary.validRecords || 0} valid`;
+        }
+        
+        throw new Error(errorMessage);
+      } else {
+        throw importError;
+      }
     }
 
-    // Clear cache and notify user
-    const cacheKeyPayments = `payments_${currentYear}_${sessionToken}`;
-    const cacheKeyClients = `clients_${currentYear}_${sessionToken}`;
-    delete apiCacheRef.current[cacheKeyPayments];
-    delete apiCacheRef.current[cacheKeyClients];
-    const message =
-      errors.length > 0
-        ? `CSV import partially completed! ${importedCount} of ${
-            records.length
-          } valid records imported for user ${currentUser}. ${
-            errors.length
-          } error(s) occurred:\n${errors.join("\n")}`
-        : `CSV imported successfully! ${importedCount} records imported for user ${currentUser}.`;
-    alert(message);
-    setErrorMessage(
-      errors.length > 0
-        ? `Imported ${importedCount} of ${records.length} records with ${
-            errors.length
-          } error(s) for user ${currentUser}:\n${errors.join("\n")}`
-        : ""
-    );
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    window.location.reload();
   } catch (err) {
     console.error("CSV import error:", {
       message: err.message,
@@ -526,18 +583,25 @@ const importCsv = async (e) => {
       status: err.response?.status,
       user: currentUser,
     });
-    let errorMessage = err.response?.data?.error || err.message;
+    
+    let errorMessage = err.message;
+    
+    // Handle specific error types
     if (errorMessage.includes("No payment types defined")) {
-      errorMessage = `${errorMessage} Navigate to the dashboard and click 'Add Type' to add types (e.g., GST, IT RETURN).`;
+      errorMessage = `${errorMessage}\n\nTo fix this: Navigate to the dashboard and click 'Add Type' to add payment types (e.g., GST, IT RETURN).`;
     } else if (err.message.includes("timeout")) {
-      errorMessage = `Request timed out while importing CSV for user ${currentUser}. Please check your connection and try again.`;
-    } else {
-      errorMessage = `Failed to import CSV for user ${currentUser}. Ensure Type is one of: ${
-        capitalizedTypes.length ? capitalizedTypes.join(", ") : "none"
-      } and Monthly Payment is a valid number.${
-        errors.length > 0 ? `\n\nCSV Errors:\n${errors.join("\n")}` : ""
-      }`;
+      errorMessage = `Request timed out while importing CSV for user ${currentUser}. The file might be too large or the connection is slow. Try with a smaller file or check your internet connection.`;
+    } else if (!errorMessage.includes("Server validation errors") && !errorMessage.includes("Summary:")) {
+      // Only add generic advice if we don't already have detailed errors
+      errorMessage = `Failed to import CSV for user ${currentUser}.\n\nPlease ensure:\n• Type values are one of: ${
+        capitalizedTypes.length ? capitalizedTypes.join(", ") : "none (add types first)"
+      }\n• Monthly Payment is a valid positive number\n• Client Name is provided\n\nOriginal error: ${errorMessage}`;
+      
+      if (parseErrors.length > 0) {
+        errorMessage += `\n\nCSV parsing issues:\n${parseErrors.join("\n")}`;
+      }
     }
+    
     setErrorMessage(errorMessage);
     throw err;
   } finally {
