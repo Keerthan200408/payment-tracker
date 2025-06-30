@@ -1136,8 +1136,9 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
       }
 
       const [amountToBePaid, type, email = "", clientName, phoneNumber = ""] = record;
-      // Assign incremental createdAt timestamp (base + index * 1ms)
-      const createdAt = new Date(baseTimestamp + i).toISOString();
+      // Assign reverse incremental createdAt timestamp
+      // First record gets baseTimestamp + (length - 1), last record gets baseTimestamp
+      const createdAt = new Date(baseTimestamp + (csvData.length - 1 - i)).toISOString();
 
       // Validate Client_Name
       if (typeof clientName !== "string" || clientName.length > 100 || !clientName.trim()) {
