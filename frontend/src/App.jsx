@@ -70,6 +70,21 @@ const App = () => {
   }
 };
 
+const sortDataByCreatedAt = (data, sortOrder = 'desc') => {
+  if (!Array.isArray(data)) return [];
+  
+  return [...data].sort((a, b) => {
+    const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+    const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
+    
+    if (sortOrder === 'desc') {
+      return dateB - dateA; // Newest first
+    } else {
+      return dateA - dateB; // Oldest first
+    }
+  });
+};
+
   const handleSessionError = (error) => {
   if (error.response && (error.response.status === 401 || error.response.status === 403)) {
     console.log("Session invalid, logging out");
@@ -315,15 +330,20 @@ const fetchClients = async (token) => {
       
       console.log("Clients fetched:", response.data);
       const clientsData = Array.isArray(response.data) ? response.data : [];
-      setClientsData(clientsData);
       
-      // Cache the result
+      // Sort clients by createdAt (newest first)
+      const sortedClientsData = sortDataByCreatedAt(clientsData, 'desc');
+      console.log("Clients sorted by createdAt (newest first)");
+      
+      setClientsData(sortedClientsData);
+      
+      // Cache the sorted result
       apiCacheRef.current[cacheKey] = {
-        data: clientsData,
+        data: sortedClientsData,
         timestamp: Date.now(),
       };
       
-      return clientsData;
+      return sortedClientsData;
     } catch (error) {
       console.error("Fetch clients error:", error.response?.data?.error || error.message);
       setClientsData([]);
@@ -374,12 +394,20 @@ const fetchPayments = async (token, year) => {
       
       const data = Array.isArray(response.data) ? response.data : [];
       console.log(`Fetched payments for ${year}:`, data);
-      setPaymentsData(data);
       
-      // Cache the result
-      apiCacheRef.current[cacheKey] = { data, timestamp: Date.now() };
+      // Sort payments by createdAt (newest first)
+      const sortedPaymentsData = sortDataByCreatedAt(data, 'desc');
+      console.log("Payments sorted by createdAt (newest first)");
       
-      return data;
+      setPaymentsData(sortedPaymentsData);
+      
+      // Cache the sorted result
+      apiCacheRef.current[cacheKey] = { 
+        data: sortedPaymentsData, 
+        timestamp: Date.now() 
+      };
+      
+      return sortedPaymentsData;
     } catch (error) {
       console.error("Error fetching payments:", error);
       setPaymentsData([]);

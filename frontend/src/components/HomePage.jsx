@@ -136,14 +136,10 @@ const filteredData = useMemo(() => {
             getPaymentStatus(row, monthFilter.toLowerCase()) === "Unpaid");
 
       return matchesSearch && matchesMonth && matchesStatus;
-    })
-    .sort((a, b) => {
-      // Sort by createdAt in descending order (newest first)
-      const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
-      const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
-      return dateB - dateA;
     });
+    // Removed .sort() - data is already sorted from App.jsx
 }, [paymentsData, searchQuery, monthFilter, statusFilter, getPaymentStatus]);
+
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -1577,20 +1573,13 @@ const renderReports = () => {
   };
 
   const entriesPerPage = 10;
-  // Sort clients by createdAt in descending order
-  const sortedClients = Object.keys(monthStatus).sort((clientA, clientB) => {
-    const paymentA = paymentsData.find((row) => row.Client_Name === clientA);
-    const paymentB = paymentsData.find((row) => row.Client_Name === clientB);
-    const dateA = paymentA?.createdAt ? new Date(paymentA.createdAt) : new Date(0);
-    const dateB = paymentB?.createdAt ? new Date(paymentB.createdAt) : new Date(0);
-    return dateB - dateA;
-  });
-  const totalEntries = sortedClients.length;
-  const totalPages = Math.ceil(totalEntries / entriesPerPage);
-  const paginatedClients = sortedClients.slice(
-    (currentPage - 1) * entriesPerPage,
-    currentPage * entriesPerPage
-  );
+  
+  const paginatedClients = Object.keys(monthStatus).slice(
+  (currentPage - 1) * entriesPerPage,
+  currentPage * entriesPerPage
+);
+const totalEntries = Object.keys(monthStatus).length;
+const totalPages = Math.ceil(totalEntries / entriesPerPage);
 
   return (
     <>
