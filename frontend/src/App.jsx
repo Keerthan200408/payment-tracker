@@ -23,6 +23,7 @@ const App = () => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
   const [currentYear, setCurrentYear] = useState("2025");
   const [errorMessage, setErrorMessage] = useState("");
   const csvFileInputRef = useRef(null);
@@ -30,49 +31,123 @@ const App = () => {
   const saveTimeouts = useRef({});
   const apiCacheRef = useRef({});
   const [types, setTypes] = useState([]);
+  const CACHE_DURATION = 5 * 60 * 1000;
 
-  const fetchTypes = async (token) => {
-    if (!token || !currentUser) return;
-    const cacheKey = `types_${currentUser}_${token}`;
-    if (
-      apiCacheRef.current[cacheKey] &&
-      Date.now() - apiCacheRef.current[cacheKey].timestamp < CACHE_DURATION
-    ) {
-      console.log(`App.jsx: Using cached types for ${currentUser}`);
-      setTypes(apiCacheRef.current[cacheKey].data);
-      return;
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  const logout = () => {
+  console.log("Logging out user:", currentUser);
+  
+  // Clear all pending requests
+  Object.keys(apiCacheRef.current).forEach(key => {
+    if (key.startsWith('request_')) {
+      delete apiCacheRef.current[key];
     }
+  });
+  
+  setCurrentUser(null);
+  setSessionToken(null);
+  localStorage.removeItem("currentUser");
+  localStorage.removeItem("sessionToken");
+  localStorage.removeItem("currentPage");
+  localStorage.removeItem("availableYears");
+  localStorage.removeItem("currentYear");
+  setClientsData([]);
+  setPaymentsData([]);
+  setTypes([]);
+  apiCacheRef.current = {}; // Clear cache
+  setPage("signIn");
+  setIsProfileMenuOpen(false);
+  setIsInitialized(false); // Reset initialization flag
+  
+  // Invalidate token on backend (fire and forget)
+  if (sessionToken) {
+    axios.post(`${BASE_URL}/logout`, {}, {
+      headers: { Authorization: `Bearer ${sessionToken}` },
+    }).catch(error => {
+      console.error("Logout API error:", error.message);
+    });
+  }
+};
+
+  const handleSessionError = (error) => {
+  if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+    console.log("Session invalid, logging out");
+    logout();
+  } else if (error.response?.status === 429) {
+    console.log("Rate limit hit, backing off");
+    setErrorMessage("Too many requests. Please wait a moment before trying again.");
+  } else {
+    console.log("Non-auth error:", error.message);
+  }
+};
+
+const fetchTypes = async (token) => {
+  if (!token || !currentUser) return;
+  
+  const cacheKey = `types_${currentUser}_${token}`;
+  
+  // Check cache first
+  if (apiCacheRef.current[cacheKey] && 
+      Date.now() - apiCacheRef.current[cacheKey].timestamp < CACHE_DURATION) {
+    console.log(`App.jsx: Using cached types for ${currentUser}`);
+    setTypes(apiCacheRef.current[cacheKey].data);
+    return;
+  }
+  
+  // Check if request is already in progress
+  const requestKey = `request_${cacheKey}`;
+  if (apiCacheRef.current[requestKey]) {
+    console.log(`App.jsx: Request already in progress for ${currentUser}`);
+    return apiCacheRef.current[requestKey];
+  }
+  
+  // Mark request as in progress
+  const requestPromise = (async () => {
     try {
-      console.log(
-        `App.jsx: Fetching types for ${currentUser} with token:`,
-        token?.substring(0, 10) + "..."
-      );
+      console.log(`App.jsx: Fetching types for ${currentUser} with token:`, token?.substring(0, 10) + "...");
+      
       const response = await axios.get(`${BASE_URL}/get-types`, {
         headers: { Authorization: `Bearer ${token}` },
         timeout: 10000,
       });
+      
       const typesData = Array.isArray(response.data) ? response.data : [];
       console.log(`App.jsx: Types fetched for ${currentUser}:`, typesData);
+      
       setTypes(typesData);
       apiCacheRef.current[cacheKey] = {
         data: typesData,
         timestamp: Date.now(),
       };
+      
+      return typesData;
     } catch (error) {
-      console.error(
-        `App.jsx: Fetch types error for ${currentUser}:`,
-        error.response?.data?.error || error.message
-      );
+      console.error(`App.jsx: Fetch types error for ${currentUser}:`, error.response?.data?.error || error.message);
       setTypes([]);
       handleSessionError(error);
+      throw error;
+    } finally {
+      // Clear the in-progress flag
+      delete apiCacheRef.current[requestKey];
     }
-  };
+  })();
+  
+  // Store the promise to prevent duplicate requests
+  apiCacheRef.current[requestKey] = requestPromise;
+  
+  return requestPromise;
+};
 
   useEffect(() => {
-    if (sessionToken) {
+  const timeoutId = setTimeout(() => {
+    if (sessionToken && currentUser) {
       fetchTypes(sessionToken);
     }
-  }, [sessionToken]);
+  }, 100); // Add debounce to prevent rapid calls
+  
+  return () => clearTimeout(timeoutId);
+}, [sessionToken, currentUser]); // Add currentUser as dependency
 
   // Set axios defaults
   useEffect(() => {
@@ -116,37 +191,56 @@ const App = () => {
     };
   }, []);
 
-  // Initialize session
   useEffect(() => {
-    const storedUser = localStorage.getItem("currentUser");
-    const storedToken = localStorage.getItem("sessionToken");
-    const storedPage = localStorage.getItem("currentPage");
-    const storedYear = localStorage.getItem("currentYear");
+  return () => {
+    // Cancel all pending requests on unmount
+    Object.keys(apiCacheRef.current).forEach(key => {
+      if (key.startsWith('request_')) {
+        delete apiCacheRef.current[key];
+      }
+    });
+    
+    // Clear all timeouts
+    Object.values(saveTimeouts.current).forEach(clearTimeout);
+    saveTimeouts.current = {};
+  };
+}, []);
 
-    console.log("App.jsx: Stored sessionToken on load:", storedToken);
-    if (storedUser && storedToken) {
-      console.log("Restoring session for user:", storedUser);
-      setCurrentUser(storedUser);
-      setSessionToken(storedToken);
-      const validPages = [
-        "home",
-        "clients",
-        "payments",
-        "reports",
-        "addClient",
-      ];
-      setPage(validPages.includes(storedPage) ? storedPage : "home");
-      const yearToSet =
-        storedYear && parseInt(storedYear) >= 2025 ? storedYear : "2025";
-      console.log("App.jsx: Setting sessionToken:", storedToken);
-      console.log("App.jsx: Setting currentYear:", yearToSet);
-      setCurrentYear(yearToSet);
+  // Initialize session
+useEffect(() => {
+  if (isInitialized) return; // Prevent re-initialization
+  
+  const storedUser = localStorage.getItem("currentUser");
+  const storedToken = localStorage.getItem("sessionToken");
+  const storedPage = localStorage.getItem("currentPage");
+  const storedYear = localStorage.getItem("currentYear");
+
+  console.log("App.jsx: Stored sessionToken on load:", storedToken);
+  
+  if (storedUser && storedToken) {
+    console.log("Restoring session for user:", storedUser);
+    setCurrentUser(storedUser);
+    setSessionToken(storedToken);
+    
+    const validPages = ["home", "clients", "payments", "reports", "addClient"];
+    setPage(validPages.includes(storedPage) ? storedPage : "home");
+    
+    const yearToSet = storedYear && parseInt(storedYear) >= 2025 ? storedYear : "2025";
+    console.log("App.jsx: Setting currentYear:", yearToSet);
+    setCurrentYear(yearToSet);
+    
+    // Fetch data with debounce
+    setTimeout(() => {
       fetchClients(storedToken);
-    } else {
-      console.log("App.jsx: No stored user or token, setting page to signIn");
-      setPage("signIn");
-    }
-  }, []);
+    }, 200);
+  } else {
+    console.log("App.jsx: No stored user or token, setting page to signIn");
+    setPage("signIn");
+  }
+  
+  setIsInitialized(true);
+}, []); // Remove dependencies to prevent re-runs
+
 
   // Save current page to localStorage
   useEffect(() => {
@@ -190,71 +284,120 @@ const App = () => {
     };
   }, []);
 
-  const fetchClients = async (token) => {
+const fetchClients = async (token) => {
+  if (!token) return;
+  
+  const cacheKey = `clients_${currentUser}_${token}`;
+  
+  // Check cache first
+  if (apiCacheRef.current[cacheKey] && 
+      Date.now() - apiCacheRef.current[cacheKey].timestamp < CACHE_DURATION) {
+    console.log(`App.jsx: Using cached clients for ${currentUser}`);
+    setClientsData(apiCacheRef.current[cacheKey].data);
+    return;
+  }
+  
+  // Check if request is already in progress
+  const requestKey = `request_${cacheKey}`;
+  if (apiCacheRef.current[requestKey]) {
+    console.log(`App.jsx: Clients request already in progress for ${currentUser}`);
+    return apiCacheRef.current[requestKey];
+  }
+  
+  // Mark request as in progress
+  const requestPromise = (async () => {
     try {
-      console.log(
-        "Fetching clients with token:",
-        token?.substring(0, 10) + "..."
-      );
+      console.log("Fetching clients with token:", token?.substring(0, 10) + "...");
       const response = await axios.get(`${BASE_URL}/get-clients`, {
         headers: { Authorization: `Bearer ${token}` },
+        timeout: 10000,
       });
+      
       console.log("Clients fetched:", response.data);
-      setClientsData(Array.isArray(response.data) ? response.data : []);
+      const clientsData = Array.isArray(response.data) ? response.data : [];
+      setClientsData(clientsData);
+      
+      // Cache the result
+      apiCacheRef.current[cacheKey] = {
+        data: clientsData,
+        timestamp: Date.now(),
+      };
+      
+      return clientsData;
     } catch (error) {
-      console.error(
-        "Fetch clients error:",
-        error.response?.data?.error || error.message
-      );
+      console.error("Fetch clients error:", error.response?.data?.error || error.message);
       setClientsData([]);
       handleSessionError(error);
+      throw error;
+    } finally {
+      // Clear the in-progress flag
+      delete apiCacheRef.current[requestKey];
     }
-  };
+  })();
+  
+  // Store the promise to prevent duplicate requests
+  apiCacheRef.current[requestKey] = requestPromise;
+  
+  return requestPromise;
+};
 
-  const CACHE_DURATION = 5 * 60 * 1000; // Add this constant
-  const fetchPayments = async (token, year) => {
-    const cacheKey = `payments_${year}_${token}`;
-    if (
-      apiCacheRef.current[cacheKey] &&
-      Date.now() - apiCacheRef.current[cacheKey].timestamp < CACHE_DURATION
-    ) {
-      console.log(`App.jsx: Using cached payments for ${year}`);
-      setPaymentsData(apiCacheRef.current[cacheKey].data);
-      return;
-    }
 
+const fetchPayments = async (token, year) => {
+  if (!token || !year) return;
+  
+  const cacheKey = `payments_${year}_${token}`;
+  
+  // Check cache first
+  if (apiCacheRef.current[cacheKey] &&
+      Date.now() - apiCacheRef.current[cacheKey].timestamp < CACHE_DURATION) {
+    console.log(`App.jsx: Using cached payments for ${year}`);
+    setPaymentsData(apiCacheRef.current[cacheKey].data);
+    return;
+  }
+
+  // Check if request is already in progress
+  const requestKey = `request_${cacheKey}`;
+  if (apiCacheRef.current[requestKey]) {
+    console.log(`App.jsx: Payments request already in progress for ${year}`);
+    return apiCacheRef.current[requestKey];
+  }
+
+  // Mark request as in progress
+  const requestPromise = (async () => {
     try {
-      console.log(
-        `Fetching payments for ${year} with token:`,
-        token?.substring(0, 10) + "..."
-      );
+      console.log(`Fetching payments for ${year} with token:`, token?.substring(0, 10) + "...");
       const response = await axios.get(`${BASE_URL}/get-payments-by-year`, {
         headers: { Authorization: `Bearer ${token}` },
         params: { year },
         timeout: 10000,
       });
+      
       const data = Array.isArray(response.data) ? response.data : [];
       console.log(`Fetched payments for ${year}:`, data);
       setPaymentsData(data);
+      
+      // Cache the result
       apiCacheRef.current[cacheKey] = { data, timestamp: Date.now() };
+      
+      return data;
     } catch (error) {
       console.error("Error fetching payments:", error);
       setPaymentsData([]);
       handleSessionError(error);
+      throw error;
+    } finally {
+      // Clear the in-progress flag
+      delete apiCacheRef.current[requestKey];
     }
-  };
+  })();
 
-  const handleSessionError = (error) => {
-    if (
-      error.response &&
-      (error.response.status === 401 || error.response.status === 403)
-    ) {
-      console.log("Session invalid, logging out");
-      logout();
-    } else {
-      console.log("Non-auth error:", error.message);
-    }
-  };
+  // Store the promise to prevent duplicate requests
+  apiCacheRef.current[requestKey] = requestPromise;
+  
+  return requestPromise;
+};
+
+
 
   const handleYearChange = async (year) => {
     console.log("Year changed to:", year);
@@ -265,34 +408,7 @@ const App = () => {
     }
   };
 
-  const logout = () => {
-    console.log("Logging out user:", currentUser);
-    setCurrentUser(null);
-    setSessionToken(null);
-    localStorage.removeItem("currentUser");
-    localStorage.removeItem("sessionToken");
-    localStorage.removeItem("currentPage");
-    localStorage.removeItem("availableYears");
-    localStorage.removeItem("currentYear");
-    setClientsData([]);
-    setPaymentsData([]);
-    setTypes([]); // Clear types state
-    apiCacheRef.current = {}; // Clear cache
-    setPage("signIn");
-    setIsProfileMenuOpen(false);
-    // Invalidate token on backend
-    axios
-      .post(
-        `${BASE_URL}/logout`,
-        {},
-        {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-        }
-      )
-      .catch((error) => {
-        console.error("Logout API error:", error.message);
-      });
-  };
+
 
   const handleContextMenu = (e, rowIndex) => {
     e.preventDefault();
@@ -375,9 +491,17 @@ const importCsv = async (e) => {
   
   try {
     // Fetch types first
-    await fetchTypes(sessionToken);
+    if (!types.length) {
+      console.log("Types not available, fetching...");
+      await fetchTypes(sessionToken);
+      // Wait a bit for state to update
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    // Use the current types state
     capitalizedTypes = types.map((type) => type.toUpperCase());
     console.log(`App.jsx: Valid types for ${currentUser}:`, capitalizedTypes);
+    
 
     // Parse CSV
     const text = await file.text();
