@@ -13,6 +13,7 @@ const App = () => {
   const [sessionToken, setSessionToken] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [page, setPage] = useState("signIn");
+  const [refreshTrigger, setRefreshTrigger] = useState(Date.now());
   const [clientsData, setClientsData] = useState([]);
   const [paymentsData, setPaymentsData] = useState([]);
   const [contextMenu, setContextMenu] = useState(null);
@@ -1073,6 +1074,7 @@ const updatePayment = async (
                   }
                   fetchTypes={fetchTypes}
                   csvFileInputRef={csvFileInputRef}
+                  refreshTrigger={refreshTrigger}
                 />
               )}
               {page === "addClient" && (
@@ -1087,6 +1089,7 @@ const updatePayment = async (
                   types={types}
                   apiCacheRef={apiCacheRef}
                   fetchTypes={fetchTypes}
+                  refreshTrigger={refreshTrigger}
                 />
               )}
               {page === "clients" && (

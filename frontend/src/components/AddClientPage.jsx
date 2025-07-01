@@ -150,12 +150,21 @@ const AddClientPage = ({
         });
         setSuccess('Client added successfully! Redirecting to clients page...');
       }
+
+      // Clear cache for clients and payments
+      const clientsCacheKey = `get-clients_${sessionToken}`;
+      const paymentsCacheKey = `get-payments-by-year_${new Date().getFullYear()}_${sessionToken}`;
+      delete apiCacheRef.current[clientsCacheKey];
+      delete apiCacheRef.current[paymentsCacheKey];
       
-      await new Promise((resolve) => setTimeout(resolve, 1000));
       await Promise.all([
         fetchClients(sessionToken),
         fetchPayments(sessionToken, new Date().getFullYear().toString())
       ]);
+
+      // Trigger refresh for HomePage
+      setRefreshTrigger(Date.now());
+
       setEditClient(null);
       setPage('clients');
     } catch (err) {

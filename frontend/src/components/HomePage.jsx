@@ -1055,6 +1055,36 @@ const handleInputChange = useCallback(
   [debouncedUpdate, currentYear, paymentsData, localInputValues, months, setErrorMessage]
 );
 
+useEffect(() => {
+  const loadPaymentsData = async () => {
+    if (!sessionToken || !currentYear) return;
+
+    const paymentsCacheKey = getCacheKey("/get-payments-by-year", {
+      year: currentYear,
+      sessionToken,
+    });
+
+    // Always fetch fresh data if refreshTrigger changes
+    console.log(`HomePage.jsx: Fetching payments for year ${currentYear} due to refreshTrigger`);
+    try {
+      const response = await axios.get(`${BASE_URL}/get-payments-by-year`, {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+        params: { year: currentYear },
+        timeout: 10000,
+      });
+      setPaymentsData(response.data || []);
+      setCachedData(paymentsCacheKey, response.data || []);
+    } catch (error) {
+      console.error("HomePage.jsx: Error fetching payments:", error);
+      setLocalErrorMessage(
+        error.response?.data?.error || "Failed to load payments data."
+      );
+    }
+  };
+
+  loadPaymentsData();
+}, [sessionToken, currentYear, refreshTrigger, getCacheKey, getCachedData, setCachedData, setPaymentsData]);
+
   useEffect(() => {
     onMount();
   }, [onMount]);
