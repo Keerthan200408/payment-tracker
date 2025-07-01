@@ -1075,6 +1075,7 @@ const updatePayment = async (
                   fetchTypes={fetchTypes}
                   csvFileInputRef={csvFileInputRef}
                   refreshTrigger={refreshTrigger}
+                  fetchPayments={fetchPayments}
                 />
               )}
               {page === "addClient" && (
