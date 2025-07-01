@@ -59,6 +59,7 @@ const HomePage = ({
   const [newType, setNewType] = useState("");
   const [currentPage, setCurrentPage] = useState(1); // Added for pagination
   const mountedRef = useRef(true);
+  const [isLoadingPayments, setIsLoadingPayments] = useState(false);
 
   const MONTHS = [
     "january",
@@ -1060,6 +1061,7 @@ useEffect(() => {
   const loadPaymentsData = async () => {
     if (!sessionToken || !currentYear) return;
 
+    setIsLoadingPayments(true);
     const paymentsCacheKey = getCacheKey("/get-payments-by-year", {
       year: currentYear,
       sessionToken,
@@ -1815,7 +1817,16 @@ const totalPages = Math.ceil(totalEntries / entriesPerPage);
 
   return (
   <div className="p-6 bg-gray-50 min-h-screen">
-    {!isOnline && (
+    {isLoadingPayments ? (
+      <div className="flex justify-center items-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-500 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading payments...</p>
+        </div>
+      </div>
+    ) : (
+      <>
+        {!isOnline && (
       <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4">
         <div className="flex">
           <div className="flex-shrink-0">
@@ -1888,6 +1899,8 @@ const totalPages = Math.ceil(totalEntries / entriesPerPage);
           </div>
         </div>
       </div>
+    )}
+    </>
     )}
   </div>
 );

@@ -166,6 +166,8 @@ const AddClientPage = ({
       // Trigger refresh for HomePage
       setRefreshTrigger(Date.now());
 
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
       setEditClient(null);
       setPage('clients');
     } catch (err) {
