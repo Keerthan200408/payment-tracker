@@ -1089,7 +1089,7 @@ const updatePayment = async (
                   types={types}
                   apiCacheRef={apiCacheRef}
                   fetchTypes={fetchTypes}
-                  refreshTrigger={refreshTrigger}
+                  setRefreshTrigger={setRefreshTrigger}
                 />
               )}
               {page === "clients" && (
