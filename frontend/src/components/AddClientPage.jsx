@@ -14,6 +14,7 @@ const AddClientPage = ({
   types,
   apiCacheRef,
   fetchTypes,
+  setRefreshTrigger,
 }) => {
   const [clientName, setClientName] = useState('');
   const [email, setEmail] = useState('');

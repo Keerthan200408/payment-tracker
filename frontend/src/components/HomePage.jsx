@@ -40,6 +40,7 @@ const HomePage = ({
   currentUser = null,
   onMount = () => {},
   fetchTypes = () => {},
+  refreshTrigger,
 }) => {
   const [availableYears, setAvailableYears] = useState(["2025"]);
   const [isLoadingYears, setIsLoadingYears] = useState(false);
