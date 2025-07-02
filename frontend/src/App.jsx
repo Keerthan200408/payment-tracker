@@ -830,43 +830,50 @@ const updatePayment = async (
 
   try {
     // Optimistic update
-    setPaymentsData((prev) => {
-      const updatedPayments = [...prev];
-      const rowData = { ...updatedPayments[rowIndex] };
-      rowData[month] = value || "";
+    // Optimistic update
+setPaymentsData((prev) => {
+  const updatedPayments = [...prev];
+  const rowData = { ...updatedPayments[rowIndex] };
+  rowData[month] = value || "";
 
-      const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
-      const activeMonths = months.filter(
-        (m) => rowData[m] && parseFloat(rowData[m]) >= 0
-      ).length;
-      const expectedPayment = amountToBePaid * activeMonths;
-      const totalPayments = months.reduce(
-        (sum, m) => sum + (parseFloat(rowData[m]) || 0),
-        0
-      );
-      const currentYearDuePayment = Math.max(expectedPayment - totalPayments, 0);
+  const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
+  const activeMonths = months.filter(
+    (m) => rowData[m] && parseFloat(rowData[m]) >= 0
+  ).length;
+  let expectedPayment = 0; // Initialize outside if block
+  if (activeMonths > 0) {
+    expectedPayment = amountToBePaid * activeMonths;
+  }
+  const totalPayments = months.reduce(
+    (sum, m) => sum + (parseFloat(rowData[m]) || 0),
+    0
+  );
+  const currentYearDuePayment = Math.max(expectedPayment - totalPayments, 0);
 
-      let prevYearCumulativeDue = 0;
-      if (parseInt(year) > 2025) {
-        const originalDuePayment = parseFloat(prev[rowIndex]?.Due_Payment) || 0;
-        const originalAmountToBePaid = parseFloat(prev[rowIndex]?.Amount_To_Be_Paid) || 0;
-        const originalActiveMonths = months.filter(
-          (m) => prev[rowIndex]?.[m] && parseFloat(prev[rowIndex][m]) >= 0
-        ).length;
-        const originalExpectedPayment = originalAmountToBePaid * originalActiveMonths;
-        const originalTotalPayments = months.reduce(
-          (sum, m) => sum + (parseFloat(prev[rowIndex]?.[m]) || 0),
-          0
-        );
-        const originalCurrentYearDue = Math.max(originalExpectedPayment - originalTotalPayments, 0);
-        prevYearCumulativeDue = Math.max(originalDuePayment - originalCurrentYearDue, 0);
-      }
+  let prevYearCumulativeDue = 0;
+  if (parseInt(year) > 2025) {
+    const originalDuePayment = parseFloat(prev[rowIndex]?.Due_Payment) || 0;
+    const originalAmountToBePaid = parseFloat(prev[rowIndex]?.Amount_To_Be_Paid) || 0;
+    const originalActiveMonths = months.filter(
+      (m) => prev[rowIndex]?.[m] && parseFloat(prev[rowIndex][m]) >= 0
+    ).length;
+    let originalExpectedPayment = 0;
+    if (originalActiveMonths > 0) {
+      originalExpectedPayment = originalAmountToBePaid * originalActiveMonths;
+    }
+    const originalTotalPayments = months.reduce(
+      (sum, m) => sum + (parseFloat(prev[rowIndex]?.[m]) || 0),
+      0
+    );
+    const originalCurrentYearDue = Math.max(originalExpectedPayment - originalTotalPayments, 0);
+    prevYearCumulativeDue = Math.max(originalDuePayment - originalCurrentYearDue, 0);
+  }
 
-      rowData.Due_Payment = (currentYearDuePayment + prevYearCumulativeDue).toFixed(2);
-      updatedPayments[rowIndex] = rowData;
-      updatedRowData = rowData;
-      return updatedPayments;
-    });
+  rowData.Due_Payment = (currentYearDuePayment + prevYearCumulativeDue).toFixed(2);
+  updatedPayments[rowIndex] = rowData;
+  updatedRowData = rowData;
+  return updatedPayments;
+});
 
     const payloadData = {
       clientName: updatedRowData.Client_Name,

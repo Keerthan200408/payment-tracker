@@ -322,6 +322,17 @@ const handleAddNewYear = useCallback(async () => {
 
     const paymentsData = paymentsResponse.data || [];
     setPaymentsData(paymentsData);
+    // Ensure Due_Payment is 0 for new clients with no payments
+const correctedPaymentsData = paymentsData.map((row) => {
+  const activeMonths = months.filter(
+    (m) => row[m] && parseFloat(row[m]) > 0
+  ).length;
+  if (activeMonths === 0) {
+    return { ...row, Due_Payment: "0.00" };
+  }
+  return row;
+});
+setPaymentsData(correctedPaymentsData);
     setCurrentYear(newYear);
     localStorage.setItem("currentYear", newYear);
 
@@ -499,7 +510,10 @@ const processBatchUpdates = useCallback(
           (m) => optimisticRowData[m] && parseFloat(optimisticRowData[m]) >= 0
         ).length;
         
-        const expectedPayment = amountToBePaid * activeMonths;
+        
+        if (activeMonths > 0) {
+          expectedPayment = amountToBePaid * activeMonths;
+        }
         const totalPayments = months.reduce(
           (sum, m) => sum + (parseFloat(optimisticRowData[m]) || 0),
           0
