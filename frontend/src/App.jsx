@@ -369,7 +369,7 @@ const fetchPayments = async (token, year, forceRefresh = false) => {
   const cacheKey = `payments_${year}_${token}`;
 
   // Invalidate cache if forceRefresh is true or refreshTrigger indicates a change
-  if (forceRefresh || refreshTrigger) {
+  if (forceRefresh) {
     console.log(`App.jsx: Invalidating cache for payments_${year} due to ${forceRefresh ? 'forceRefresh' : 'refreshTrigger'}`);
     delete apiCacheRef.current[cacheKey];
   }

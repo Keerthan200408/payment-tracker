@@ -61,6 +61,7 @@ const HomePage = ({
   const [currentPage, setCurrentPage] = useState(1); // Added for pagination
   const mountedRef = useRef(true);
   const [isLoadingPayments, setIsLoadingPayments] = useState(false);
+  const [lastRefreshTrigger, setLastRefreshTrigger] = useState(0);
 
   const MONTHS = [
     "january",
@@ -1065,15 +1066,19 @@ useEffect(() => {
     setIsLoadingPayments(true);
     console.log(`HomePage.jsx: Fetching payments for year ${currentYear} due to refreshTrigger: ${refreshTrigger}`);
     
-    // Clear cache when refreshTrigger changes to ensure fresh data
+    // Clear cache and force refresh if refreshTrigger has changed
     const paymentsCacheKey = getCacheKey('/get-payments-by-year', {
       year: currentYear,
       sessionToken,
     });
-    delete apiCacheRef.current[paymentsCacheKey]; // Invalidate cache on refreshTrigger
+    if (refreshTrigger && refreshTrigger !== lastRefreshTrigger) {
+      console.log(`HomePage.jsx: Invalidating cache for payments_${currentYear} due to refreshTrigger change`);
+      delete apiCacheRef.current[paymentsCacheKey];
+      setLastRefreshTrigger(refreshTrigger); // Update lastRefreshTrigger to prevent repeated fetches
+    }
 
     try {
-      await fetchPayments(sessionToken, currentYear); // Use fetchPayments from App.jsx
+      await fetchPayments(sessionToken, currentYear, refreshTrigger && refreshTrigger !== lastRefreshTrigger); // Pass forceRefresh based on trigger change
       console.log(`HomePage.jsx: Payments fetched for year ${currentYear}: ${paymentsData.length} items`);
     } catch (error) {
       console.error('HomePage.jsx: Error fetching payments:', error);
@@ -1092,7 +1097,7 @@ useEffect(() => {
   };
 
   loadPaymentsData();
-}, [sessionToken, currentYear, refreshTrigger, fetchPayments, getCacheKey, getCachedData, setPaymentsData]);
+}, [sessionToken, currentYear, fetchPayments, getCacheKey, getCachedData, setPaymentsData]);
 
   useEffect(() => {
     onMount();
