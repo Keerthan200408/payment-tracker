@@ -80,18 +80,17 @@ const HomePage = ({
 
   const months = MONTHS;
 
-  const calculateDuePayment = (rowData, months) => {
+const calculateDuePayment = (rowData, months) => {
   const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
   
   if (amountToBePaid <= 0) {
     return 0;
   }
 
-  // Count months that have any payment value (including 0)
-  // But exclude empty strings or null/undefined
+  // Count only months with manually entered values (non-empty, non-null, non-undefined, >= 0)
   const activeMonths = months.filter(month => {
     const value = rowData[month];
-    return value !== "" && value !== null && value !== undefined;
+    return value !== "" && value !== null && value !== undefined && parseFloat(value) >= 0;
   }).length;
 
   // Calculate total payments made
@@ -351,17 +350,12 @@ const handleAddNewYear = useCallback(async () => {
 
     const paymentsData = paymentsResponse.data || [];
     setPaymentsData(paymentsData);
-    // Ensure Due_Payment is 0 for new clients with no payments
-const correctedPaymentsData = paymentsData.map((row) => {
-  const activeMonths = months.filter(
-    (m) => row[m] && parseFloat(row[m]) > 0
-  ).length;
-  if (activeMonths === 0) {
-    return { ...row, Due_Payment: "0.00" };
-  }
-  return row;
-});
-setPaymentsData(correctedPaymentsData);
+    // Set Due_Payment to 0 for new clients with no active payments
+    const correctedPaymentsData = paymentsData.map((row) => ({
+      ...row,
+      Due_Payment: "0.00"
+    }));
+    setPaymentsData(correctedPaymentsData);
     setCurrentYear(newYear);
     localStorage.setItem("currentYear", newYear);
 
@@ -1036,59 +1030,16 @@ const handleInputChange = useCallback(
 
     const key = `${rowIndex}-${month}`;
     
-    // Batch state update to reduce re-renders
+    // Update local input values
     setLocalInputValues((prev) => ({
       ...prev,
       [key]: trimmedValue,
     }));
 
-    // Optimized intermediate month filling logic
-    const rowData = paymentsData[rowIndex];
-    if (rowData && trimmedValue !== "") {
-      const currentMonthIndex = months.indexOf(month);
-      
-      // Find last paid month more efficiently
-      let lastPaidMonthIndex = -1;
-      for (let i = 0; i < months.length; i++) {
-        const monthValue = parseFloat(rowData[months[i]] || 0);
-        if (monthValue > 0) {
-          lastPaidMonthIndex = i;
-        }
-      }
-
-      // Fill intermediate months if needed
-      if (lastPaidMonthIndex >= 0 && currentMonthIndex > lastPaidMonthIndex + 1) {
-        const intermediateUpdates = {};
-        
-        for (let i = lastPaidMonthIndex + 1; i < currentMonthIndex; i++) {
-          const intermediateMonth = months[i];
-          const intermediateKey = `${rowIndex}-${intermediateMonth}`;
-          
-          // Only update if not already modified by user
-          if (
-            localInputValues[intermediateKey] === undefined ||
-            localInputValues[intermediateKey] === rowData[intermediateMonth]
-          ) {
-            intermediateUpdates[intermediateKey] = "0";
-            // Queue update for intermediate month
-            debouncedUpdate(rowIndex, intermediateMonth, "0", currentYear);
-          }
-        }
-        
-        // Batch update intermediate months
-        if (Object.keys(intermediateUpdates).length > 0) {
-          setLocalInputValues((prev) => ({
-            ...prev,
-            ...intermediateUpdates,
-          }));
-        }
-      }
-    }
-
-    // Queue the main update
+    // Queue the main update without filling intermediate months
     debouncedUpdate(rowIndex, month, trimmedValue, currentYear);
   },
-  [debouncedUpdate, currentYear, paymentsData, localInputValues, months, setErrorMessage]
+  [debouncedUpdate, currentYear, setErrorMessage]
 );
 
 useEffect(() => {
