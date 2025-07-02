@@ -300,11 +300,11 @@ useEffect(() => {
     };
   }, []);
 
-const fetchClients = async (token) => {
+const fetchClients = async (token, forceRefresh = false) => {
   if (!token) return;
   
   const cacheKey = `clients_${currentUser}_${token}`;
-
+  
   // Invalidate cache if forceRefresh is true
   if (forceRefresh) {
     console.log(`App.jsx: Invalidating cache for clients_${currentUser} due to forceRefresh`);
@@ -313,7 +313,8 @@ const fetchClients = async (token) => {
   
   // Check cache first
   if (apiCacheRef.current[cacheKey] && 
-      Date.now() - apiCacheRef.current[cacheKey].timestamp < CACHE_DURATION) {
+      Date.now() - apiCacheRef.current[cacheKey].timestamp < CACHE_DURATION &&
+      !forceRefresh) {
     console.log(`App.jsx: Using cached clients for ${currentUser}`);
     setClientsData(apiCacheRef.current[cacheKey].data);
     return;
