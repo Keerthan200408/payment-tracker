@@ -507,10 +507,10 @@ const processBatchUpdates = useCallback(
 
         // Efficient due payment calculation
         const activeMonths = months.filter(
-          (m) => optimisticRowData[m] && parseFloat(optimisticRowData[m]) >= 0
+          (m) => optimisticRowData[m] && parseFloat(optimisticRowData[m]) > 0
         ).length;
         
-        
+        let expectedPayment = 0;
         if (activeMonths > 0) {
           expectedPayment = amountToBePaid * activeMonths;
         }

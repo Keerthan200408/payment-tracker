@@ -838,7 +838,7 @@ setPaymentsData((prev) => {
 
   const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
   const activeMonths = months.filter(
-    (m) => rowData[m] && parseFloat(rowData[m]) >= 0
+    (m) => rowData[m] && parseFloat(rowData[m]) > 0
   ).length;
   let expectedPayment = 0; // Initialize outside if block
   if (activeMonths > 0) {
