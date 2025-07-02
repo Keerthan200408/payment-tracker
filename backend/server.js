@@ -407,7 +407,7 @@ app.post("/api/add-client", authenticateToken, async (req, res) => {
   let { clientName, email, type, monthlyPayment, phoneNumber } = req.body;
   const username = req.user.username;
   const paymentValue = parseFloat(monthlyPayment);
-  const createdAt = new Date().toISOString(); // Add timestamp
+  const createdAt = new Date().toISOString();
   
   if (clientName.length > 100 || type.length > 50) {
     return res.status(400).json({ error: "Client name or type too long" });
@@ -451,7 +451,7 @@ app.post("/api/add-client", authenticateToken, async (req, res) => {
       return res.status(400).json({ error: "Client with this name and type already exists" });
     }
     
-    // Add client to clients collection with createdAt
+    // Add client to clients collection
     await clientsCollection.insertOne({
       Client_Name: clientName,
       Email: email,
@@ -461,23 +461,21 @@ app.post("/api/add-client", authenticateToken, async (req, res) => {
       createdAt: createdAt,
     });
     
-    // Get all existing years for this user
+    // Get all existing years
     const existingYears = await paymentsCollection.distinct("Year");
-    
-    // If no years exist, default to 2025
     const yearsToCreate = existingYears.length > 0 ? existingYears : [2025];
     
-    // Create payment records for all existing years with createdAt
+    // FIXED: Create payment records with proper initial due payment
     const paymentDocs = yearsToCreate.map(year => ({
       Client_Name: clientName,
       Type: type,
       Amount_To_Be_Paid: paymentValue,
       Year: year,
       Payments: {
-        January: 0, February: 0, March: 0, April: 0, May: 0, June: 0,
-        July: 0, August: 0, September: 0, October: 0, November: 0, December: 0,
+        January: "", February: "", March: "", April: "", May: "", June: "",
+        July: "", August: "", September: "", October: "", November: "", December: "",
       },
-      Due_Payment: paymentValue,
+      Due_Payment: 0, // Start with 0 - will be calculated when payments are made
       createdAt: createdAt,
     }));
     
@@ -489,11 +487,7 @@ app.post("/api/add-client", authenticateToken, async (req, res) => {
       yearsCreated: yearsToCreate 
     });
   } catch (error) {
-    console.error("Add client error:", {
-      message: error.message,
-      stack: error.stack,
-      username,
-    });
+    console.error("Add client error:", error);
     res.status(500).json({ error: `Failed to add client: ${error.message}` });
   }
 });
@@ -616,50 +610,80 @@ app.get("/api/get-payments-by-year", authenticateToken, async (req, res) => {
     return res.status(400).json({ error: "Valid year is required" });
   }
   const username = req.user.username;
+  
   try {
     const db = await connectMongo();
     const clientsCollection = db.collection(`clients_${username}`);
     const paymentsCollection = db.collection(`payments_${username}`);
+    
+    // Get clients for email/phone mapping
     const clients = await clientsCollection.find({}).toArray();
     const clientEmailMap = new Map(clients.map(c => [`${c.Client_Name}_${c.Type}`, c.Email || ""]));
     const clientPhoneMap = new Map(clients.map(c => [`${c.Client_Name}_${c.Type}`, c.Phone_Number || ""]));
+    
+    // Get payments for the year
     let payments = await paymentsCollection.find({ Year: parseInt(year) }).toArray();
+    
+    // FIXED: Handle previous year due payments properly
     if (parseInt(year) > 2025) {
       const prevYearPayments = await paymentsCollection.find({ Year: parseInt(year) - 1 }).toArray();
-      const prevYearDueMap = new Map(prevYearPayments.map(p => [`${p.Client_Name}_${p.Type}`, p.Due_Payment || 0]));
-      payments = payments.map(p => ({
-        ...p,
-        Due_Payment: p.Due_Payment + (prevYearDueMap.get(`${p.Client_Name}_${p.Type}`) || 0),
-      }));
+      const prevYearDueMap = new Map(prevYearPayments.map(p => [`${p.Client_Name}_${p.Type}`, parseFloat(p.Due_Payment) || 0]));
+      
+      payments = payments.map(p => {
+        const prevDue = prevYearDueMap.get(`${p.Client_Name}_${p.Type}`) || 0;
+        return { ...p, Previous_Year_Due: prevDue };
+      });
     }
-    const processedPayments = payments.map(payment => ({
-      Client_Name: payment.Client_Name || "",
-      Type: payment.Type || "",
-      Amount_To_Be_Paid: parseFloat(payment.Amount_To_Be_Paid) || 0,
-      january: payment.Payments.January || "",
-      february: payment.Payments.February || "",
-      march: payment.Payments.March || "",
-      april: payment.Payments.April || "",
-      may: payment.Payments.May || "",
-      june: payment.Payments.June || "",
-      july: payment.Payments.July || "",
-      august: payment.Payments.August || "",
-      september: payment.Payments.September || "",
-      october: payment.Payments.October || "",
-      november: payment.Payments.November || "",
-      december: payment.Payments.December || "",
-      Due_Payment: parseFloat(payment.Due_Payment) || 0,
-      Email: clientEmailMap.get(`${payment.Client_Name}_${payment.Type}`) || "",
-      Phone_Number: clientPhoneMap.get(`${payment.Client_Name}_${payment.Type}`) || "",
-      createdAt: payment.createdAt || new Date(0).toISOString(), // Include createdAt
-    }));
+    
+    // FIXED: Process payments with correct due payment calculation
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 
+                   'July', 'August', 'September', 'October', 'November', 'December'];
+    
+    const processedPayments = payments.map(payment => {
+      const amountToBePaid = parseFloat(payment.Amount_To_Be_Paid) || 0;
+      const previousYearDue = parseFloat(payment.Previous_Year_Due) || 0;
+      
+      // Calculate current year due payment
+      const activeMonths = months.filter(month => {
+        const value = payment.Payments[month];
+        return value !== "" && value !== null && value !== undefined;
+      }).length;
+      
+      const totalPaymentsMade = months.reduce((sum, month) => {
+        return sum + (parseFloat(payment.Payments[month]) || 0);
+      }, 0);
+      
+      const expectedPayment = activeMonths * amountToBePaid;
+      const currentYearDue = Math.max(expectedPayment - totalPaymentsMade, 0);
+      const totalDuePayment = currentYearDue + previousYearDue;
+      
+      return {
+        Client_Name: payment.Client_Name || "",
+        Type: payment.Type || "",
+        Amount_To_Be_Paid: amountToBePaid,
+        january: payment.Payments.January || "",
+        february: payment.Payments.February || "",
+        march: payment.Payments.March || "",
+        april: payment.Payments.April || "",
+        may: payment.Payments.May || "",
+        june: payment.Payments.June || "",
+        july: payment.Payments.July || "",
+        august: payment.Payments.August || "",
+        september: payment.Payments.September || "",
+        october: payment.Payments.October || "",
+        november: payment.Payments.November || "",
+        december: payment.Payments.December || "",
+        Due_Payment: Math.round(totalDuePayment * 100) / 100,
+        Email: clientEmailMap.get(`${payment.Client_Name}_${payment.Type}`) || "",
+        Phone_Number: clientPhoneMap.get(`${payment.Client_Name}_${payment.Type}`) || "",
+        createdAt: payment.createdAt || new Date(0).toISOString(),
+      };
+    });
+    
     console.log(`Fetched ${processedPayments.length} payments for ${year} for user ${username}`);
     res.json(processedPayments);
   } catch (error) {
-    console.error(`Get payments for year ${year} error:`, {
-      message: error.message,
-      stack: error.stack,
-    });
+    console.error(`Get payments for year ${year} error:`, error);
     res.status(500).json({ error: `Failed to fetch payments for year ${year}: ${error.message}` });
   }
 });

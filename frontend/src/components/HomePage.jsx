@@ -80,6 +80,35 @@ const HomePage = ({
 
   const months = MONTHS;
 
+  const calculateDuePayment = (rowData, months) => {
+  const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
+  
+  if (amountToBePaid <= 0) {
+    return 0;
+  }
+
+  // Count months that have any payment value (including 0)
+  // But exclude empty strings or null/undefined
+  const activeMonths = months.filter(month => {
+    const value = rowData[month];
+    return value !== "" && value !== null && value !== undefined;
+  }).length;
+
+  // Calculate total payments made
+  const totalPaymentsMade = months.reduce((sum, month) => {
+    const payment = parseFloat(rowData[month]) || 0;
+    return sum + payment;
+  }, 0);
+
+  // Expected payment = activeMonths * monthly amount
+  const expectedTotalPayment = activeMonths * amountToBePaid;
+  
+  // Due payment = expected - actual (minimum 0)
+  const duePayment = Math.max(expectedTotalPayment - totalPaymentsMade, 0);
+  
+  return Math.round(duePayment * 100) / 100; // Round to 2 decimal places
+};
+
   const getPaymentStatus = useCallback((row, month) => {
     const amountToBePaid = parseFloat(row?.Amount_To_Be_Paid || 0);
     const paidInMonth = parseFloat(row?.[month] || 0);
@@ -443,7 +472,7 @@ const processBatchUpdates = useCallback(
       }
     });
 
-    // Optimized grouping by row with reduced object creation
+    // Optimized grouping by row
     const updatesByRow = new Map();
     
     updates.forEach(({ rowIndex, month, value, year }) => {
@@ -482,7 +511,7 @@ const processBatchUpdates = useCallback(
       const updatePromises = Array.from(updatesByRow.values()).map(async (rowUpdate) => {
         const { rowIndex, year, updates, clientName, type, clientEmail, clientPhone, duePayment, rowData } = rowUpdate;
 
-        // Pre-calculate optimistic updates
+        // FIXED: Pre-calculate optimistic updates with proper due payment
         const optimisticRowData = { ...rowData };
         const statusCalculations = [];
         const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
@@ -505,21 +534,8 @@ const processBatchUpdates = useCallback(
           });
         });
 
-        // Efficient due payment calculation
-        const activeMonths = months.filter(
-          (m) => optimisticRowData[m] && parseFloat(optimisticRowData[m]) > 0
-        ).length;
-        
-        let expectedPayment = 0;
-        if (activeMonths > 0) {
-          expectedPayment = amountToBePaid * activeMonths;
-        }
-        const totalPayments = months.reduce(
-          (sum, m) => sum + (parseFloat(optimisticRowData[m]) || 0),
-          0
-        );
-        
-        optimisticRowData.Due_Payment = Math.max(expectedPayment - totalPayments, 0).toFixed(2);
+        // FIXED: Efficient due payment calculation using the utility function
+        optimisticRowData.Due_Payment = calculateDuePayment(optimisticRowData, months).toFixed(2);
 
         // Store optimistic update
         stateUpdates.paymentsDataUpdates.set(rowIndex, optimisticRowData);
@@ -535,8 +551,8 @@ const processBatchUpdates = useCallback(
                 'Content-Type': 'application/json'
               },
               params: { year },
-              timeout: 8000, // Balanced timeout for reliability
-              validateStatus: (status) => status < 500, // Don't retry on client errors
+              timeout: 8000,
+              validateStatus: (status) => status < 500,
             }
           );
 
@@ -563,7 +579,7 @@ const processBatchUpdates = useCallback(
               type,
               year,
               notifyStatuses,
-              duePayment
+              updatedRow.Due_Payment || duePayment
             ).then((notificationSent) => {
               if (!notificationSent) {
                 missingContactClients.push(clientName);
@@ -605,19 +621,21 @@ const processBatchUpdates = useCallback(
             failedUpdates.push(result.value);
           }
         } else {
-          // Handle rejected promises
           console.error('Promise rejected:', result.reason);
         }
       });
 
       // Optimized batch state updates
       if (successfulUpdates.length > 0) {
-        // Single payments data update
+        // FIXED: Single payments data update with proper due payment
         setPaymentsData((prev) => {
           const updated = [...prev];
           successfulUpdates.forEach(({ rowIndex, updatedRow }) => {
             if (updatedRow && updated[rowIndex]) {
-              updated[rowIndex] = { ...updated[rowIndex], ...updatedRow };
+              // Ensure Due_Payment is properly calculated
+              const mergedRow = { ...updated[rowIndex], ...updatedRow };
+              mergedRow.Due_Payment = calculateDuePayment(mergedRow, months);
+              updated[rowIndex] = mergedRow;
             }
           });
           return updated;
