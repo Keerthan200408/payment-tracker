@@ -159,8 +159,8 @@ const AddClientPage = ({
       delete apiCacheRef.current[paymentsCacheKey];
       
       await Promise.all([
-        fetchClients(sessionToken),
-        fetchPayments(sessionToken, new Date().getFullYear().toString())
+        fetchClients(sessionToken, true),
+        fetchPayments(sessionToken, new Date().getFullYear().toString(), true)
       ]);
 
       // Trigger refresh for HomePage

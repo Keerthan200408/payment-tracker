@@ -304,6 +304,12 @@ const fetchClients = async (token) => {
   if (!token) return;
   
   const cacheKey = `clients_${currentUser}_${token}`;
+
+  // Invalidate cache if forceRefresh is true
+  if (forceRefresh) {
+    console.log(`App.jsx: Invalidating cache for clients_${currentUser} due to forceRefresh`);
+    delete apiCacheRef.current[cacheKey];
+  }
   
   // Check cache first
   if (apiCacheRef.current[cacheKey] && 
