@@ -363,14 +363,21 @@ const fetchClients = async (token) => {
 };
 
 
-const fetchPayments = async (token, year) => {
+const fetchPayments = async (token, year, forceRefresh = false) => {
   if (!token || !year) return;
-  
+
   const cacheKey = `payments_${year}_${token}`;
-  
+
+  // Invalidate cache if forceRefresh is true or refreshTrigger indicates a change
+  if (forceRefresh || refreshTrigger) {
+    console.log(`App.jsx: Invalidating cache for payments_${year} due to ${forceRefresh ? 'forceRefresh' : 'refreshTrigger'}`);
+    delete apiCacheRef.current[cacheKey];
+  }
+
   // Check cache first
   if (apiCacheRef.current[cacheKey] &&
-      Date.now() - apiCacheRef.current[cacheKey].timestamp < CACHE_DURATION) {
+      Date.now() - apiCacheRef.current[cacheKey].timestamp < CACHE_DURATION &&
+      !forceRefresh) {
     console.log(`App.jsx: Using cached payments for ${year}`);
     setPaymentsData(apiCacheRef.current[cacheKey].data);
     return;
@@ -392,22 +399,22 @@ const fetchPayments = async (token, year) => {
         params: { year },
         timeout: 10000,
       });
-      
+
       const data = Array.isArray(response.data) ? response.data : [];
       console.log(`Fetched payments for ${year}:`, data);
-      
+
       // Sort payments by createdAt (newest first)
       const sortedPaymentsData = sortDataByCreatedAt(data, 'desc');
       console.log("Payments sorted by createdAt (newest first)");
-      
+
       setPaymentsData(sortedPaymentsData);
-      
+
       // Cache the sorted result
       apiCacheRef.current[cacheKey] = { 
         data: sortedPaymentsData, 
         timestamp: Date.now() 
       };
-      
+
       return sortedPaymentsData;
     } catch (error) {
       console.error("Error fetching payments:", error);
@@ -422,7 +429,7 @@ const fetchPayments = async (token, year) => {
 
   // Store the promise to prevent duplicate requests
   apiCacheRef.current[requestKey] = requestPromise;
-  
+
   return requestPromise;
 };
 
