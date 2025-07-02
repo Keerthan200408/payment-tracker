@@ -1036,10 +1036,22 @@ const handleInputChange = useCallback(
       [key]: trimmedValue,
     }));
 
-    // Queue the main update without filling intermediate months
+    // Optimistic update for paymentsData to recalculate Due_Payment
+    setPaymentsData((prev) => {
+      const updatedPayments = [...prev];
+      const rowData = { ...updatedPayments[rowIndex] };
+      rowData[month] = trimmedValue;
+
+      // Recalculate Due_Payment using calculateDuePayment
+      rowData.Due_Payment = calculateDuePayment(rowData, months).toFixed(2);
+      updatedPayments[rowIndex] = rowData;
+      return updatedPayments;
+    });
+
+    // Queue the main update
     debouncedUpdate(rowIndex, month, trimmedValue, currentYear);
   },
-  [debouncedUpdate, currentYear, setErrorMessage]
+  [debouncedUpdate, currentYear, paymentsData, months, setErrorMessage, setPaymentsData]
 );
 
 useEffect(() => {
