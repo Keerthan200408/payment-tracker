@@ -18,7 +18,6 @@ const App = () => {
   const [paymentsData, setPaymentsData] = useState([]);
   const [contextMenu, setContextMenu] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusSort, setStatusSort] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [editClient, setEditClient] = useState(null);
