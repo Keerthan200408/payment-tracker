@@ -147,17 +147,16 @@ const getPaymentStatus = useCallback((row, month) => {
   );
 
 const filteredData = useMemo(() => {
-  return paymentsData.filter((row) => {
-    const lowerMonth = monthFilter?.toLowerCase();
+  const normalizedMonth = monthFilter?.toLowerCase() || "";
 
-    const paid = parseFloat(row?.[lowerMonth]) || 0;
+  return paymentsData.filter((row) => {
+    const paid = parseFloat(row?.[normalizedMonth]) || 0;
     const due = parseFloat(row?.Amount_To_Be_Paid) || 0;
 
-    // Calculate status
     let status = "";
     if (!monthFilter) {
       status = "";
-    } else if (paid >= due) {
+    } else if (paid >= due && due > 0) {
       status = "Paid";
     } else if (paid === 0) {
       status = "Unpaid";
@@ -165,21 +164,19 @@ const filteredData = useMemo(() => {
       status = "PartiallyPaid";
     }
 
-    // Match filters
-    const matchSearch =
+    const searchMatch =
       !searchQuery ||
       row?.Client_Name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       row?.Type?.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchMonth = !monthFilter || row?.[lowerMonth] !== undefined;
+    const monthExists =
+      !monthFilter || row?.hasOwnProperty(normalizedMonth);
 
-    const matchStatus = !statusFilter || status === statusFilter;
+    const statusMatch = !statusFilter || status === statusFilter;
 
-    return matchSearch && matchMonth && matchStatus;
+    return searchMatch && monthExists && statusMatch;
   });
 }, [paymentsData, searchQuery, monthFilter, statusFilter]);
-
-
 
 
 
@@ -1024,26 +1021,29 @@ useEffect(() => {
     setIsLoadingPayments(true);
     console.log(`HomePage.jsx: Fetching payments for year ${currentYear} due to refreshTrigger: ${refreshTrigger}`);
     
-    // Clear cache and force refresh if refreshTrigger has changed
     const paymentsCacheKey = getCacheKey('/get-payments-by-year', {
       year: currentYear,
       sessionToken,
     });
+
     if (refreshTrigger && refreshTrigger !== lastRefreshTrigger) {
       console.log(`HomePage.jsx: Invalidating cache for payments_${currentYear} due to refreshTrigger change`);
       delete apiCacheRef.current[paymentsCacheKey];
-      setLastRefreshTrigger(refreshTrigger); // Update lastRefreshTrigger to prevent repeated fetches
+      setLastRefreshTrigger(refreshTrigger);
     }
 
     try {
-      await fetchPayments(sessionToken, currentYear, refreshTrigger && refreshTrigger !== lastRefreshTrigger); // Pass forceRefresh based on trigger change
+      await fetchPayments(sessionToken, currentYear, refreshTrigger && refreshTrigger !== lastRefreshTrigger);
       console.log(`HomePage.jsx: Payments fetched for year ${currentYear}: ${paymentsData.length} items`);
+
+      if (paymentsData.length > 0) {
+        console.log("🔍 Sample Row for Debug:", paymentsData[0]);
+      }
     } catch (error) {
       console.error('HomePage.jsx: Error fetching payments:', error);
       setLocalErrorMessage(
         error.response?.data?.error || 'Failed to load payments data.'
       );
-      // Fallback to cached data only if no refreshTrigger is present
       const cachedData = getCachedData(paymentsCacheKey);
       if (cachedData && !refreshTrigger) {
         setPaymentsData(cachedData);
@@ -1056,6 +1056,7 @@ useEffect(() => {
 
   loadPaymentsData();
 }, [sessionToken, currentYear, fetchPayments, getCacheKey, getCachedData, setPaymentsData]);
+
 
   useEffect(() => {
     onMount();
@@ -1304,11 +1305,12 @@ const renderDashboard = () => {
           className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
         >
           <option value="">All Months</option>
-          {months.map((month, index) => (
-            <option key={index} value={month}>
+          {months.map((month) => (
+            <option key={month} value={month.toLowerCase()}>
               {month.charAt(0).toUpperCase() + month.slice(1)}
             </option>
           ))}
+
         </select>
         <select
         value={statusFilter}
