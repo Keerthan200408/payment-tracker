@@ -1547,11 +1547,16 @@ const renderReports = () => {
         acc[row?.Client_Name] = {};
       }
       months.forEach((month) => {
-        acc[row?.Client_Name][month] = getPaymentStatus(row, month);
+        const amountToBePaid = parseFloat(row?.Amount_To_Be_Paid || 0);
+        const paid = parseFloat(row?.[month] || 0);
+        let status = "Unpaid";
+        if (paid >= amountToBePaid) status = "Paid";
+        else if (paid > 0) status = "PartiallyPaid";
+        acc[row?.Client_Name][month.toLowerCase()] = status;
       });
       return acc;
     }, {});
-  }, [paymentsData, months, getPaymentStatus]);
+  }, [paymentsData, months]);
 
   const getStatusBackgroundColor = (status) => {
     if (status === "Unpaid") return "bg-red-100 text-red-800";
@@ -1561,13 +1566,32 @@ const renderReports = () => {
   };
 
   const entriesPerPage = 10;
-  
-  const paginatedClients = Object.keys(monthStatus).slice(
-  (currentPage - 1) * entriesPerPage,
-  currentPage * entriesPerPage
-);
-const totalEntries = Object.keys(monthStatus).length;
-const totalPages = Math.ceil(totalEntries / entriesPerPage);
+
+  const filteredClients = useMemo(() => {
+    let filtered = Object.keys(monthStatus);
+
+    if (searchQuery) {
+      filtered = filtered.filter((client) =>
+        client.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    if (monthFilter && statusFilter) {
+      filtered = filtered.filter((client) => {
+        const status = monthStatus[client]?.[monthFilter.toLowerCase()];
+        return status === statusFilter;
+      });
+    }
+
+    return filtered;
+  }, [monthStatus, searchQuery, monthFilter, statusFilter]);
+
+  const paginatedClients = filteredClients.slice(
+    (currentPage - 1) * entriesPerPage,
+    currentPage * entriesPerPage
+  );
+  const totalEntries = filteredClients.length;
+  const totalPages = Math.ceil(totalEntries / entriesPerPage);
 
   return (
     <>
@@ -1619,10 +1643,7 @@ const totalPages = Math.ceil(totalEntries / entriesPerPage);
             <tbody className="bg-white divide-y divide-gray-200">
               {paginatedClients.length === 0 ? (
                 <tr>
-                  <td
-                    colSpan={14}
-                    className="px-6 py-12 text-center text-gray-500"
-                  >
+                  <td colSpan={14} className="px-6 py-12 text-center text-gray-500">
                     <div className="flex flex-col items-center">
                       <i className="fas fa-users text-4xl text-gray-300 mb-3"></i>
                       <p className="text-lg font-medium text-gray-600">
@@ -1638,7 +1659,6 @@ const totalPages = Math.ceil(totalEntries / entriesPerPage);
                 </tr>
               ) : (
                 paginatedClients.map((client, idx) => {
-                  // Find the corresponding payment data for this client
                   const paymentData = paymentsData.find(
                     (row) => row.Client_Name === client
                   );
@@ -1651,20 +1671,23 @@ const totalPages = Math.ceil(totalEntries / entriesPerPage);
                       <td className="px-6 py-4 whitespace-nowrap text-center text-sm sm:text-base text-gray-900">
                         {paymentData?.Type || "N/A"}
                       </td>
-                      {months.map((month, mIdx) => (
-                        <td
-                          key={mIdx}
-                          className="px-6 py-4 whitespace-nowrap text-center"
-                        >
-                          <span
-                            className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${getStatusBackgroundColor(
-                              monthStatus[client]?.[month] || "Unpaid"
-                            )}`}
+                      {months.map((month, mIdx) => {
+                        const status = monthStatus[client]?.[month.toLowerCase()] || "Unpaid";
+                        return (
+                          <td
+                            key={mIdx}
+                            className="px-6 py-4 whitespace-nowrap text-center"
                           >
-                            {monthStatus[client]?.[month] || "Unpaid"}
-                          </span>
-                        </td>
-                      ))}
+                            <span
+                              className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${getStatusBackgroundColor(
+                                status
+                              )}`}
+                            >
+                              {status}
+                            </span>
+                          </td>
+                        );
+                      })}
                     </tr>
                   );
                 })
@@ -1689,70 +1712,19 @@ const totalPages = Math.ceil(totalEntries / entriesPerPage);
             >
               Previous
             </button>
-            {totalPages <= 5 ? (
-              [...Array(totalPages)].map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setCurrentPage(i + 1)}
-                  className={`px-4 py-2 border border-gray-300 rounded-md text-sm sm:text-base ${
-                    currentPage === i + 1
-                      ? "bg-gray-800 text-white"
-                      : "text-gray-700 hover:bg-gray-50"
-                  } transition duration-200`}
-                >
-                  {i + 1}
-                </button>
-              ))
-            ) : (
-              <>
-                {currentPage > 3 && (
-                  <>
-                    <button
-                      onClick={() => setCurrentPage(1)}
-                      className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base hover:bg-gray-50 transition duration-200"
-                    >
-                      1
-                    </button>
-                    {currentPage > 4 && (
-                      <span className="px-4 py-2 text-gray-700">...</span>
-                    )}
-                  </>
-                )}
-                {[...Array(5)].map((_, i) => {
-                  const pageNum =
-                    currentPage <= 3 ? i + 1 : currentPage - 2 + i;
-                  if (pageNum <= totalPages && pageNum > 0) {
-                    return (
-                      <button
-                        key={pageNum}
-                        onClick={() => setCurrentPage(pageNum)}
-                        className={`px-4 py-2 border border-gray-300 rounded-md text-sm sm:text-base ${
-                          currentPage === pageNum
-                            ? "bg-gray-800 text-white"
-                            : "text-gray-700 hover:bg-gray-50"
-                        } transition duration-200`}
-                      >
-                        {pageNum}
-                      </button>
-                    );
-                  }
-                  return null;
-                })}
-                {currentPage < totalPages - 2 && (
-                  <>
-                    {currentPage < totalPages - 3 && (
-                      <span className="px-4 py-2 text-gray-700">...</span>
-                    )}
-                    <button
-                      onClick={() => setCurrentPage(totalPages)}
-                      className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base hover:bg-gray-50 transition duration-200"
-                    >
-                      {totalPages}
-                    </button>
-                  </>
-                )}
-              </>
-            )}
+            {[...Array(totalPages)].map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setCurrentPage(i + 1)}
+                className={`px-4 py-2 border border-gray-300 rounded-md text-sm sm:text-base ${
+                  currentPage === i + 1
+                    ? "bg-gray-800 text-white"
+                    : "text-gray-700 hover:bg-gray-50"
+                } transition duration-200`}
+              >
+                {i + 1}
+              </button>
+            ))}
             <button
               onClick={() =>
                 setCurrentPage((prev) => Math.min(prev + 1, totalPages))
@@ -1768,6 +1740,7 @@ const totalPages = Math.ceil(totalEntries / entriesPerPage);
     </>
   );
 };
+
 
 
   return (
