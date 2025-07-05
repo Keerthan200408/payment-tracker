@@ -147,36 +147,28 @@ const getPaymentStatus = useCallback((row, month) => {
   );
 
 const filteredData = useMemo(() => {
-  const normalizedMonth = monthFilter?.toLowerCase() || "";
-
-  return paymentsData.filter((row) => {
-    const paid = parseFloat(row?.[normalizedMonth]) || 0;
-    const due = parseFloat(row?.Amount_To_Be_Paid) || 0;
-
-    let status = "";
-    if (!monthFilter) {
-      status = "";
-    } else if (paid >= due && due > 0) {
-      status = "Paid";
-    } else if (paid === 0) {
-      status = "Unpaid";
-    } else {
-      status = "PartiallyPaid";
-    }
-
-    const searchMatch =
+  return (paymentsData || []).filter((row) => {
+    const matchesSearch =
       !searchQuery ||
       row?.Client_Name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       row?.Type?.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const monthExists =
-      !monthFilter || row?.hasOwnProperty(normalizedMonth);
+    const hasMonthValue =
+      !monthFilter ||
+      (row[monthFilter.toLowerCase()] !== undefined &&
+        row[monthFilter.toLowerCase()] !== null &&
+        row[monthFilter.toLowerCase()] !== "");
 
-    const statusMatch = !statusFilter || status === statusFilter;
+    const matchesStatus =
+      !monthFilter || !statusFilter
+        ? true
+        : getPaymentStatus(row, monthFilter.toLowerCase()) === statusFilter;
 
-    return searchMatch && monthExists && statusMatch;
+    // ✅ Only include if there's actual data for the month
+    return matchesSearch && hasMonthValue && matchesStatus;
   });
-}, [paymentsData, searchQuery, monthFilter, statusFilter]);
+}, [paymentsData, searchQuery, monthFilter, statusFilter, getPaymentStatus]);
+
 
 
 
