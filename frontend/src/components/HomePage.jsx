@@ -1526,7 +1526,8 @@ const renderDashboard = () => {
         </div>
       )}
 
-      {contextMenu && (
+      <div className="relative">
+        {contextMenu && (
         <div
           className="absolute bg-white border border-gray-300 rounded-lg shadow-sm p-2 z-50"
           style={{ top: contextMenu.y, left: contextMenu.x }}
@@ -1539,6 +1540,7 @@ const renderDashboard = () => {
           </button>
         </div>
       )}
+      </div>
     </>
   );
 };
