@@ -147,14 +147,14 @@ const calculateDuePayment = (rowData, months) => {
   );
 
 const getLiveStatus = (row, month) => {
-  const paid = parseFloat(row[month]) || 0;
-  const due = parseFloat(row.Amount_To_Be_Paid) || 0;
+  const paid = parseFloat(row[month]);
+  const duePerMonth = parseFloat(row.Amount_To_Be_Paid);
 
-  if (paid >= due) return "Paid";
-  if (paid > 0) return "PartiallyPaid";
-  return "Unpaid";
+  // Treat blank/null/NaN as 0
+  if (isNaN(paid) || paid === 0) return "Unpaid";
+  if (paid >= duePerMonth) return "Paid";
+  return "PartiallyPaid";
 };
-
 
 const filteredData = useMemo(() => {
   let filtered = [...paymentsData];
@@ -170,8 +170,8 @@ const filteredData = useMemo(() => {
 
   if (monthFilter) {
     filtered = filtered.filter((row) => {
-      const paid = parseFloat(row[monthFilter]) || 0;
-      return paid >= 0;
+      const val = row[monthFilter];
+      return val !== undefined && val !== null && val !== "";
     });
 
     if (statusFilter) {
@@ -184,6 +184,7 @@ const filteredData = useMemo(() => {
 
   return filtered;
 }, [paymentsData, searchQuery, monthFilter, statusFilter]);
+
 
 
 
