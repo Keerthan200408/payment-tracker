@@ -1558,21 +1558,17 @@ const renderDashboard = () => {
 
 const renderReports = () => {
   const monthStatus = useMemo(() => {
-    return (paymentsData || []).reduce((acc, row) => {
-      if (!acc[row?.Client_Name]) {
-        acc[row?.Client_Name] = {};
-      }
-      months.forEach((month) => {
-        const amountToBePaid = parseFloat(row?.Amount_To_Be_Paid || 0);
-        const paid = parseFloat(row?.[month] || 0);
-        let status = "Unpaid";
-        if (paid >= amountToBePaid) status = "Paid";
-        else if (paid > 0) status = "PartiallyPaid";
-        acc[row?.Client_Name][month.toLowerCase()] = status;
-      });
-      return acc;
-    }, {});
-  }, [paymentsData, months]);
+  return (paymentsData || []).reduce((acc, row) => {
+    if (!acc[row?.Client_Name]) {
+      acc[row?.Client_Name] = {};
+    }
+    months.forEach((month) => {
+      acc[row?.Client_Name][month] = getPaymentStatus(row, month);
+    });
+    return acc;
+  }, {});
+}, [paymentsData, months, getPaymentStatus]);
+
 
   const getStatusBackgroundColor = (status) => {
     if (status === "Unpaid") return "bg-red-100 text-red-800";
