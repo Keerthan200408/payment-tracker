@@ -1164,7 +1164,7 @@ const handleAddType = async () => {
     setLocalErrorMessage("");
     const cacheKey = `types_${currentUser}_${sessionToken}`;
     delete apiCacheRef.current[cacheKey];
-    await fetchTypes();
+    await fetchTypes(sessionToken);
     alert(`Type ${capitalizedType} added successfully.`);
   } catch (error) {
     console.error(`HomePage.jsx: Error adding type for ${currentUser}:`, error);
