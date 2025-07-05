@@ -145,7 +145,7 @@ const calculateDuePayment = (rowData, months) => {
   );
 
 const filteredData = useMemo(() => {
-  let filtered = [...paymentsData];
+  let filtered = paymentsData;
 
   if (searchQuery) {
     const lowerQuery = searchQuery.toLowerCase();
@@ -164,19 +164,15 @@ const filteredData = useMemo(() => {
 
     if (statusFilter) {
       filtered = filtered.filter((row) => {
-        const due = parseFloat(row.Due_Payment) || 0;
-        const paid = parseFloat(row[monthFilter]) || 0;
-
-        if (statusFilter === "Paid") return due <= 0;
-        if (statusFilter === "PartiallyPaid") return paid > 0 && due > 0;
-        if (statusFilter === "Unpaid") return paid === 0 && due > 0;
-        return true;
+        const status = row?.Payment_Status; // 🟡 static value
+        return status === statusFilter;
       });
     }
   }
 
   return filtered;
 }, [paymentsData, searchQuery, monthFilter, statusFilter]);
+
 
 
 
