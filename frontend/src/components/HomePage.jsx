@@ -108,13 +108,15 @@ const calculateDuePayment = (rowData, months) => {
   return Math.round(duePayment * 100) / 100; // Round to 2 decimal places
 };
 
-  const getPaymentStatus = useCallback((row, month) => {
-    const amountToBePaid = parseFloat(row?.Amount_To_Be_Paid || 0);
-    const paidInMonth = parseFloat(row?.[month] || 0);
-    if (paidInMonth === 0) return "Unpaid";
-    if (paidInMonth >= amountToBePaid) return "Paid";
-    return "PartiallyPaid";
-  }, []);
+const getPaymentStatus = useCallback((row, month) => {
+  const paid = parseFloat(row?.[month]) || 0;
+  const due = parseFloat(row?.Amount_To_Be_Paid) || 0;
+
+  if (paid >= due && due > 0) return "Paid";
+  if (paid > 0 && paid < due) return "PartiallyPaid";
+  return "Unpaid";
+}, []);
+
 
   const getInputBackgroundColor = useCallback(
     (row, month, rowIndex) => {
@@ -145,32 +147,23 @@ const calculateDuePayment = (rowData, months) => {
   );
 
 const filteredData = useMemo(() => {
-  return (paymentsData || [])
-    .filter((row) => {
-      const matchesSearch =
-        !searchQuery ||
-        row?.Client_Name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        row?.Type?.toLowerCase().includes(searchQuery.toLowerCase());
+  return (paymentsData || []).filter((row) => {
+    const matchesSearch =
+      !searchQuery ||
+      row?.Client_Name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      row?.Type?.toLowerCase().includes(searchQuery.toLowerCase());
 
-      const matchesMonth =
-        !monthFilter ||
-        (row?.[monthFilter.toLowerCase()] !== undefined &&
-          row?.[monthFilter.toLowerCase()] !== null);
+    const monthKey = monthFilter?.toLowerCase();
+    const hasMonthData = !monthFilter || row?.[monthKey] !== undefined;
 
-      const matchesStatus = !monthFilter
-        ? true
-        : !statusFilter ||
-          (statusFilter === "Paid" &&
-            getPaymentStatus(row, monthFilter.toLowerCase()) === "Paid") ||
-          (statusFilter === "PartiallyPaid" &&
-            getPaymentStatus(row, monthFilter.toLowerCase()) === "PartiallyPaid") ||
-          (statusFilter === "Unpaid" &&
-            getPaymentStatus(row, monthFilter.toLowerCase()) === "Unpaid");
+    const matchesStatus =
+      !statusFilter ||
+      getPaymentStatus(row, monthKey) === statusFilter;
 
-      return matchesSearch && matchesMonth && matchesStatus;
-    });
-    // Removed .sort() - data is already sorted from App.jsx
+    return matchesSearch && hasMonthData && matchesStatus;
+  });
 }, [paymentsData, searchQuery, monthFilter, statusFilter, getPaymentStatus]);
+
 
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -1301,16 +1294,17 @@ const renderDashboard = () => {
           ))}
         </select>
         <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
-          disabled={!monthFilter}
-        >
-          <option value="">Status</option>
-          <option value="Paid">Paid</option>
-          <option value="PartiallyPaid">Partially Paid</option>
-          <option value="Unpaid">Unpaid</option>
-        </select>
+        value={statusFilter}
+        onChange={(e) => setStatusFilter(e.target.value)}
+        className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+        disabled={!monthFilter}
+      >
+        <option value="">Status</option>
+        <option value="Paid">Paid</option>
+        <option value="PartiallyPaid">Partially Paid</option>
+        <option value="Unpaid">Unpaid</option>
+      </select>
+
       </div>
 
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
