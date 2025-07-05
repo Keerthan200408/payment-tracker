@@ -1110,6 +1110,21 @@ const renderDashboard = () => {
     currentPage * entriesPerPage
   );
 
+const getOverallStatus = (row) => {
+  const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+  const totalPaid = months.reduce((sum, m) => sum + (parseFloat(row[m]) || 0), 0);
+  const due = parseFloat(row.Due_Payment) || 0;
+
+  if (due <= 0) return "Paid";
+  if (totalPaid > 0) return "Partially Paid";
+  return "Unpaid";
+};
+
+//Added by pradeep this is a new function to handle the rendering of the dashboard
+
   return (
     <>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
@@ -1310,8 +1325,20 @@ const renderDashboard = () => {
                       </td>
                     ))}
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm sm:text-base text-gray-900">
-                      ₹{(parseFloat(row?.Due_Payment) || 0).toLocaleString()}.00
-                    </td>
+  ₹{(parseFloat(row?.Due_Payment) || 0).toLocaleString()}.00
+  <span
+    className={`ml-2 px-2 py-1 rounded text-xs font-semibold ${
+      getOverallStatus(row) === "Paid"
+        ? "bg-green-100 text-green-800"
+        : getOverallStatus(row) === "Partially Paid"
+        ? "bg-yellow-100 text-yellow-800"
+        : "bg-red-100 text-red-800"
+    }`}
+  >
+    {getOverallStatus(row)}
+  </span>
+</td>
+
                   </tr>
                 ))
               )}
