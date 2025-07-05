@@ -147,36 +147,32 @@ const getPaymentStatus = useCallback((row, month) => {
   );
 
 const filteredData = useMemo(() => {
-  const normalizedMonth = monthFilter?.toLowerCase() || "";
+  return (paymentsData || [])
+    .filter((row) => {
+      const matchesSearch =
+        !searchQuery ||
+        row?.Client_Name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        row?.Type?.toLowerCase().includes(searchQuery.toLowerCase());
 
-  return paymentsData.filter((row) => {
-    const paid = parseFloat(row?.[normalizedMonth]) || 0;
-    const due = parseFloat(row?.Amount_To_Be_Paid) || 0;
+      const matchesMonth =
+        !monthFilter ||
+        (row?.[monthFilter.toLowerCase()] !== undefined &&
+          row?.[monthFilter.toLowerCase()] !== null);
 
-    let status = "";
-    if (!monthFilter) {
-      status = "";
-    } else if (paid >= due && due > 0) {
-      status = "Paid";
-    } else if (paid === 0) {
-      status = "Unpaid";
-    } else {
-      status = "PartiallyPaid";
-    }
+      const matchesStatus = !monthFilter
+        ? true
+        : !statusFilter ||
+          (statusFilter === "Paid" &&
+            getPaymentStatus(row, monthFilter.toLowerCase()) === "Paid") ||
+          (statusFilter === "PartiallyPaid" &&
+            getPaymentStatus(row, monthFilter.toLowerCase()) === "PartiallyPaid") ||
+          (statusFilter === "Unpaid" &&
+            getPaymentStatus(row, monthFilter.toLowerCase()) === "Unpaid");
 
-    const searchMatch =
-      !searchQuery ||
-      row?.Client_Name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      row?.Type?.toLowerCase().includes(searchQuery.toLowerCase());
-
-    const monthExists =
-      !monthFilter || row?.hasOwnProperty(normalizedMonth);
-
-    const statusMatch = !statusFilter || status === statusFilter;
-
-    return searchMatch && monthExists && statusMatch;
-  });
-}, [paymentsData, searchQuery, monthFilter, statusFilter]);
+      return matchesSearch && matchesMonth && matchesStatus;
+    });
+    // Removed .sort() - data is already sorted from App.jsx
+}, [paymentsData, searchQuery, monthFilter, statusFilter, getPaymentStatus]);
 
 
 
