@@ -147,49 +147,32 @@ const getPaymentStatus = useCallback((row, month) => {
   );
 
 const filteredData = useMemo(() => {
-  console.log('Filtering paymentsData:', {
-    totalRows: paymentsData?.length || 0,
-    searchQuery,
-    monthFilter,
-    statusFilter,
-  });
+  return (paymentsData || [])
+    .filter((row) => {
+      const matchesSearch =
+        !searchQuery ||
+        row?.Client_Name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        row?.Type?.toLowerCase().includes(searchQuery.toLowerCase());
 
-  return (paymentsData || []).filter((row, index) => {
-    if (!row || !row.Client_Name || !row.Amount_To_Be_Paid) {
-      console.warn(`Invalid row at index ${index}:`, row);
-      return false;
-    }
+      const matchesMonth =
+        !monthFilter ||
+        (row?.[monthFilter.toLowerCase()] !== undefined &&
+         row?.[monthFilter.toLowerCase()] !== null);
 
-    const matchesSearch =
-      !searchQuery ||
-      row.Client_Name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (row.Type && row.Type.toLowerCase().includes(searchQuery.toLowerCase()));
+      const matchesStatus = !monthFilter
+        ? true
+        : !statusFilter ||
+          (statusFilter === "Paid" &&
+            getPaymentStatus(row, monthFilter.toLowerCase()) === "Paid") ||
+          (statusFilter === "PartiallyPaid" &&
+            getPaymentStatus(row, monthFilter.toLowerCase()) === "PartiallyPaid") ||
+          (statusFilter === "Unpaid" &&
+            getPaymentStatus(row, monthFilter.toLowerCase()) === "Unpaid");
 
-    const monthKey = monthFilter.toLowerCase();
-    const monthValue = row[monthKey];
-
-    const matchesMonth =
-      !monthFilter ||
-      (monthValue !== undefined &&
-       monthValue !== null &&
-       !isNaN(parseFloat(monthValue)));
-
-    const matchesStatus = !monthFilter
-      ? true
-      : !statusFilter ||
-        getPaymentStatus(row, monthKey) === statusFilter;
-
-    console.log(`Row ${index} (${row.Client_Name}):`, {
-      matchesSearch,
-      matchesMonth,
-      matchesStatus,
-      monthValue,
-      status: getPaymentStatus(row, monthKey),
+      return matchesSearch && matchesMonth && matchesStatus;
     });
-
-    return matchesSearch && matchesMonth && matchesStatus;
-  });
 }, [paymentsData, searchQuery, monthFilter, statusFilter, getPaymentStatus]);
+
 
 
 
