@@ -147,22 +147,37 @@ const getPaymentStatus = useCallback((row, month) => {
   );
 
 const filteredData = useMemo(() => {
-  return (paymentsData || []).filter((row) => {
-    const matchesSearch =
-      !searchQuery ||
-      row?.Client_Name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      row?.Type?.toLowerCase().includes(searchQuery.toLowerCase());
+  return (paymentsData || [])
+    .filter((row) => {
+      const lowerMonth = monthFilter?.toLowerCase();
+      const amountToBePaid = parseFloat(row?.Amount_To_Be_Paid || 0);
+      const paidAmount = parseFloat(row?.[lowerMonth] || 0);
 
-    const monthKey = monthFilter?.toLowerCase();
-    const hasMonthData = !monthFilter || row?.[monthKey] !== undefined;
+      const matchesSearch =
+        !searchQuery ||
+        row?.Client_Name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        row?.Type?.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesStatus =
-      !statusFilter ||
-      getPaymentStatus(row, monthKey) === statusFilter;
+      const matchesMonth = !monthFilter || row?.[lowerMonth] !== undefined;
 
-    return matchesSearch && hasMonthData && matchesStatus;
-  });
-}, [paymentsData, searchQuery, monthFilter, statusFilter, getPaymentStatus]);
+      // ✅ Determine actual status
+      let actualStatus = "";
+      if (!monthFilter) {
+        actualStatus = "";
+      } else if (paidAmount === 0) {
+        actualStatus = "Unpaid";
+      } else if (paidAmount >= amountToBePaid) {
+        actualStatus = "Paid";
+      } else {
+        actualStatus = "PartiallyPaid";
+      }
+
+      const matchesStatus = !statusFilter || actualStatus === statusFilter;
+
+      return matchesSearch && matchesMonth && matchesStatus;
+    });
+}, [paymentsData, searchQuery, monthFilter, statusFilter]);
+
 
 
 
