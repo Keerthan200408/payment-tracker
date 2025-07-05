@@ -444,242 +444,90 @@ const debugDuePayment = (rowIndex, stage, value) => {
   console.log(`Due Payment Debug - Row ${rowIndex} at ${stage}: ${value}`);
 };
 
-const processBatchUpdates = useCallback(
-  async () => {
-    if (!updateQueueRef.current.length) {
-      console.log("HomePage.jsx: No updates to process");
-      batchTimerRef.current = null;
-      return;
-    }
-
-    const updates = [...updateQueueRef.current];
-    updateQueueRef.current = [];
+const processBatchUpdates = useCallback(async () => {
+  if (!updateQueueRef.current.length) {
     batchTimerRef.current = null;
-    
-    console.log(`HomePage.jsx: Processing batch of ${updates.length} updates`, updates);
-    setIsUpdating(true);
+    return;
+  }
 
-    // Pre-build caches for performance
-    const rowDataCache = new Map();
-    const localValuesCache = { ...localInputValues };
-    const missingContactClients = [];
+  const updates = [...updateQueueRef.current];
+  updateQueueRef.current = [];
+  batchTimerRef.current = null;
+  setIsUpdating(true);
 
-    // Single pass to build row data cache
-    updates.forEach(({ rowIndex }) => {
-      if (!rowDataCache.has(rowIndex) && paymentsData[rowIndex]) {
-        rowDataCache.set(rowIndex, paymentsData[rowIndex]);
-      }
-    });
-
-    // Optimized grouping by row
-    const updatesByRow = new Map();
-    
-    updates.forEach(({ rowIndex, month, value, year }) => {
-      const rowData = rowDataCache.get(rowIndex);
-      if (!rowData) {
-        console.warn(`HomePage.jsx: Invalid rowIndex ${rowIndex}`);
-        return;
-      }
-
-      if (!updatesByRow.has(rowIndex)) {
-        updatesByRow.set(rowIndex, {
-          rowIndex,
-          year,
-          updates: [],
-          clientName: rowData.Client_Name,
-          type: rowData.Type,
-          clientEmail: rowData.Email || "",
-          clientPhone: rowData.Phone_Number || "",
-          duePayment: rowData.Due_Payment || "0.00",
-          rowData,
-        });
-      }
-      
-      // CRITICAL FIX: Send month in lowercase to match backend expectation
-      updatesByRow.get(rowIndex).updates.push({ 
-        month: month.toLowerCase(), // Convert to lowercase for backend
-        value 
-      });
-    });
-
-    try {
-      // Process updates with optimized parallel execution
-      const updatePromises = Array.from(updatesByRow.values()).map(async (rowUpdate) => {
-        const { rowIndex, year, updates, clientName, type, clientEmail, clientPhone, duePayment, rowData } = rowUpdate;
-
-        try {
-          // API call
-          const response = await axios.post(
-            `${BASE_URL}/batch-save-payments`,
-            { clientName, type, updates },
-            {
-              headers: { 
-                Authorization: `Bearer ${sessionToken}`,
-                'Content-Type': 'application/json'
-              },
-              params: { year },
-              timeout: 8000,
-              validateStatus: (status) => status < 500,
-            }
-          );
-
-          const { updatedRow } = response.data;
-          
-          console.log(`Backend response for ${clientName}:`, {
-            Due_Payment: updatedRow.Due_Payment,
-            months: updates.map(u => `${u.month}: ${updatedRow[u.month]}`)
-          });
-
-          return {
-            success: true,
-            rowIndex,
-            updatedRow,
-            updates: rowUpdate.updates, // Use original updates with proper month names
-            hasNotificationContact: !!(clientEmail || clientPhone),
-          };
-        } catch (error) {
-          console.error(`HomePage.jsx: Failed to batch update row ${rowIndex}:`, error);
-          return {
-            success: false,
-            rowIndex,
-            error: error.response?.data?.error || error.message,
-            updates: rowUpdate.updates,
-          };
-        }
-      });
-
-      // Wait for all updates
-      const results = await Promise.allSettled(updatePromises);
-      
-      const failedUpdates = [];
-      const successfulUpdates = [];
-
-      results.forEach((result) => {
-        if (result.status === 'fulfilled') {
-          if (result.value.success) {
-            successfulUpdates.push(result.value);
-          } else {
-            failedUpdates.push(result.value);
+  try {
+    const results = await Promise.allSettled(
+      updates.map(({ rowIndex, month, value, year }) => {
+        const row = paymentsData[rowIndex];
+        return axios.post(
+          `${BASE_URL}/batch-save-payments`,
+          {
+            clientName: row.Client_Name,
+            type: row.Type,
+            updates: [{ month: month.toLowerCase(), value }],
+          },
+          {
+            headers: { Authorization: `Bearer ${sessionToken}` },
+            params: { year },
+            timeout: 8000,
           }
-        } else {
-          console.error('Promise rejected:', result.reason);
-        }
+        ).then(res => ({
+          rowIndex,
+          updatedRow: res.data.updatedRow,
+          month,
+        }));
+      })
+    );
+
+    const successful = results
+      .filter(r => r.status === "fulfilled")
+      .map(r => r.value);
+
+    // ✅ Update UI with backend values
+    setPaymentsData(prev => {
+      const updated = [...prev];
+      successful.forEach(({ rowIndex, updatedRow }) => {
+        updated[rowIndex] = {
+          ...updated[rowIndex],
+          ...updatedRow,
+          January: updatedRow.january || "",
+          February: updatedRow.february || "",
+          March: updatedRow.march || "",
+          April: updatedRow.april || "",
+          May: updatedRow.may || "",
+          June: updatedRow.june || "",
+          July: updatedRow.july || "",
+          August: updatedRow.august || "",
+          September: updatedRow.september || "",
+          October: updatedRow.october || "",
+          November: updatedRow.november || "",
+          December: updatedRow.december || "",
+          Due_Payment: parseFloat(updatedRow.Due_Payment || 0).toFixed(2),
+        };
       });
+      return updated;
+    });
 
-      // CRITICAL FIX: Properly map backend response to frontend state
-      if (successfulUpdates.length > 0) {
-        setPaymentsData((prev) => {
-          const updated = [...prev];
-          
-          successfulUpdates.forEach(({ rowIndex, updatedRow }) => {
-            if (updatedRow && updated[rowIndex]) {
-              console.log(`Updating row ${rowIndex} with Due_Payment: ${updatedRow.Due_Payment}`);
-              
-              // CRITICAL: Backend returns lowercase month names, map them properly
-              const mappedRow = {
-                ...updated[rowIndex], // Keep existing data
-                Client_Name: updatedRow.Client_Name,
-                Type: updatedRow.Type,
-                Amount_To_Be_Paid: updatedRow.Amount_To_Be_Paid,
-                Email: updatedRow.Email,
-                Phone_Number: updatedRow.Phone_Number,
-                // Map lowercase backend response to frontend format
-                January: updatedRow.january || "",
-                February: updatedRow.february || "",
-                March: updatedRow.march || "",
-                April: updatedRow.april || "",
-                May: updatedRow.may || "",
-                June: updatedRow.june || "",
-                July: updatedRow.july || "",
-                August: updatedRow.august || "",
-                September: updatedRow.september || "",
-                October: updatedRow.october || "",
-                November: updatedRow.november || "",
-                December: updatedRow.december || "",
-                // MOST IMPORTANT: Use the backend-calculated Due_Payment
-                Due_Payment: parseFloat(updatedRow.Due_Payment).toFixed(2)
-              };
-              
-              updated[rowIndex] = mappedRow;
-            }
-          });
-          
-          return updated;
-        });
+    // ✅ Clear pending highlights
+    setPendingUpdates(prev => {
+      const newPending = { ...prev };
+      successful.forEach(({ rowIndex, month }) => {
+        const capitalized = month.charAt(0).toUpperCase() + month.slice(1);
+        delete newPending[`${rowIndex}-${capitalized}`];
+      });
+      return newPending;
+    });
 
-        // Update pending status
-        setPendingUpdates((prev) => {
-          const newPending = { ...prev };
-          successfulUpdates.forEach(({ updates, rowIndex }) => {
-            updates.forEach(({ month }) => {
-              // Use original month name (capitalized) for key
-              const originalMonth = month.charAt(0).toUpperCase() + month.slice(1);
-              delete newPending[`${rowIndex}-${originalMonth}`];
-            });
-          });
-          return newPending;
-        });
+    // ✅ Optionally: force-refresh from backend
+    // await fetchPayments(sessionToken, currentYear, true);
 
-        // Update local input values
-        setLocalInputValues((prev) => {
-          const newValues = { ...prev };
-          successfulUpdates.forEach(({ updates, rowIndex, updatedRow }) => {
-            updates.forEach(({ month }) => {
-              // Use original month name (capitalized) for key
-              const originalMonth = month.charAt(0).toUpperCase() + month.slice(1);
-              const key = `${rowIndex}-${originalMonth}`;
-              // Get value from backend response (lowercase key)
-              newValues[key] = updatedRow[month] || "";
-            });
-          });
-          return newValues;
-        });
-      }
+  } catch (err) {
+    console.error("Batch update failed:", err);
+  } finally {
+    setIsUpdating(false);
+  }
+}, [paymentsData, sessionToken, currentYear, fetchPayments]);
 
-      // Handle failures (rest remains same)
-      if (failedUpdates.length > 0) {
-        const retryUpdates = [];
-        
-        failedUpdates.forEach(({ rowIndex, updates, error }) => {
-          const rowData = rowDataCache.get(rowIndex);
-          const errorMsg = `Failed to update ${rowData?.Client_Name || "unknown"}: ${error}`;
-          
-          setLocalErrorMessage(errorMsg);
-          setErrorMessage(errorMsg);
-
-          // Revert optimistic updates for failed rows
-          setPaymentsData((prev) =>
-            prev.map((row, idx) =>
-              idx === rowIndex ? rowDataCache.get(rowIndex) || row : row
-            )
-          );
-
-          // Queue retries - convert back to original month format
-          updates.forEach((update) => {
-            const originalMonth = update.month.charAt(0).toUpperCase() + update.month.slice(1);
-            retryUpdates.push({ 
-              ...update, 
-              month: originalMonth, 
-              rowIndex 
-            });
-          });
-        });
-
-        // Add retries to queue
-        updateQueueRef.current.unshift(...retryUpdates);
-      }
-
-      // Rest of error handling...
-      
-    } catch (error) {
-      console.error("HomePage.jsx: Batch update error:", error);
-      // Error handling remains the same
-    } finally {
-      setIsUpdating(false);
-    }
-  },
-  [paymentsData, sessionToken, months, localInputValues, setErrorMessage, setLocalErrorMessage]
-);
 
 // ADDITIONAL FIX: Remove the legacy updatePayment function calls completely
 // Make sure no other part of your code is calling updatePayment
