@@ -167,11 +167,12 @@ const filteredData = useMemo(() => {
           (statusFilter === "PartiallyPaid" &&
             getPaymentStatus(row, monthFilter.toLowerCase()) === "PartiallyPaid") ||
           (statusFilter === "Unpaid" &&
-            getPaymentStatus(row, monthFilter.toLowerCase()) === "Unpaid");
+            parseFloat(row?.[monthFilter.toLowerCase()] || 0) === 0);
 
       return matchesSearch && matchesMonth && matchesStatus;
     });
 }, [paymentsData, searchQuery, monthFilter, statusFilter, getPaymentStatus]);
+
 
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
