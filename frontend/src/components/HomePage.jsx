@@ -145,32 +145,39 @@ const calculateDuePayment = (rowData, months) => {
   );
 
 const filteredData = useMemo(() => {
-  return (paymentsData || [])
-    .filter((row) => {
-      const matchesSearch =
-        !searchQuery ||
-        row?.Client_Name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        row?.Type?.toLowerCase().includes(searchQuery.toLowerCase());
+  let filtered = [...paymentsData];
 
-      const matchesMonth =
-        !monthFilter ||
-        (row?.[monthFilter.toLowerCase()] !== undefined &&
-          row?.[monthFilter.toLowerCase()] !== null);
+  if (searchQuery) {
+    const lowerQuery = searchQuery.toLowerCase();
+    filtered = filtered.filter(
+      (row) =>
+        row?.Client_Name?.toLowerCase().includes(lowerQuery) ||
+        row?.Type?.toLowerCase().includes(lowerQuery)
+    );
+  }
 
-      const matchesStatus = !monthFilter
-        ? true
-        : !statusFilter ||
-          (statusFilter === "Paid" &&
-            getPaymentStatus(row, monthFilter.toLowerCase()) === "Paid") ||
-          (statusFilter === "PartiallyPaid" &&
-            getPaymentStatus(row, monthFilter.toLowerCase()) === "PartiallyPaid") ||
-          (statusFilter === "Unpaid" &&
-            getPaymentStatus(row, monthFilter.toLowerCase()) === "Unpaid");
-
-      return matchesSearch && matchesMonth && matchesStatus;
+  if (monthFilter) {
+    filtered = filtered.filter((row) => {
+      const value = parseFloat(row[monthFilter]) || 0;
+      return value >= 0;
     });
-    // Removed .sort() - data is already sorted from App.jsx
-}, [paymentsData, searchQuery, monthFilter, statusFilter, getPaymentStatus]);
+
+    if (statusFilter) {
+      filtered = filtered.filter((row) => {
+        const due = parseFloat(row.Due_Payment) || 0;
+        const paid = parseFloat(row[monthFilter]) || 0;
+
+        if (statusFilter === "Paid") return due <= 0;
+        if (statusFilter === "PartiallyPaid") return paid > 0 && due > 0;
+        if (statusFilter === "Unpaid") return paid === 0 && due > 0;
+        return true;
+      });
+    }
+  }
+
+  return filtered;
+}, [paymentsData, searchQuery, monthFilter, statusFilter]);
+
 
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
