@@ -156,8 +156,8 @@ const filteredData = useMemo(() => {
 
       const matchesMonth =
         !monthFilter ||
-        (row?.[monthFilter.toLowerCase()] !== undefined &&
-          row?.[monthFilter.toLowerCase()] !== null);
+        (!isNaN(parseFloat(row?.[monthFilter.toLowerCase()])) &&
+         row?.[monthFilter.toLowerCase()] !== "");
 
       const matchesStatus = !monthFilter
         ? true
@@ -171,11 +171,7 @@ const filteredData = useMemo(() => {
 
       return matchesSearch && matchesMonth && matchesStatus;
     });
-    // Removed .sort() - data is already sorted from App.jsx
 }, [paymentsData, searchQuery, monthFilter, statusFilter, getPaymentStatus]);
-
-
-
 
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
