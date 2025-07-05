@@ -22,6 +22,8 @@ const HomePage = ({
   setMonthFilter = () => {},
   statusFilter = "",
   setStatusFilter = () => {},
+  statusSort = "",
+  setStatusSort = () => {}, // ✅ ADD THIS
   updatePayment = () => {},
   handleContextMenu = () => {},
   contextMenu = null,
@@ -145,7 +147,7 @@ const calculateDuePayment = (rowData, months) => {
   );
 
 const filteredData = useMemo(() => {
-  let filtered = paymentsData;
+  let filtered = [...paymentsData];
 
   if (searchQuery) {
     const lowerQuery = searchQuery.toLowerCase();
@@ -158,20 +160,36 @@ const filteredData = useMemo(() => {
 
   if (monthFilter) {
     filtered = filtered.filter((row) => {
-      const value = parseFloat(row[monthFilter]) || 0;
-      return value >= 0;
+      const paid = parseFloat(row[monthFilter]) || 0;
+      return paid >= 0;
     });
 
     if (statusFilter) {
       filtered = filtered.filter((row) => {
-        const status = row?.Payment_Status; // 🟡 static value
+        const status = getLiveStatus(row, monthFilter);
         return status === statusFilter;
+      });
+    }
+
+    if (statusSort) {
+      const statusRank = {
+        "Unpaid": 0,
+        "PartiallyPaid": 1,
+        "Paid": 2,
+      };
+
+      filtered.sort((a, b) => {
+        const statusA = getLiveStatus(a, monthFilter);
+        const statusB = getLiveStatus(b, monthFilter);
+        return statusSort === "asc"
+          ? statusRank[statusA] - statusRank[statusB]
+          : statusRank[statusB] - statusRank[statusA];
       });
     }
   }
 
   return filtered;
-}, [paymentsData, searchQuery, monthFilter, statusFilter]);
+}, [paymentsData, searchQuery, monthFilter, statusFilter, statusSort]);
 
 
 
@@ -1126,6 +1144,16 @@ const getOverallStatus = (row) => {
   return "Unpaid";
 };
 
+const getLiveStatus = (row, month) => {
+  const paid = parseFloat(row[month]) || 0;
+  const due = parseFloat(row.Amount_To_Be_Paid) || 0;
+
+  if (paid >= due) return "Paid";
+  if (paid > 0) return "PartiallyPaid";
+  return "Unpaid";
+};
+
+
 //Added by pradeep this is a new function to handle the rendering of the dashboard
 
   return (
@@ -1182,40 +1210,54 @@ const getOverallStatus = (row) => {
       </div>
 
       <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 mb-6">
-        <div className="relative flex-1 sm:w-1/3">
-          <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-          <input
-            type="text"
-            placeholder="Search by client or type..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base"
-          />
-        </div>
-        <select
-          value={monthFilter}
-          onChange={(e) => setMonthFilter(e.target.value)}
-          className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
-        >
-          <option value="">All Months</option>
-          {months.map((month, index) => (
-            <option key={index} value={month}>
-              {month.charAt(0).toUpperCase() + month.slice(1)}
-            </option>
-          ))}
-        </select>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
-          disabled={!monthFilter}
-        >
-          <option value="">Status</option>
-          <option value="Paid">Paid</option>
-          <option value="PartiallyPaid">Partially Paid</option>
-          <option value="Unpaid">Unpaid</option>
-        </select>
-      </div>
+  <div className="relative flex-1 sm:w-1/3">
+    <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+    <input
+      type="text"
+      placeholder="Search by client or type..."
+      value={searchQuery}
+      onChange={(e) => setSearchQuery(e.target.value)}
+      className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base"
+    />
+  </div>
+
+  <select
+    value={monthFilter}
+    onChange={(e) => setMonthFilter(e.target.value)}
+    className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+  >
+    <option value="">All Months</option>
+    {months.map((month, index) => (
+      <option key={index} value={month}>
+        {month.charAt(0).toUpperCase() + month.slice(1)}
+      </option>
+    ))}
+  </select>
+
+  <select
+    value={statusFilter}
+    onChange={(e) => setStatusFilter(e.target.value)}
+    className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+    disabled={!monthFilter}
+  >
+    <option value="">Status</option>
+    <option value="Paid">Paid</option>
+    <option value="PartiallyPaid">Partially Paid</option>
+    <option value="Unpaid">Unpaid</option>
+  </select>
+
+  <select
+    value={statusSort}
+    onChange={(e) => setStatusSort(e.target.value)}
+    className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+    disabled={!monthFilter}
+  >
+    <option value="">Sort by Status</option>
+    <option value="asc">Unpaid → Paid</option>
+    <option value="desc">Paid → Unpaid</option>
+  </select>
+</div>
+
 
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
