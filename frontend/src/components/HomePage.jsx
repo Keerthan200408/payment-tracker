@@ -113,8 +113,8 @@ const getPaymentStatus = useCallback((row, month) => {
   const due = parseFloat(row?.Amount_To_Be_Paid) || 0;
 
   if (paid >= due && due > 0) return "Paid";
-  else if (paid > 0 && paid < due) return "PartiallyPaid";
-  else return "Unpaid";
+  if (paid > 0 && paid < due) return "PartiallyPaid";
+   return "Unpaid";
 }, []);
 
 
