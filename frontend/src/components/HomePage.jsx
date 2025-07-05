@@ -153,19 +153,22 @@ const filteredData = useMemo(() => {
       row?.Client_Name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       row?.Type?.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const hasMonthValue =
-      !monthFilter ||
-      (row[monthFilter.toLowerCase()] !== undefined &&
-        row[monthFilter.toLowerCase()] !== null &&
-        row[monthFilter.toLowerCase()] !== "");
+    const monthKey = monthFilter?.toLowerCase();
+    const hasMonthEntry = monthFilter
+      ? row[monthKey] !== undefined && row[monthKey] !== null
+      : true;
+
+    const parsedValue = parseFloat(row[monthKey]);
+    const hasValidMonth = monthFilter
+      ? !isNaN(parsedValue) // ✅ this includes 0 as valid
+      : true;
 
     const matchesStatus =
       !monthFilter || !statusFilter
         ? true
-        : getPaymentStatus(row, monthFilter.toLowerCase()) === statusFilter;
+        : getPaymentStatus(row, monthKey) === statusFilter;
 
-    // ✅ Only include if there's actual data for the month
-    return matchesSearch && hasMonthValue && matchesStatus;
+    return matchesSearch && hasMonthEntry && hasValidMonth && matchesStatus;
   });
 }, [paymentsData, searchQuery, monthFilter, statusFilter, getPaymentStatus]);
 
