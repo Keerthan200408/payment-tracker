@@ -146,6 +146,16 @@ const calculateDuePayment = (rowData, months) => {
     [localInputValues, pendingUpdates]
   );
 
+const getLiveStatus = (row, month) => {
+  const paid = parseFloat(row[month]) || 0;
+  const due = parseFloat(row.Amount_To_Be_Paid) || 0;
+
+  if (paid >= due) return "Paid";
+  if (paid > 0) return "PartiallyPaid";
+  return "Unpaid";
+};
+
+
 const filteredData = useMemo(() => {
   let filtered = [...paymentsData];
 
@@ -170,26 +180,11 @@ const filteredData = useMemo(() => {
         return status === statusFilter;
       });
     }
-
-    if (statusSort) {
-      const statusRank = {
-        "Unpaid": 0,
-        "PartiallyPaid": 1,
-        "Paid": 2,
-      };
-
-      filtered.sort((a, b) => {
-        const statusA = getLiveStatus(a, monthFilter);
-        const statusB = getLiveStatus(b, monthFilter);
-        return statusSort === "asc"
-          ? statusRank[statusA] - statusRank[statusB]
-          : statusRank[statusB] - statusRank[statusA];
-      });
-    }
   }
 
   return filtered;
-}, [paymentsData, searchQuery, monthFilter, statusFilter, statusSort]);
+}, [paymentsData, searchQuery, monthFilter, statusFilter]);
+
 
 
 
