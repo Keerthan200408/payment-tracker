@@ -147,12 +147,11 @@ const calculateDuePayment = (rowData, months) => {
   );
 
 const getLiveStatus = (row, month) => {
-  const paid = parseFloat(row[month]);
-  const duePerMonth = parseFloat(row.Amount_To_Be_Paid);
+  const paid = parseFloat(row?.[month]) || 0;
+  const due = parseFloat(row?.Amount_To_Be_Paid) || 0;
 
-  // Treat blank/null/NaN as 0
-  if (isNaN(paid) || paid === 0) return "Unpaid";
-  if (paid >= duePerMonth) return "Paid";
+  if (paid === 0) return "Unpaid";
+  if (paid >= due) return "Paid";
   return "PartiallyPaid";
 };
 
@@ -169,11 +168,13 @@ const filteredData = useMemo(() => {
   }
 
   if (monthFilter) {
+    // ✅ Filter out empty rows for that month
     filtered = filtered.filter((row) => {
-      const val = row[monthFilter];
-      return val !== undefined && val !== null && val !== "";
+      const val = row?.[monthFilter];
+      return val !== null && val !== undefined && val !== "";
     });
 
+    // ✅ Only apply statusFilter if it's selected
     if (statusFilter) {
       filtered = filtered.filter((row) => {
         const status = getLiveStatus(row, monthFilter);
@@ -184,9 +185,6 @@ const filteredData = useMemo(() => {
 
   return filtered;
 }, [paymentsData, searchQuery, monthFilter, statusFilter]);
-
-
-
 
 
 
@@ -1218,8 +1216,11 @@ const getLiveStatus = (row, month) => {
   </div>
 
   <select
-    value={monthFilter}
-    onChange={(e) => setMonthFilter(e.target.value)}
+  value={monthFilter}
+  onChange={(e) => {
+    setMonthFilter(e.target.value);
+    setStatusFilter(""); // ✅ Reset status filter when month changes
+  }}
     className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
   >
     <option value="">All Months</option>
