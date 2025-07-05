@@ -446,6 +446,7 @@ const debugDuePayment = (rowIndex, stage, value) => {
 
 const processBatchUpdates = useCallback(async () => {
   if (!updateQueueRef.current.length) {
+    console.log("HomePage.jsx: No updates to process");
     batchTimerRef.current = null;
     return;
   }
@@ -456,10 +457,10 @@ const processBatchUpdates = useCallback(async () => {
   setIsUpdating(true);
 
   try {
-    const results = await Promise.allSettled(
-      updates.map(({ rowIndex, month, value, year }) => {
-        const row = paymentsData[rowIndex];
-        return axios.post(
+    const updatePromises = updates.map(async ({ rowIndex, month, value, year }) => {
+      const row = paymentsData[rowIndex];
+      try {
+        const response = await axios.post(
           `${BASE_URL}/batch-save-payments`,
           {
             clientName: row.Client_Name,
@@ -471,22 +472,41 @@ const processBatchUpdates = useCallback(async () => {
             params: { year },
             timeout: 8000,
           }
-        ).then(res => ({
-          rowIndex,
-          updatedRow: res.data.updatedRow,
-          month,
-        }));
-      })
-    );
+        );
 
-    const successful = results
-      .filter(r => r.status === "fulfilled")
+        const updatedRow = response.data.updatedRow;
+
+        return {
+          success: true,
+          rowIndex,
+          updatedRow,
+          month,
+        };
+      } catch (error) {
+        console.error(`Failed to update row ${rowIndex}:`, error);
+        return {
+          success: false,
+          rowIndex,
+          error: error.response?.data?.error || error.message,
+          month,
+        };
+      }
+    });
+
+    const results = await Promise.allSettled(updatePromises);
+
+    const successfulUpdates = results
+      .filter(r => r.status === "fulfilled" && r.value.success)
       .map(r => r.value);
 
-    // ✅ Update UI with backend values
+    const failedUpdates = results
+      .filter(r => r.status === "fulfilled" && !r.value.success)
+      .map(r => r.value);
+
+    // ✅ Update frontend state
     setPaymentsData(prev => {
       const updated = [...prev];
-      successful.forEach(({ rowIndex, updatedRow }) => {
+      successfulUpdates.forEach(({ rowIndex, updatedRow }) => {
         updated[rowIndex] = {
           ...updated[rowIndex],
           ...updatedRow,
@@ -508,21 +528,39 @@ const processBatchUpdates = useCallback(async () => {
       return updated;
     });
 
-    // ✅ Clear pending highlights
+    // ✅ Clear pending update flags
     setPendingUpdates(prev => {
       const newPending = { ...prev };
-      successful.forEach(({ rowIndex, month }) => {
+      successfulUpdates.forEach(({ rowIndex, month }) => {
         const capitalized = month.charAt(0).toUpperCase() + month.slice(1);
         delete newPending[`${rowIndex}-${capitalized}`];
       });
       return newPending;
     });
 
-    // ✅ Optionally: force-refresh from backend
-    // await fetchPayments(sessionToken, currentYear, true);
+    // ✅ Update local input values
+    setLocalInputValues(prev => {
+      const newValues = { ...prev };
+      successfulUpdates.forEach(({ rowIndex, month, updatedRow }) => {
+        const capitalized = month.charAt(0).toUpperCase() + month.slice(1);
+        const key = `${rowIndex}-${capitalized}`;
+        newValues[key] = updatedRow[month.toLowerCase()] || "";
+      });
+      return newValues;
+    });
 
-  } catch (err) {
-    console.error("Batch update failed:", err);
+    // ❌ Handle failures (optional retry logic)
+    if (failedUpdates.length > 0) {
+      failedUpdates.forEach(({ rowIndex, error }) => {
+        const msg = `Failed to update row ${rowIndex}: ${error}`;
+        setErrorMessage(msg);
+        setLocalErrorMessage(msg);
+      });
+    }
+
+  } catch (error) {
+    console.error("HomePage.jsx: Batch update error:", error);
+    setErrorMessage("An unexpected error occurred during update.");
   } finally {
     setIsUpdating(false);
   }
@@ -748,7 +786,7 @@ const debouncedUpdate = useCallback(
       setErrorMessage("Please wait for data to load before making updates.");
       return;
     }
-    
+
     if (!paymentsData[rowIndex]) {
       console.warn("HomePage.jsx: Invalid rowIndex:", rowIndex);
       setErrorMessage("Invalid row index.");
@@ -756,7 +794,7 @@ const debouncedUpdate = useCallback(
     }
 
     const key = `${rowIndex}-${month}`;
-    
+
     // Clear existing timer to prevent duplicate operations
     if (debounceTimersRef.current[key]) {
       clearTimeout(debounceTimersRef.current[key]);
@@ -770,42 +808,42 @@ const debouncedUpdate = useCallback(
 
     // Optimized debounce with reduced timer
     debounceTimersRef.current[key] = setTimeout(() => {
-      // Efficient queue management - remove duplicates in one pass
+      const updateData = {
+        rowIndex,
+        month,
+        value,
+        year,
+        timestamp: Date.now(),
+      };
+
+      // Efficient queue management - remove duplicates
       const existingIndex = updateQueueRef.current.findIndex(
-        (update) => update.rowIndex === rowIndex && update.month === month
+        (u) => u.rowIndex === rowIndex && u.month === month
       );
-      
+
       if (existingIndex !== -1) {
-        updateQueueRef.current[existingIndex] = {
-          rowIndex,
-          month,
-          value,
-          year,
-          timestamp: Date.now(),
-        };
+        updateQueueRef.current[existingIndex] = updateData;
       } else {
-        updateQueueRef.current.push({
-          rowIndex,
-          month,
-          value,
-          year,
-          timestamp: Date.now(),
-        });
+        updateQueueRef.current.push(updateData);
       }
 
-      console.log("HomePage.jsx: Queued update:", { rowIndex, month, value, year });
+      console.log("HomePage.jsx: Queued update:", updateData);
 
-      // Start batch processing with adaptive timing
+      // Start batch processing
       if (!batchTimerRef.current) {
-        const batchDelay = updateQueueRef.current.length > 5 ? 500 : 700; // Faster for larger batches
-        batchTimerRef.current = setTimeout(processBatchUpdates, batchDelay);
+        const batchDelay = updateQueueRef.current.length > 5 ? 500 : 700;
+        batchTimerRef.current = setTimeout(() => {
+          console.log("HomePage.jsx: Triggering batch update...");
+          processBatchUpdates();
+        }, batchDelay);
       }
 
       delete debounceTimersRef.current[key];
-    }, 600); // Reduced debounce time for faster response
+    }, 600);
   },
   [paymentsData, setErrorMessage]
 );
+
 
   const handleYearChangeDebounced = useCallback(
     (year) => {
