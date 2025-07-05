@@ -147,36 +147,38 @@ const getPaymentStatus = useCallback((row, month) => {
   );
 
 const filteredData = useMemo(() => {
-  return (paymentsData || [])
-    .filter((row) => {
-      const lowerMonth = monthFilter?.toLowerCase();
-      const amountToBePaid = parseFloat(row?.Amount_To_Be_Paid || 0);
-      const paidAmount = parseFloat(row?.[lowerMonth] || 0);
+  return paymentsData.filter((row) => {
+    const lowerMonth = monthFilter?.toLowerCase();
 
-      const matchesSearch =
-        !searchQuery ||
-        row?.Client_Name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        row?.Type?.toLowerCase().includes(searchQuery.toLowerCase());
+    const paid = parseFloat(row?.[lowerMonth]) || 0;
+    const due = parseFloat(row?.Amount_To_Be_Paid) || 0;
 
-      const matchesMonth = !monthFilter || row?.[lowerMonth] !== undefined;
+    // Calculate status
+    let status = "";
+    if (!monthFilter) {
+      status = "";
+    } else if (paid >= due) {
+      status = "Paid";
+    } else if (paid === 0) {
+      status = "Unpaid";
+    } else {
+      status = "PartiallyPaid";
+    }
 
-      // ✅ Determine actual status
-      let actualStatus = "";
-      if (!monthFilter) {
-        actualStatus = "";
-      } else if (paidAmount === 0) {
-        actualStatus = "Unpaid";
-      } else if (paidAmount >= amountToBePaid) {
-        actualStatus = "Paid";
-      } else {
-        actualStatus = "PartiallyPaid";
-      }
+    // Match filters
+    const matchSearch =
+      !searchQuery ||
+      row?.Client_Name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      row?.Type?.toLowerCase().includes(searchQuery.toLowerCase());
 
-      const matchesStatus = !statusFilter || actualStatus === statusFilter;
+    const matchMonth = !monthFilter || row?.[lowerMonth] !== undefined;
 
-      return matchesSearch && matchesMonth && matchesStatus;
-    });
+    const matchStatus = !statusFilter || status === statusFilter;
+
+    return matchSearch && matchMonth && matchStatus;
+  });
 }, [paymentsData, searchQuery, monthFilter, statusFilter]);
+
 
 
 
