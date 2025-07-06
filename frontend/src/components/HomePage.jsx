@@ -109,14 +109,22 @@ const calculateDuePayment = (rowData, months) => {
 };
 
 const getPaymentStatus = useCallback((row, month) => {
-  const paid = parseFloat(row?.[month]) || 0;
+  const globalRowIndex = paymentsData.findIndex(
+    (r) => r.Client_Name === row.Client_Name && r.Type === row.Type
+  );
+
+  const rawValue = localInputValues[`${globalRowIndex}-${month}`];
+  const paid = parseFloat(
+    rawValue !== undefined ? rawValue : row?.[month] ?? 0
+  ) || 0;
+
   const due = parseFloat(row?.Amount_To_Be_Paid) || 0;
 
-  if (due <= 0) return "Unpaid"; // If nothing is due, treat as unpaid
+  if (due <= 0) return "Unpaid";
   if (paid >= due) return "Paid";
   if (paid > 0 && paid < due) return "PartiallyPaid";
   return "Unpaid";
-}, []);
+}, [localInputValues, paymentsData]);
 
   const getInputBackgroundColor = useCallback(
     (row, month, rowIndex) => {
@@ -157,15 +165,14 @@ const filteredData = useMemo(() => {
       row?.Type?.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesMonth =
-      !monthFilter ||
-      row?.[monthKey] !== undefined;
+      !monthFilter || (row?.[monthKey] !== undefined && row?.[monthKey] !== null);
 
     const matchesStatus =
       !monthFilter || !statusFilter || status === statusFilter;
 
     return matchesSearch && matchesMonth && matchesStatus;
   });
-}, [paymentsData, searchQuery, monthFilter, statusFilter, getPaymentStatus]);
+}, [paymentsData, searchQuery, monthFilter, statusFilter, getPaymentStatus, localInputValues]);
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
