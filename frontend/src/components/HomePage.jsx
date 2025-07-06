@@ -1297,20 +1297,18 @@ const renderDashboard = () => {
               {month.charAt(0).toUpperCase() + month.slice(1)}
             </option>
           ))}
-
         </select>
         <select
-        value={statusFilter}
-        onChange={(e) => setStatusFilter(e.target.value)}
-        className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
-        disabled={!monthFilter}
-      >
-        <option value="">Status</option>
-        <option value="Paid">Paid</option>
-        <option value="PartiallyPaid">Partially Paid</option>
-        <option value="Unpaid">Unpaid</option>
-      </select>
-
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+          disabled={!monthFilter}
+        >
+          <option value="">Status</option>
+          <option value="Paid">Paid</option>
+          <option value="PartiallyPaid">Partially Paid</option>
+          <option value="Unpaid">Unpaid</option>
+        </select>
       </div>
 
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
@@ -1378,56 +1376,61 @@ const renderDashboard = () => {
                   </td>
                 </tr>
               ) : (
-                paginatedData.map((row, rowIndex) => (
-                  <tr
-                    key={`${row?.Client_Name || "unknown"}-${rowIndex}`}
-                    onContextMenu={(e) => handleContextMenu(e, (currentPage - 1) * entriesPerPage + rowIndex)}
-                    className="hover:bg-gray-50"
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap flex items-center text-sm sm:text-base text-gray-900">
-                      <i className="fas fa-user-circle mr-2 text-gray-400"></i>
-                      {row?.Client_Name || "N/A"}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm sm:text-base text-gray-900">
-                      {row?.Type || "N/A"}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm sm:text-base text-gray-900">
-                      ₹{(parseFloat(row?.Amount_To_Be_Paid) || 0).toLocaleString()}.00
-                    </td>
-                    {months.map((month, colIndex) => (
-                      <td
-                        key={colIndex}
-                        className="px-6 py-4 whitespace-nowrap text-center"
-                      >
-                        <input
-                          type="text"
-                          value={
-                            localInputValues[`${(currentPage - 1) * entriesPerPage + rowIndex}-${month}`] !== undefined
-                              ? localInputValues[`${(currentPage - 1) * entriesPerPage + rowIndex}-${month}`]
-                              : row?.[month] || ""
-                          }
-                          onChange={(e) =>
-                            handleInputChange((currentPage - 1) * entriesPerPage + rowIndex, month, e.target.value)
-                          }
-                          className={`w-20 p-1 border border-gray-300 rounded text-right focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base ${getInputBackgroundColor(
-                            row,
-                            month,
-                            (currentPage - 1) * entriesPerPage + rowIndex
-                          )}`}
-                          placeholder="0.00"
-                          title={
-                            pendingUpdates[`${(currentPage - 1) * entriesPerPage + rowIndex}-${month}`]
-                              ? "Saving..."
-                              : ""
-                          }
-                        />
+                paginatedData.map((row, localRowIndex) => {
+                  const globalRowIndex = paymentsData.findIndex(
+                    (r) => r.Client_Name === row.Client_Name
+                  );
+                  return (
+                    <tr
+                      key={`${row?.Client_Name || "unknown"}-${localRowIndex}`}
+                      onContextMenu={(e) => handleContextMenu(e, globalRowIndex)}
+                      className="hover:bg-gray-50"
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap flex items-center text-sm sm:text-base text-gray-900">
+                        <i className="fas fa-user-circle mr-2 text-gray-400"></i>
+                        {row?.Client_Name || "N/A"}
                       </td>
-                    ))}
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm sm:text-base text-gray-900">
-                      ₹{(parseFloat(row?.Due_Payment) || 0).toLocaleString()}.00
-                    </td>
-                  </tr>
-                ))
+                      <td className="px-6 py-4 whitespace-nowrap text-center text-sm sm:text-base text-gray-900">
+                        {row?.Type || "N/A"}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm sm:text-base text-gray-900">
+                        ₹{(parseFloat(row?.Amount_To_Be_Paid) || 0).toLocaleString()}.00
+                      </td>
+                      {months.map((month, colIndex) => (
+                        <td
+                          key={colIndex}
+                          className="px-6 py-4 whitespace-nowrap text-center"
+                        >
+                          <input
+                            type="text"
+                            value={
+                              localInputValues[`${globalRowIndex}-${month}`] !== undefined
+                                ? localInputValues[`${globalRowIndex}-${month}`]
+                                : row?.[month] || ""
+                            }
+                            onChange={(e) =>
+                              handleInputChange(globalRowIndex, month, e.target.value)
+                            }
+                            className={`w-20 p-1 border border-gray-300 rounded text-right focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base ${getInputBackgroundColor(
+                              row,
+                              month,
+                              globalRowIndex
+                            )}`}
+                            placeholder="0.00"
+                            title={
+                              pendingUpdates[`${globalRowIndex}-${month}`]
+                                ? "Saving..."
+                                : ""
+                            }
+                          />
+                        </td>
+                      ))}
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm sm:text-base text-gray-900">
+                        ₹{(parseFloat(row?.Due_Payment) || 0).toLocaleString()}.00
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -1528,18 +1531,18 @@ const renderDashboard = () => {
 
       <div className="relative">
         {contextMenu && (
-        <div
-          className="absolute bg-white border border-gray-300 rounded-lg shadow-sm p-2 z-50"
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-        >
-          <button
-            onClick={deleteRow}
-            className="w-full text-left px-4 py-2 hover:bg-gray-50 text-gray-700 flex items-center"
+          <div
+            className="absolute bg-white border border-gray-300 rounded-lg shadow-sm p-2 z-50"
+            style={{ top: contextMenu.y, left: contextMenu.x }}
           >
-            <i className="fas fa-trash mr-2"></i> Delete
-          </button>
-        </div>
-      )}
+            <button
+              onClick={deleteRow}
+              className="w-full text-left px-4 py-2 hover:bg-gray-50 text-gray-700 flex items-center"
+            >
+              <i className="fas fa-trash mr-2"></i> Delete
+            </button>
+          </div>
+        )}
       </div>
     </>
   );
