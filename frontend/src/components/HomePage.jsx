@@ -1016,43 +1016,35 @@ return {
 const handleInputChange = useCallback(
   (rowIndex, month, value) => {
     const trimmedValue = value.trim();
-    const parsedValue = parseFloat(trimmedValue);
+    const parsedValue = trimmedValue === "" || trimmedValue === "0.00" ? "" : trimmedValue;
 
-    if (trimmedValue !== "" && (isNaN(parsedValue) || parsedValue < 0)) {
+    if (trimmedValue !== "" && trimmedValue !== "0.00" && (isNaN(parsedValue) || parseFloat(parsedValue) < 0)) {
       setErrorMessage("Please enter a valid non-negative number.");
       return;
     }
 
     const key = `${rowIndex}-${month}`;
-
-    // Update local input values for UI
     setLocalInputValues((prev) => ({
       ...prev,
       [key]: trimmedValue,
     }));
 
-    // Perform optimistic update
-    setPaymentsData((prev) => {
-      const updatedPayments = [...prev];
-      const rowData = { ...updatedPayments[rowIndex] };
-
-      rowData[month] = trimmedValue;
-
-      const newDuePayment = calculateDuePayment(rowData, months, currentYear);
-      debugDuePayment(rowIndex, "Optimistic Update", newDuePayment);
-      rowData.Due_Payment = newDuePayment.toFixed(2);
-
-      updatedPayments[rowIndex] = rowData;
-      log(`HomePage.jsx: handleInputChange: Optimistic update for ${rowData.Client_Name || 'unknown'}, ${month} = ${trimmedValue}, Due_Payment = ${newDuePayment}`);
-
-      return updatedPayments;
-    });
-
-    // Queue update for backend
-    debouncedUpdate(rowIndex, month, trimmedValue === "" ? "" : trimmedValue, currentYear);
+    // ✅ Just trigger the backend update, let that handle Due_Payment
+    updatePayment(
+      rowIndex,
+      month,
+      parsedValue,
+      currentYear,
+      paymentsData,
+      setPaymentsData,
+      setErrorMessage,
+      sessionToken,
+      saveTimeouts
+    );
   },
-  [debouncedUpdate, currentYear, setErrorMessage, setPaymentsData, months]
+  [updatePayment, paymentsData, currentYear, sessionToken, setPaymentsData]
 );
+
 
 
   useEffect(() => {
