@@ -12,7 +12,6 @@
   "dependencies": {
     "axios": "^1.4.0",
     "bootstrap": "^5.3.6",
-    "dinero.js": "^1.9.1",
     "lodash": "^4.17.21",
     "papaparse": "^5.5.3",
     "react": "^18.2.0",

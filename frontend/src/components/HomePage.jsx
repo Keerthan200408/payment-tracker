@@ -7,8 +7,6 @@ import React, {
 } from "react";
 import axios from "axios";
 import { debounce } from "lodash";
-import Dinero from 'dinero.js';
-
 
 const BASE_URL = "https://payment-tracker-aswa.onrender.com/api";
 const BATCH_DELAY = 1000;
@@ -83,32 +81,25 @@ const HomePage = ({
   const months = MONTHS;
 
 const calculateDuePayment = (rowData, months) => {
-  const amountToBePaid = Dinero({ amount: Math.round(parseFloat(rowData.Amount_To_Be_Paid) * 100), currency: 'USD' });
-  console.log(`HomePage.jsx: calculateDuePayment for ${rowData.Client_Name || 'unknown'}: Amount_To_Be_Paid = ${amountToBePaid.getAmount() / 100}, Year = ${currentYear}`);
+  const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
   
-  if (amountToBePaid.getAmount() <= 0) {
-    console.log(`HomePage.jsx: calculateDuePayment: Returning 0 due to invalid Amount_To_Be_Paid`);
+  if (amountToBePaid <= 0) {
     return 0;
   }
 
-  // Calculate total payments made across all months for the current year
-  let totalPaymentsMade = Dinero({ amount: 0, currency: 'USD' });
-  months.forEach((month) => {
-    const payment = Dinero({ amount: Math.round(parseFloat(rowData[month]) * 100), currency: 'USD' });
-    console.log(`HomePage.jsx: calculateDuePayment: Month ${month} = ${payment.getAmount() / 100}`);
-    totalPaymentsMade = totalPaymentsMade.add(payment);
-  });
+  // Calculate total payments made across all months
+  const totalPaymentsMade = months.reduce((sum, month) => {
+    const payment = parseFloat(rowData[month]) || 0;
+    return sum + payment;
+  }, 0);
 
-  // Expected payment = Amount_To_Be_Paid * 12 (all months for the current year)
-  const expectedTotalPayment = amountToBePaid.times(12);
-  console.log(`HomePage.jsx: calculateDuePayment: Expected = ${expectedTotalPayment.getAmount() / 100}, Total Paid = ${totalPaymentsMade.getAmount() / 100}`);
+  // Expected payment = Amount_To_Be_Paid * 12 (all months)
+  const expectedTotalPayment = amountToBePaid * 12;
   
   // Due payment = expected - actual (minimum 0)
-  const duePayment = expectedTotalPayment.subtract(totalPaymentsMade).getAmount();
-  const duePaymentDinero = Dinero({ amount: duePayment < 0 ? 0 : duePayment, currency: 'USD' });
-  console.log(`HomePage.jsx: calculateDuePayment: Due_Payment = ${duePaymentDinero.getAmount() / 100}`);
+  const duePayment = Math.max(expectedTotalPayment - totalPaymentsMade, 0);
   
-  return duePaymentDinero.getAmount() / 100; // Convert back to dollars
+  return Math.round(duePayment * 100) / 100; // Round to 2 decimal places
 };
 
 const getPaymentStatus = useCallback((row, month) => {
@@ -494,12 +485,13 @@ const processBatchUpdates = useCallback(
           type: rowData.Type,
           clientEmail: rowData.Email || "",
           clientPhone: rowData.Phone_Number || "",
+          duePayment: rowData.Due_Payment || "0.00",
           rowData,
         });
       }
       
       updatesByRow.get(rowIndex).updates.push({ 
-        month: month.toLowerCase(),
+        month: month.toLowerCase(), // Convert to lowercase for backend
         value 
       });
     });
@@ -507,9 +499,10 @@ const processBatchUpdates = useCallback(
     try {
       // Process updates with optimized parallel execution
       const updatePromises = Array.from(updatesByRow.values()).map(async (rowUpdate) => {
-        const { rowIndex, year, updates, clientName, type, clientEmail, clientPhone, rowData } = rowUpdate;
+        const { rowIndex, year, updates, clientName, type, clientEmail, clientPhone, duePayment, rowData } = rowUpdate;
+
         try {
-          console.log(`HomePage.jsx: Sending batch update for ${clientName}, year ${year}`, updates);
+          // API call
           const response = await axios.post(
             `${BASE_URL}/batch-save-payments`,
             { clientName, type, updates },
@@ -526,23 +519,10 @@ const processBatchUpdates = useCallback(
 
           const { updatedRow } = response.data;
           
-          // Recalculate Due_Payment using frontend logic for current year
-          const recalculatedDuePayment = calculateDuePayment(
-            { ...updatedRow, Client_Name: clientName, Type: type },
-            months
-          );
           console.log(`HomePage.jsx: Backend response for ${clientName}`, {
-            Backend_Due_Payment: updatedRow.Due_Payment,
-            Recalculated_Due_Payment: recalculatedDuePayment,
-            Year: year,
+            Due_Payment: updatedRow.Due_Payment,
             months: updates.map(u => `${u.month}: ${updatedRow[u.month]}`)
           });
-
-          // Update the row with recalculated Due_Payment
-          const correctedRow = {
-            ...updatedRow,
-            Due_Payment: recalculatedDuePayment.toFixed(2)
-          };
 
           // Build notification statuses
           const notifyStatuses = updates.map(({ month, value }) => {
@@ -552,14 +532,14 @@ const processBatchUpdates = useCallback(
             if (paidAmount >= expectedAmount && expectedAmount > 0) status = "Paid";
             else if (paidAmount > 0 && expectedAmount > 0) status = "PartiallyPaid";
             return {
-              month: month.charAt(0).toUpperCase() + month.slice(1),
+              month: month.charAt(0).toUpperCase() + month.slice(1), // Capitalize for notification
               status,
               paidAmount,
               expectedAmount,
             };
           });
 
-          // Trigger notification with recalculated Due_Payment
+          // Trigger notification
           if (clientEmail || clientPhone) {
             await handleNotifications(
               clientName,
@@ -568,14 +548,14 @@ const processBatchUpdates = useCallback(
               type,
               year,
               notifyStatuses,
-              recalculatedDuePayment.toFixed(2)
+              updatedRow.Due_Payment
             );
           }
 
           return {
             success: true,
             rowIndex,
-            updatedRow: correctedRow,
+            updatedRow,
             updates: rowUpdate.updates,
             hasNotificationContact: !!(clientEmail || clientPhone),
           };
@@ -615,7 +595,7 @@ const processBatchUpdates = useCallback(
           
           successfulUpdates.forEach(({ rowIndex, updatedRow }) => {
             if (updatedRow && updated[rowIndex]) {
-              console.log(`HomePage.jsx: Updating row ${rowIndex} with recalculated Due_Payment: ${updatedRow.Due_Payment} for year ${year}`);
+              console.log(`HomePage.jsx: Updating row ${rowIndex} with backend Due_Payment: ${updatedRow.Due_Payment}`);
               
               const mappedRow = {
                 ...updated[rowIndex],
@@ -636,14 +616,14 @@ const processBatchUpdates = useCallback(
                 October: updatedRow.october || "",
                 November: updatedRow.november || "",
                 December: updatedRow.december || "",
-                Due_Payment: updatedRow.Due_Payment // Use recalculated Due_Payment
+                Due_Payment: parseFloat(updatedRow.Due_Payment || 0).toFixed(2)
               };
               
               updated[rowIndex] = mappedRow;
             }
           });
           
-          console.log(`HomePage.jsx: Updated paymentsData with ${successfulUpdates.length} rows for year ${currentYear}`);
+          console.log(`HomePage.jsx: Updated paymentsData with ${successfulUpdates.length} rows`);
           return updated;
         });
 
@@ -672,14 +652,8 @@ const processBatchUpdates = useCallback(
           return newValues;
         });
 
-        // Force refresh payments data to ensure consistency
+        // Optional: Fetch fresh payments data to ensure consistency
         try {
-          const paymentsCacheKey = getCacheKey('/get-payments-by-year', {
-            year: currentYear,
-            sessionToken,
-          });
-          console.log(`HomePage.jsx: Clearing cache for ${paymentsCacheKey}`);
-          delete apiCacheRef.current[paymentsCacheKey];
           await fetchPayments(sessionToken, currentYear, true);
           console.log("HomePage.jsx: Refreshed payments data after batch update");
         } catch (error) {
@@ -729,7 +703,7 @@ const processBatchUpdates = useCallback(
       setIsUpdating(false);
     }
   },
-  [paymentsData, sessionToken, months, localInputValues, setErrorMessage, setLocalErrorMessage, fetchPayments, currentYear, getCacheKey]
+  [paymentsData, sessionToken, months, localInputValues, setErrorMessage, setLocalErrorMessage, fetchPayments, currentYear]
 );
 
 // ADDITIONAL FIX: Remove the legacy updatePayment function calls completely
