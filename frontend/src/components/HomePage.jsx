@@ -989,14 +989,18 @@ const handleInputChange = useCallback(
       [key]: trimmedValue,
     }));
 
-    // CRITICAL FIX: Simplified optimistic update - just update the value
-    // Let the server calculate the Due Payment properly
+    // Optimistic update: Update month value and calculate Due_Payment
     setPaymentsData((prev) => {
       const updatedPayments = [...prev];
       const rowData = { ...updatedPayments[rowIndex] };
       
-      // Just update the month value - don't calculate Due Payment here
+      // Update the month value
       rowData[month] = trimmedValue;
+      
+      // Calculate new Due_Payment optimistically
+      const newDuePayment = calculateDuePayment(rowData, months);
+      debugDuePayment(rowIndex, "Optimistic Update", newDuePayment);
+      rowData.Due_Payment = newDuePayment.toFixed(2);
       
       updatedPayments[rowIndex] = rowData;
       return updatedPayments;
@@ -1005,7 +1009,7 @@ const handleInputChange = useCallback(
     // Queue the update for server processing
     debouncedUpdate(rowIndex, month, trimmedValue, currentYear);
   },
-  [debouncedUpdate, currentYear, setErrorMessage, setPaymentsData]
+  [debouncedUpdate, currentYear, setErrorMessage, setPaymentsData, months]
 );
 
 useEffect(() => {
