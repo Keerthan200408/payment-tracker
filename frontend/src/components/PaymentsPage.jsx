@@ -6,7 +6,7 @@ const BASE_URL = 'https://payment-tracker-aswa.onrender.com/api';
 const PaymentsPage = ({ paymentsData, setPaymentsData, fetchClients, fetchPayments, sessionToken, isImporting, currentYear, setCurrentYear, handleYearChange }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const entriesPerPage = 10;
-  const totalEntries = paymentsData.length;
+  const totalEntries = paymentsData ? paymentsData.length : 0;
   const totalPages = Math.ceil(totalEntries / entriesPerPage);
 
   const [availableYears, setAvailableYears] = useState(() => {
@@ -149,6 +149,17 @@ const searchUserYears = async (forceFetch = false) => {
     'november',
     'december',
   ];
+
+  // Check if paymentsData is defined
+  if (!paymentsData) {
+    console.error('PaymentsPage.jsx: paymentsData is undefined or null');
+    return (
+      <div className="p-6 bg-gray-50 min-h-screen">
+        <h2 className="text-xl font-medium text-gray-700 mb-4">Payments</h2>
+        <div className="text-red-600">Error: No payment data available.</div>
+      </div>
+    );
+  }
 
   const paginatedData = paymentsData.slice(
     (currentPage - 1) * entriesPerPage,
