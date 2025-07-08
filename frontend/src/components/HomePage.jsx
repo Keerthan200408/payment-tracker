@@ -89,17 +89,28 @@ const calculateDuePayment = (rowData, months, currentYear) => {
 
   const sanitizedData = validateRowData(rowData, currentYear);
   const amountToBePaid = parseFloat(sanitizedData.Amount_To_Be_Paid) || 0;
-  if (amountToBePaid <= 0) return 0;
+  
+  if (amountToBePaid <= 0) {
+    log(`HomePage.jsx: calculateDuePayment: Returning 0 due to invalid Amount_To_Be_Paid: ${amountToBePaid}`);
+    return 0;
+  }
 
   const totalPaymentsMade = months.reduce((sum, month) => {
-    const raw = sanitizedData[month];
-    const val = parseFloat(raw);
-    if (isNaN(val) || val < 0) return sum;
-    return sum + val;
+    const rawValue = sanitizedData[month];
+    const payment = (rawValue === "" || rawValue === "0.00" || rawValue == null) ? 0 : parseFloat(rawValue);
+    if (isNaN(payment) || payment < 0) {
+      log(`HomePage.jsx: calculateDuePayment: Invalid payment for ${month}: ${rawValue}, treating as 0`);
+      return sum;
+    }
+    log(`HomePage.jsx: calculateDuePayment: Month ${month} = ${payment}`);
+    return sum + payment;
   }, 0);
 
   const expectedTotal = amountToBePaid * 12;
   const due = Math.max(expectedTotal - totalPaymentsMade, 0);
+  
+  log(`HomePage.jsx: calculateDuePayment: Expected = ${expectedTotal}, Total Paid = ${totalPaymentsMade}, Due_Payment = ${due}`);
+  
   return Math.round(due * 100) / 100;
 };
 
@@ -172,7 +183,7 @@ const calculateDuePayment = (rowData, months, currentYear) => {
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  const validateRowData = (rowData, currentYear) => {
+const validateRowData = (rowData, currentYear) => {
   log(`HomePage.jsx: Validating rowData for ${rowData.Client_Name || 'unknown'}, Year = ${currentYear}`);
   
   const sanitizedData = { ...rowData, Year: rowData.Year || currentYear };
@@ -545,7 +556,7 @@ log(`HomePage.jsx: Backend response for ${clientName}`, {
   Backend_Due_Payment: updatedRow.Due_Payment,
   Recalculated_Due_Payment: recalculatedDuePayment,
   Year: year,
-  months: updates.map(u => `${u.month}: ${updatedRow[u.month]}`)
+  Updates: updates.map(u => `${u.month}: ${u.value}`)
 });
 
 // Always use recalculated value
@@ -1017,9 +1028,9 @@ return {
 const handleInputChange = useCallback(
   (rowIndex, month, value) => {
     const trimmedValue = value.trim();
-    const parsedValue = trimmedValue === "" || trimmedValue === "0.00" ? "" : trimmedValue;
+    const parsedValue = trimmedValue === "" || trimmedValue === "0.00" ? "0" : trimmedValue;
 
-    if (trimmedValue !== "" && trimmedValue !== "0.00" && (isNaN(parsedValue) || parseFloat(parsedValue) < 0)) {
+    if (trimmedValue !== "" && trimmedValue !== "0.00" && (isNaN(parseFloat(parsedValue)) || parseFloat(parsedValue) < 0)) {
       setErrorMessage("Please enter a valid non-negative number.");
       return;
     }
@@ -1030,7 +1041,7 @@ const handleInputChange = useCallback(
       [key]: trimmedValue,
     }));
 
-    // ✅ Recalculate Due_Payment for full row before update
+    // Recalculate Due_Payment for full row before update
     const updatedRow = { ...paymentsData[rowIndex], [month]: parsedValue };
     const recalculatedDue = calculateDuePayment(updatedRow, months, currentYear);
 
@@ -1039,17 +1050,18 @@ const handleInputChange = useCallback(
       const newData = [...prev];
       newData[rowIndex] = {
         ...newData[rowIndex],
-        [month]: parsedValue,
+        [month]: trimmedValue, // Use trimmedValue for UI consistency
         Due_Payment: recalculatedDue.toFixed(2),
       };
+      log(`HomePage.jsx: handleInputChange: Optimistic update for ${newData[rowIndex].Client_Name || 'unknown'}, ${month} = ${trimmedValue}, Due_Payment = ${recalculatedDue}`);
       return newData;
     });
 
-    // ✅ Backend update
+    // Backend update
     updatePayment(
       rowIndex,
       month,
-      parsedValue,
+      parsedValue, // Send parsedValue as a string number (e.g., "0" or "1000")
       currentYear,
       paymentsData,
       setPaymentsData,
@@ -1058,7 +1070,7 @@ const handleInputChange = useCallback(
       saveTimeouts
     );
   },
-  [updatePayment, paymentsData, currentYear, sessionToken, setPaymentsData]
+  [updatePayment, paymentsData, currentYear, sessionToken, setPaymentsData, setErrorMessage, months]
 );
 
 

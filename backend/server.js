@@ -689,31 +689,37 @@ app.get("/api/get-payments-by-year", authenticateToken, async (req, res) => {
 });
 
 // Save Payment
+// Save Payment
 app.post("/api/save-payment", authenticateToken, paymentLimiter, async (req, res) => {
   const { clientName, type, month, value } = req.body;
   const year = req.query.year || new Date().getFullYear().toString();
   const username = req.user.username;
   console.log("Save payment request:", { clientName, type, month, value, year, user: username });
+
   if (!clientName || !type || !month) {
     console.error("Missing required fields:", { clientName, type, month });
     return res.status(400).json({ error: "Client name, type, and month are required" });
   }
-  const numericValue = value !== "" && value !== null && value !== undefined ? parseFloat(value) : null;
-  if (numericValue !== null && (isNaN(numericValue) || numericValue < 0)) {
+
+  const numericValue = value !== "" && value !== null && value !== undefined ? parseFloat(value) : 0;
+  if (isNaN(numericValue) || numericValue < 0) {
     console.error("Invalid payment value:", value);
     return res.status(400).json({ error: "Invalid payment value" });
   }
+
+  const monthMap = {
+    january: "January", february: "February", march: "March", april: "April", may: "May",
+    june: "June", july: "July", august: "August", september: "September", october: "October",
+    november: "November", december: "December",
+  };
+
+  const monthKey = monthMap[month.toLowerCase()];
+  if (!monthKey) {
+    console.error("Invalid month:", month);
+    return res.status(400).json({ error: "Invalid month" });
+  }
+
   try {
-    const monthMap = {
-      january: "January", february: "February", march: "March", april: "April", may: "May",
-      june: "June", july: "July", august: "August", september: "September", october: "October",
-      november: "November", december: "December",
-    };
-    const monthKey = monthMap[month.toLowerCase()];
-    if (!monthKey) {
-      console.error("Invalid month:", month);
-      return res.status(400).json({ error: "Invalid month" });
-    }
     const db = await connectMongo();
     const paymentsCollection = db.collection(`payments_${username}`);
     const payment = await paymentsCollection.findOne({ Client_Name: clientName, Type: type, Year: parseInt(year) });
@@ -721,11 +727,19 @@ app.post("/api/save-payment", authenticateToken, paymentLimiter, async (req, res
       console.error("Payment record not found:", { user: username, clientName, type, year });
       return res.status(404).json({ error: "Payment record not found" });
     }
-    const updatedPayments = { ...payment.Payments, [monthKey]: numericValue || 0 };
-    const activeMonths = Object.values(updatedPayments).filter(m => m >= 0).length;
-    const expectedPayment = payment.Amount_To_Be_Paid * activeMonths;
-    const totalPayments = Object.values(updatedPayments).reduce((sum, m) => sum + (m || 0), 0);
-    let currentYearDuePayment = Math.max(expectedPayment - totalPayments, 0);
+
+    const updatedPayments = { ...payment.Payments, [monthKey]: numericValue === 0 ? "" : numericValue.toString() };
+    const months = Object.keys(monthMap).map((key) => monthMap[key]);
+    const amountToBePaid = parseFloat(payment.Amount_To_Be_Paid) || 0;
+
+    const totalPaymentsMade = months.reduce((sum, month) => {
+      const value = updatedPayments[month];
+      const parsedValue = parseFloat(value) || 0;
+      return sum + parsedValue;
+    }, 0);
+
+    const expectedPayment = amountToBePaid * 12;
+    const currentYearDuePayment = Math.max(expectedPayment - totalPaymentsMade, 0);
     let prevYearCumulativeDue = 0;
     if (parseInt(year) > 2025) {
       const prevPayment = await paymentsCollection.findOne({
@@ -733,32 +747,50 @@ app.post("/api/save-payment", authenticateToken, paymentLimiter, async (req, res
         Type: type,
         Year: parseInt(year) - 1,
       });
-      prevYearCumulativeDue = prevPayment?.Due_Payment || 0;
+      prevYearCumulativeDue = parseFloat(prevPayment?.Due_Payment) || 0;
     }
+    const finalDuePayment = Math.round((currentYearDuePayment + prevYearCumulativeDue) * 100) / 100;
+
+    console.log("Due_Payment calculation:", {
+      clientName,
+      type,
+      year,
+      month: monthKey,
+      value: numericValue,
+      amountToBePaid,
+      totalPaymentsMade,
+      expectedPayment,
+      currentYearDuePayment,
+      prevYearCumulativeDue,
+      finalDuePayment,
+      updatedPayments: JSON.stringify(updatedPayments),
+    });
+
     await paymentsCollection.updateOne(
       { Client_Name: clientName, Type: type, Year: parseInt(year) },
-      { $set: { Payments: updatedPayments, Due_Payment: currentYearDuePayment + prevYearCumulativeDue } }
+      { $set: { Payments: updatedPayments, Due_Payment: finalDuePayment, Last_Updated: new Date() } }
     );
-    const updatedPayment = await paymentsCollection.findOne({ Client_Name: clientName, Type: type, Year: parseInt(year) });
+
     const updatedRow = {
-      Client_Name: updatedPayment.Client_Name,
-      Type: updatedPayment.Type,
-      Amount_To_Be_Paid: parseFloat(updatedPayment.Amount_To_Be_Paid) || 0,
-      january: updatedPayment.Payments.January || "",
-      february: updatedPayment.Payments.February || "",
-      march: updatedPayment.Payments.March || "",
-      april: updatedPayment.Payments.April || "",
-      may: updatedPayment.Payments.May || "",
-      june: updatedPayment.Payments.June || "",
-      july: updatedPayment.Payments.July || "",
-      august: updatedPayment.Payments.August || "",
-      september: updatedPayment.Payments.September || "",
-      october: updatedPayment.Payments.October || "",
-      november: updatedPayment.Payments.November || "",
-      december: updatedPayment.Payments.December || "",
-      Due_Payment: parseFloat(updatedPayment.Due_Payment) || 0,
+      Client_Name: payment.Client_Name,
+      Type: payment.Type,
+      Amount_To_Be_Paid: amountToBePaid,
+      january: updatedPayments.January || "",
+      february: updatedPayments.February || "",
+      march: updatedPayments.March || "",
+      april: updatedPayments.April || "",
+      may: updatedPayments.May || "",
+      june: updatedPayments.June || "",
+      july: updatedPayments.July || "",
+      august: updatedPayments.August || "",
+      september: updatedPayments.September || "",
+      october: updatedPayments.October || "",
+      november: updatedPayments.November || "",
+      december: updatedPayments.December || "",
+      Due_Payment: finalDuePayment,
     };
-    console.log("Payment updated successfully for:", clientName, month, value);
+
+    console.log("Payment updated successfully for:", clientName, monthKey, numericValue, { finalDuePayment });
     res.json({ message: "Payment updated successfully", updatedRow });
   } catch (error) {
     console.error("Save payment error:", {
@@ -776,11 +808,12 @@ app.post("/api/save-payment", authenticateToken, paymentLimiter, async (req, res
 
 // Batch Save Payments
 // Optimized batch-save-payments API endpoint
+// Batch Save Payments
 app.post("/api/batch-save-payments", authenticateToken, paymentLimiter, async (req, res) => {
   const { clientName, type, updates } = req.body;
   const year = req.query.year || new Date().getFullYear().toString();
   const username = req.user.username;
-  
+
   console.log("Batch save payment request:", { clientName, type, updatesCount: updates?.length, year, user: username });
 
   // Enhanced input validation with early returns
@@ -791,8 +824,8 @@ app.post("/api/batch-save-payments", authenticateToken, paymentLimiter, async (r
 
   // Pre-compiled month map for better performance
   const monthMap = {
-    january: "January", february: "February", march: "March", april: "April", 
-    may: "May", june: "June", july: "July", august: "August", 
+    january: "January", february: "February", march: "March", april: "April",
+    may: "May", june: "June", july: "July", august: "August",
     september: "September", october: "October", november: "November", december: "December",
   };
 
@@ -802,21 +835,21 @@ app.post("/api/batch-save-payments", authenticateToken, paymentLimiter, async (r
 
   for (let i = 0; i < updates.length; i++) {
     const { month, value } = updates[i];
-    
+
     if (!month || !monthMap[month.toLowerCase()]) {
       validationErrors.push(`Invalid month at index ${i}: ${month}`);
       continue;
     }
 
-    const numericValue = value !== "" && value !== null && value !== undefined ? parseFloat(value) : null;
-    if (numericValue !== null && (isNaN(numericValue) || numericValue < 0)) {
+    const numericValue = value !== "" && value !== null && value !== undefined ? parseFloat(value) : 0;
+    if (isNaN(numericValue) || numericValue < 0) {
       validationErrors.push(`Invalid payment value at index ${i} for ${month}: ${value}`);
       continue;
     }
 
     processedUpdates.push({
       month: monthMap[month.toLowerCase()],
-      value: numericValue !== null ? numericValue : 0
+      value: numericValue,
     });
   }
 
@@ -829,7 +862,7 @@ app.post("/api/batch-save-payments", authenticateToken, paymentLimiter, async (r
   try {
     db = await connectMongo();
     const paymentsCollection = db.collection(`payments_${username}`);
-    
+
     // Use aggregation pipeline for efficient data retrieval and processing
     const yearInt = parseInt(year);
     const pipeline = [
@@ -837,8 +870,8 @@ app.post("/api/batch-save-payments", authenticateToken, paymentLimiter, async (r
         $match: {
           Client_Name: clientName,
           Type: type,
-          Year: yearInt
-        }
+          Year: yearInt,
+        },
       },
       {
         $lookup: {
@@ -851,16 +884,16 @@ app.post("/api/batch-save-payments", authenticateToken, paymentLimiter, async (r
                   $and: [
                     { $eq: ["$Client_Name", "$$clientName"] },
                     { $eq: ["$Type", "$$type"] },
-                    { $eq: ["$Year", yearInt - 1] }
-                  ]
-                }
-              }
+                    { $eq: ["$Year", yearInt - 1] },
+                  ],
+                },
+              },
             },
-            { $project: { Due_Payment: 1 } }
+            { $project: { Due_Payment: 1 } },
           ],
-          as: "prevYearData"
-        }
-      }
+          as: "prevYearData",
+        },
+      },
     ];
 
     const [paymentData] = await paymentsCollection.aggregate(pipeline).toArray();
@@ -874,32 +907,57 @@ app.post("/api/batch-save-payments", authenticateToken, paymentLimiter, async (r
     const updatedPayments = {
       ...paymentData.Payments,
       ...processedUpdates.reduce((acc, { month, value }) => {
-        acc[month] = value;
+        acc[month] = value === 0 ? "" : value.toString(); // Store as empty string for UI consistency
         return acc;
-      }, {})
+      }, {}),
     };
 
-    // Optimized calculations
-    const amountToBePaid = paymentData.Amount_To_Be_Paid;
-    const paymentValues = Object.values(updatedPayments);
-    const activeMonths = paymentValues.filter(m => m >= 0).length;
-    const expectedPayment = amountToBePaid * activeMonths;
-    const totalPayments = paymentValues.reduce((sum, m) => sum + (m || 0), 0);
-    const currentYearDuePayment = Math.max(expectedPayment - totalPayments, 0);
-    
-    // Get previous year due payment efficiently
-    const prevYearCumulativeDue = paymentData.prevYearData?.[0]?.Due_Payment || 0;
-    const finalDuePayment = currentYearDuePayment + (yearInt > 2025 ? prevYearCumulativeDue : 0);
+    // Calculate Due_Payment
+    const amountToBePaid = parseFloat(paymentData.Amount_To_Be_Paid) || 0;
+    const months = Object.keys(monthMap).map((key) => monthMap[key]);
+
+    // Count active months: only months with non-empty, non-zero payments
+    const activeMonths = months.reduce((count, month) => {
+      const value = updatedPayments[month];
+      const parsedValue = parseFloat(value) || 0;
+      return count + (value !== "" && parsedValue > 0 ? 1 : 0);
+    }, 0);
+
+    const totalPaymentsMade = months.reduce((sum, month) => {
+      const value = updatedPayments[month];
+      const parsedValue = parseFloat(value) || 0;
+      return sum + parsedValue;
+    }, 0);
+
+    const expectedPayment = amountToBePaid * 12; // Always expect 12 months
+    const currentYearDuePayment = Math.max(expectedPayment - totalPaymentsMade, 0);
+    const prevYearCumulativeDue = yearInt > 2025 ? parseFloat(paymentData.prevYearData?.[0]?.Due_Payment) || 0 : 0;
+    const finalDuePayment = Math.round((currentYearDuePayment + prevYearCumulativeDue) * 100) / 100;
+
+    // Log for debugging
+    console.log("Due_Payment calculation:", {
+      clientName,
+      type,
+      year,
+      amountToBePaid,
+      activeMonths,
+      totalPaymentsMade,
+      expectedPayment,
+      currentYearDuePayment,
+      prevYearCumulativeDue,
+      finalDuePayment,
+      updatedPayments: JSON.stringify(updatedPayments),
+    });
 
     // Single atomic update operation
     const updateResult = await paymentsCollection.updateOne(
       { Client_Name: clientName, Type: type, Year: yearInt },
-      { 
-        $set: { 
-          Payments: updatedPayments, 
+      {
+        $set: {
+          Payments: updatedPayments,
           Due_Payment: finalDuePayment,
-          Last_Updated: new Date() // Add timestamp for debugging
-        } 
+          Last_Updated: new Date(),
+        },
       }
     );
 
@@ -907,12 +965,11 @@ app.post("/api/batch-save-payments", authenticateToken, paymentLimiter, async (r
       throw new Error("No document matched for update");
     }
 
-    // Efficient response building without additional DB query
+    // Efficient response building
     const updatedRow = {
       Client_Name: paymentData.Client_Name,
       Type: paymentData.Type,
-      Amount_To_Be_Paid: parseFloat(amountToBePaid) || 0,
-      // Use the updated payments directly instead of querying again
+      Amount_To_Be_Paid: amountToBePaid,
       january: updatedPayments.January || "",
       february: updatedPayments.February || "",
       march: updatedPayments.March || "",
@@ -925,23 +982,26 @@ app.post("/api/batch-save-payments", authenticateToken, paymentLimiter, async (r
       october: updatedPayments.October || "",
       november: updatedPayments.November || "",
       december: updatedPayments.December || "",
-      Due_Payment: parseFloat(finalDuePayment) || 0,
+      Due_Payment: finalDuePayment,
       Email: paymentData.Email || "",
       Phone_Number: paymentData.Phone_Number || "",
     };
 
-    console.log("Batch payment updated successfully for:", clientName, `${processedUpdates.length} updates`);
-    
-    res.json({ 
-      message: "Batch payment updated successfully", 
-      updatedRow,
-      updatesProcessed: processedUpdates.length
+    console.log("Batch payment updated successfully for:", clientName, `${processedUpdates.length} updates`, {
+      finalDuePayment,
+      totalPaymentsMade,
+      expectedPayment,
     });
 
+    res.json({
+      message: "Batch payment updated successfully",
+      updatedRow,
+      updatesProcessed: processedUpdates.length,
+    });
   } catch (error) {
     console.error("Batch save payment error:", {
       message: error.message,
-      stack: error.stack.split('\n').slice(0, 3).join('\n'), // Limit stack trace
+      stack: error.stack.split("\n").slice(0, 3).join("\n"),
       clientName,
       type,
       updatesCount: updates.length,
@@ -949,7 +1009,6 @@ app.post("/api/batch-save-payments", authenticateToken, paymentLimiter, async (r
       user: username,
     });
 
-    // Enhanced error responses
     let errorMessage = "Failed to save batch payments";
     let statusCode = 500;
 
@@ -964,9 +1023,9 @@ app.post("/api/batch-save-payments", authenticateToken, paymentLimiter, async (r
       statusCode = 409;
     }
 
-    res.status(statusCode).json({ 
+    res.status(statusCode).json({
       error: `${errorMessage}: ${error.message}`,
-      code: error.code || 'UNKNOWN_ERROR'
+      code: error.code || "UNKNOWN_ERROR",
     });
   }
 });
