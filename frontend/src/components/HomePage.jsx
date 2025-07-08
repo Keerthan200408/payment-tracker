@@ -84,34 +84,37 @@ const HomePage = ({
   const months = MONTHS;
 
   const calculateDuePayment = (rowData, months, currentYear) => {
-    log(`HomePage.jsx: calculateDuePayment for ${rowData.Client_Name || 'unknown'}, Year = ${currentYear}`);
-    
-    // Validate rowData
-    const sanitizedData = validateRowData(rowData, currentYear);
-    const amountToBePaid = parseFloat(sanitizedData.Amount_To_Be_Paid) || 0;
-    
-    if (amountToBePaid <= 0) {
-      log(`HomePage.jsx: calculateDuePayment: Returning 0 due to invalid Amount_To_Be_Paid: ${amountToBePaid}`);
-      return 0;
+  log(`HomePage.jsx: calculateDuePayment for ${rowData.Client_Name || 'unknown'}, Year = ${currentYear}`);
+  
+  // Validate rowData
+  const sanitizedData = validateRowData(rowData, currentYear);
+  const amountToBePaid = parseFloat(sanitizedData.Amount_To_Be_Paid) || 0;
+  
+  if (amountToBePaid <= 0) {
+    log(`HomePage.jsx: calculateDuePayment: Returning 0 due to invalid Amount_To_Be_Paid: ${amountToBePaid}`);
+    return 0;
+  }
+
+  // Calculate total payments made across all months
+  const totalPaymentsMade = months.reduce((sum, month) => {
+    const rawValue = sanitizedData[month];
+    const payment = (rawValue === "" || rawValue === "0.00" || rawValue == null) ? 0 : parseFloat(rawValue);
+    if (isNaN(payment) || payment < 0) {
+      log(`HomePage.jsx: calculateDuePayment: Invalid payment for ${month}: ${rawValue}, treating as 0`);
+      return sum;
     }
+    log(`HomePage.jsx: calculateDuePayment: Month ${month} = ${payment}`);
+    return sum + payment;
+  }, 0);
 
-    // Calculate total payments made across all months
-    const totalPaymentsMade = months.reduce((sum, month) => {
-      const payment = parseFloat(sanitizedData[month]) || 0;
-      log(`HomePage.jsx: calculateDuePayment: Month ${month} = ${payment}`);
-      return sum + payment;
-    }, 0);
-
-    // Expected payment = Amount_To_Be_Paid * 12 (all months for current year)
-    const expectedTotalPayment = amountToBePaid * 12;
-    log(`HomePage.jsx: calculateDuePayment: Expected = ${expectedTotalPayment}, Total Paid = ${totalPaymentsMade}`);
-    
-    // Due payment = expected - actual (minimum 0)
-    const duePayment = Math.max(expectedTotalPayment - totalPaymentsMade, 0);
-    log(`HomePage.jsx: calculateDuePayment: Due_Payment = ${duePayment}`);
-    
-    return Math.round(duePayment * 100) / 100; // Round to 2 decimal places
-  };
+  // Expected payment = Amount_To_Be_Paid * 12 (all months for current year)
+  const expectedTotalPayment = amountToBePaid * 12;
+  const duePayment = Math.max(expectedTotalPayment - totalPaymentsMade, 0);
+  
+  log(`HomePage.jsx: calculateDuePayment: Expected = ${expectedTotalPayment}, Total Paid = ${totalPaymentsMade}, Due_Payment = ${duePayment}`);
+  
+  return Math.round(duePayment * 100) / 100; // Round to 2 decimal places
+};
 
   const getPaymentStatus = useCallback((row, month) => {
     const globalRowIndex = paymentsData.findIndex(
@@ -182,30 +185,32 @@ const HomePage = ({
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
   const validateRowData = (rowData, currentYear) => {
-    log(`HomePage.jsx: Validating rowData for ${rowData.Client_Name || 'unknown'}, Year = ${currentYear}`);
-    
-    const sanitizedData = { ...rowData, Year: rowData.Year || currentYear };
-    const amountToBePaid = parseFloat(sanitizedData.Amount_To_Be_Paid) || 0;
-    
-    if (isNaN(amountToBePaid) || amountToBePaid < 0) {
-      log(`HomePage.jsx: Invalid Amount_To_Be_Paid for ${rowData.Client_Name || 'unknown'}: ${rowData.Amount_To_Be_Paid}, defaulting to 0`);
-      sanitizedData.Amount_To_Be_Paid = 0;
+  log(`HomePage.jsx: Validating rowData for ${rowData.Client_Name || 'unknown'}, Year = ${currentYear}`);
+  
+  const sanitizedData = { ...rowData, Year: rowData.Year || currentYear };
+  const amountToBePaid = parseFloat(sanitizedData.Amount_To_Be_Paid) || 0;
+  
+  if (isNaN(amountToBePaid) || amountToBePaid < 0) {
+    log(`HomePage.jsx: Invalid Amount_To_Be_Paid for ${rowData.Client_Name || 'unknown'}: ${rowData.Amount_To_Be_Paid}, defaulting to 0`);
+    sanitizedData.Amount_To_Be_Paid = 0;
+  }
+  
+  MONTHS.forEach((month) => {
+    const rawValue = rowData[month];
+    if (rawValue == null || rawValue === "" || rawValue === "0.00" || isNaN(parseFloat(rawValue)) || parseFloat(rawValue) < 0) {
+      log(`HomePage.jsx: Invalid payment for ${rowData.Client_Name || 'unknown'}, ${month}: ${rawValue}, defaulting to empty string for UI`);
+      sanitizedData[month] = "";
+    } else {
+      sanitizedData[month] = parseFloat(rawValue).toString(); // Normalize to string for UI consistency
     }
-    
-    MONTHS.forEach((month) => {
-      const payment = parseFloat(rowData[month]) || 0;
-      if (isNaN(payment) || payment < 0) {
-        log(`HomePage.jsx: Invalid payment for ${rowData.Client_Name || 'unknown'}, ${month}: ${rowData[month]}, defaulting to 0`);
-        sanitizedData[month] = "";
-      }
-    });
-    
-    if (sanitizedData.Year !== currentYear) {
-      log(`HomePage.jsx: Year mismatch for ${rowData.Client_Name || 'unknown'}: Expected ${currentYear}, Got ${sanitizedData.Year}`);
-    }
-    
-    return sanitizedData;
-  };
+  });
+  
+  if (sanitizedData.Year !== currentYear) {
+    log(`HomePage.jsx: Year mismatch for ${rowData.Client_Name || 'unknown'}: Expected ${currentYear}, Got ${sanitizedData.Year}`);
+  }
+  
+  return sanitizedData;
+};
 
   const retryWithBackoff = async (fn, retries = 3, delay = 500) => {
     for (let i = 0; i < retries; i++) {
@@ -525,71 +530,81 @@ const HomePage = ({
           try {
             log(`HomePage.jsx: Sending batch update for ${clientName}, year ${year}`, updates);
             const response = await axios.post(
-              `${BASE_URL}/batch-save-payments`,
-              { clientName, type, updates },
-              {
-                headers: { 
-                  Authorization: `Bearer ${sessionToken}`,
-                  'Content-Type': 'application/json'
-                },
-                params: { year },
-                timeout: 8000,
-                validateStatus: (status) => status < 500,
-              }
-            );
+  `${BASE_URL}/batch-save-payments`,
+  { clientName, type, updates },
+  {
+    headers: { 
+      Authorization: `Bearer ${sessionToken}`,
+      'Content-Type': 'application/json'
+    },
+    params: { year },
+    timeout: 8000,
+    validateStatus: (status) => status < 500,
+  }
+);
 
-            const { updatedRow } = response.data;
-            
-            const recalculatedDuePayment = calculateDuePayment(
-              { ...updatedRow, Client_Name: clientName, Type: type },
-              months,
-              currentYear
-            );
-            log(`HomePage.jsx: Backend response for ${clientName}`, {
-              Backend_Due_Payment: updatedRow.Due_Payment,
-              Recalculated_Due_Payment: recalculatedDuePayment,
-              Year: year,
-              months: updates.map(u => `${u.month}: ${updatedRow[u.month]}`)
-            });
+const { updatedRow } = response.data;
 
-            const correctedRow = {
-              ...updatedRow,
-              Due_Payment: recalculatedDuePayment.toFixed(2)
-            };
+// Recalculate Due_Payment to ensure correctness
+const recalculatedDuePayment = calculateDuePayment(
+  { ...updatedRow, Client_Name: clientName, Type: type },
+  months,
+  currentYear
+);
 
-            const notifyStatuses = updates.map(({ month, value }) => {
-              const paidAmount = parseFloat(value) || 0;
-              const expectedAmount = parseFloat(rowData.Amount_To_Be_Paid) || 0;
-              let status = "Unpaid";
-              if (paidAmount >= expectedAmount && expectedAmount > 0) status = "Paid";
-              else if (paidAmount > 0 && expectedAmount > 0) status = "PartiallyPaid";
-              return {
-                month: month.charAt(0).toUpperCase() + month.slice(1),
-                status,
-                paidAmount,
-                expectedAmount,
-              };
-            });
+// Log for debugging
+log(`HomePage.jsx: Backend response for ${clientName}`, {
+  Backend_Due_Payment: updatedRow.Due_Payment,
+  Recalculated_Due_Payment: recalculatedDuePayment,
+  Year: year,
+  months: updates.map(u => `${u.month}: ${updatedRow[u.month]}`)
+});
 
-            if (clientEmail || clientPhone) {
-              await handleNotifications(
-                clientName,
-                clientEmail,
-                clientPhone,
-                type,
-                year,
-                notifyStatuses,
-                recalculatedDuePayment.toFixed(2)
-              );
-            }
+// Always use recalculated value
+const correctedRow = {
+  ...updatedRow,
+  Due_Payment: recalculatedDuePayment.toFixed(2)
+};
 
-            return {
-              success: true,
-              rowIndex,
-              updatedRow: correctedRow,
-              updates: rowUpdate.updates,
-              hasNotificationContact: !!(clientEmail || clientPhone),
-            };
+// Validate backend response
+if (Math.abs(parseFloat(updatedRow.Due_Payment) - recalculatedDuePayment) > 0.01) {
+  log(`HomePage.jsx: Backend Due_Payment mismatch for ${clientName}: Backend = ${updatedRow.Due_Payment}, Frontend = ${recalculatedDuePayment}`);
+}
+
+const notifyStatuses = updates.map(({ month, value }) => {
+  const paidAmount = parseFloat(value) || 0;
+  const expectedAmount = parseFloat(rowData.Amount_To_Be_Paid) || 0;
+  let status = "Unpaid";
+  if (paidAmount >= expectedAmount && expectedAmount > 0) status = "Paid";
+  else if (paidAmount > 0 && expectedAmount > 0) status = "PartiallyPaid";
+  return {
+    month: month.charAt(0).toUpperCase() + month.slice(1),
+    status,
+    paidAmount,
+    expectedAmount,
+  };
+});
+
+if (clientEmail || clientPhone) {
+  await handleNotifications(
+    clientName,
+    clientEmail,
+    clientPhone,
+    type,
+    year,
+    notifyStatuses,
+    recalculatedDuePayment.toFixed(2)
+  );
+}
+
+return {
+  success: true,
+  rowIndex,
+  updatedRow: correctedRow,
+  updates: rowUpdate.updates,
+  hasNotificationContact: !!(clientEmail || clientPhone),
+};
+
           } catch (error) {
             log(`HomePage.jsx: Failed to batch update row ${rowIndex}:`, error);
             return {
@@ -1012,40 +1027,46 @@ const HomePage = ({
   );
 
   const handleInputChange = useCallback(
-    (rowIndex, month, value) => {
-      const trimmedValue = value.trim();
-      const parsedValue = trimmedValue === "" ? "" : parseFloat(trimmedValue);
+  (rowIndex, month, value) => {
+    const trimmedValue = value.trim();
+    const parsedValue = trimmedValue === "" || trimmedValue === "0.00" ? 0 : parseFloat(trimmedValue);
+    
+    if (trimmedValue !== "" && trimmedValue !== "0.00" && (isNaN(parsedValue) || parsedValue < 0)) {
+      setErrorMessage("Please enter a valid non-negative number.");
+      return;
+    }
+
+    const key = `${rowIndex}-${month}`;
+    
+    // Update local input values for UI
+    setLocalInputValues((prev) => ({
+      ...prev,
+      [key]: trimmedValue,
+    }));
+
+    // Perform optimistic update
+    setPaymentsData((prev) => {
+      const updatedPayments = [...prev];
+      const rowData = { ...updatedPayments[rowIndex] };
       
-      if (trimmedValue !== "" && (isNaN(parsedValue) || parsedValue < 0)) {
-        setErrorMessage("Please enter a valid non-negative number.");
-        return;
-      }
-
-      const key = `${rowIndex}-${month}`;
+      // Store trimmedValue for UI, but use parsedValue for calculation
+      rowData[month] = trimmedValue;
       
-      setLocalInputValues((prev) => ({
-        ...prev,
-        [key]: trimmedValue,
-      }));
+      const newDuePayment = calculateDuePayment(rowData, months, currentYear);
+      debugDuePayment(rowIndex, "Optimistic Update", newDuePayment);
+      rowData.Due_Payment = newDuePayment.toFixed(2);
+      
+      updatedPayments[rowIndex] = rowData;
+      log(`HomePage.jsx: handleInputChange: Optimistic update for ${rowData.Client_Name || 'unknown'}, ${month} = ${trimmedValue}, Due_Payment = ${newDuePayment}`);
+      
+      return updatedPayments;
+    });
 
-      setPaymentsData((prev) => {
-        const updatedPayments = [...prev];
-        const rowData = { ...updatedPayments[rowIndex] };
-        
-        rowData[month] = trimmedValue;
-        
-        const newDuePayment = calculateDuePayment(rowData, months, currentYear);
-        debugDuePayment(rowIndex, "Optimistic Update", newDuePayment);
-        rowData.Due_Payment = newDuePayment.toFixed(2);
-        
-        updatedPayments[rowIndex] = rowData;
-        return updatedPayments;
-      });
-
-      debouncedUpdate(rowIndex, month, trimmedValue, currentYear);
-    },
-    [debouncedUpdate, currentYear, setErrorMessage, setPaymentsData, months]
-  );
+    // Queue update for backend
+    debouncedUpdate(rowIndex, month, trimmedValue === "" || trimmedValue === "0.00" ? "" : trimmedValue, currentYear);
+  },
+  [debouncedUpdate, currentYear, setErrorMessage, setPaymentsData, months]
+);
 
   useEffect(() => {
     const loadPaymentsData = async () => {
