@@ -87,20 +87,14 @@ const calculateDuePayment = (rowData, months) => {
     return 0;
   }
 
-  // Count only months with manually entered values (non-empty, non-null, non-undefined, >= 0)
-  const activeMonths = months.filter(month => {
-    const value = rowData[month];
-    return value !== "" && value !== null && value !== undefined && parseFloat(value) >= 0;
-  }).length;
-
-  // Calculate total payments made
+  // Calculate total payments made across all months
   const totalPaymentsMade = months.reduce((sum, month) => {
     const payment = parseFloat(rowData[month]) || 0;
     return sum + payment;
   }, 0);
 
-  // Expected payment = activeMonths * monthly amount
-  const expectedTotalPayment = activeMonths * amountToBePaid;
+  // Expected payment = Amount_To_Be_Paid * 12 (all months)
+  const expectedTotalPayment = amountToBePaid * 12;
   
   // Due payment = expected - actual (minimum 0)
   const duePayment = Math.max(expectedTotalPayment - totalPaymentsMade, 0);
