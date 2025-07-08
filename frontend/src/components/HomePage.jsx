@@ -176,23 +176,23 @@ const filteredData = useMemo(() => {
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  const retryWithBackoff = async (fn, retries = 3, delay = 500) => {
-    for (let i = 0; i < retries; i++) {
-      try {
-        return await fn();
-      } catch (error) {
-        if (error.response?.status === 429 && i < retries - 1) {
-          console.log(
-            `HomePage.jsx: Rate limit hit, retrying in ${delay}ms...`
-          );
-          await sleep(delay);
-          delay *= 2;
-        } else {
-          throw error;
-        }
+const retryWithBackoff = async (fn, retries = 3, delay = 500) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (error.response?.status === 429 && i < retries - 1) {
+        console.log(
+          `HomePage.jsx: Rate limit hit, retrying in ${delay}ms...`
+        );
+        await sleep(delay);
+        delay *= 2;
+      } else {
+        throw error;
       }
     }
-  };
+  }
+};
 
   const getCacheKey = useCallback((url, params = {}) => {
     return `${url}_${JSON.stringify(params)}`;
@@ -496,7 +496,6 @@ const processBatchUpdates = useCallback(
         });
       }
       
-      // CRITICAL FIX: Send month in lowercase to match backend expectation
       updatesByRow.get(rowIndex).updates.push({ 
         month: month.toLowerCase(), // Convert to lowercase for backend
         value 
@@ -526,16 +525,44 @@ const processBatchUpdates = useCallback(
 
           const { updatedRow } = response.data;
           
-          console.log(`Backend response for ${clientName}:`, {
+          console.log(`HomePage.jsx: Backend response for ${clientName}`, {
             Due_Payment: updatedRow.Due_Payment,
             months: updates.map(u => `${u.month}: ${updatedRow[u.month]}`)
           });
+
+          // Build notification statuses
+          const notifyStatuses = updates.map(({ month, value }) => {
+            const paidAmount = parseFloat(value) || 0;
+            const expectedAmount = parseFloat(rowData.Amount_To_Be_Paid) || 0;
+            let status = "Unpaid";
+            if (paidAmount >= expectedAmount && expectedAmount > 0) status = "Paid";
+            else if (paidAmount > 0 && expectedAmount > 0) status = "PartiallyPaid";
+            return {
+              month: month.charAt(0).toUpperCase() + month.slice(1), // Capitalize for notification
+              status,
+              paidAmount,
+              expectedAmount,
+            };
+          });
+
+          // Trigger notification
+          if (clientEmail || clientPhone) {
+            await handleNotifications(
+              clientName,
+              clientEmail,
+              clientPhone,
+              type,
+              year,
+              notifyStatuses,
+              updatedRow.Due_Payment
+            );
+          }
 
           return {
             success: true,
             rowIndex,
             updatedRow,
-            updates: rowUpdate.updates, // Use original updates with proper month names
+            updates: rowUpdate.updates,
             hasNotificationContact: !!(clientEmail || clientPhone),
           };
         } catch (error) {
@@ -563,28 +590,26 @@ const processBatchUpdates = useCallback(
             failedUpdates.push(result.value);
           }
         } else {
-          console.error('Promise rejected:', result.reason);
+          console.error('HomePage.jsx: Promise rejected:', result.reason);
         }
       });
 
-      // CRITICAL FIX: Properly map backend response to frontend state
+      // Update state with successful updates
       if (successfulUpdates.length > 0) {
         setPaymentsData((prev) => {
           const updated = [...prev];
           
           successfulUpdates.forEach(({ rowIndex, updatedRow }) => {
             if (updatedRow && updated[rowIndex]) {
-              console.log(`Updating row ${rowIndex} with Due_Payment: ${updatedRow.Due_Payment}`);
+              console.log(`HomePage.jsx: Updating row ${rowIndex} with backend Due_Payment: ${updatedRow.Due_Payment}`);
               
-              // CRITICAL: Backend returns lowercase month names, map them properly
               const mappedRow = {
-                ...updated[rowIndex], // Keep existing data
+                ...updated[rowIndex],
                 Client_Name: updatedRow.Client_Name,
                 Type: updatedRow.Type,
                 Amount_To_Be_Paid: updatedRow.Amount_To_Be_Paid,
                 Email: updatedRow.Email,
                 Phone_Number: updatedRow.Phone_Number,
-                // Map lowercase backend response to frontend format
                 January: updatedRow.january || "",
                 February: updatedRow.february || "",
                 March: updatedRow.march || "",
@@ -597,14 +622,14 @@ const processBatchUpdates = useCallback(
                 October: updatedRow.october || "",
                 November: updatedRow.november || "",
                 December: updatedRow.december || "",
-                // MOST IMPORTANT: Use the backend-calculated Due_Payment
-                Due_Payment: parseFloat(updatedRow.Due_Payment).toFixed(2)
+                Due_Payment: parseFloat(updatedRow.Due_Payment || 0).toFixed(2)
               };
               
               updated[rowIndex] = mappedRow;
             }
           });
           
+          console.log(`HomePage.jsx: Updated paymentsData with ${successfulUpdates.length} rows`);
           return updated;
         });
 
@@ -613,7 +638,6 @@ const processBatchUpdates = useCallback(
           const newPending = { ...prev };
           successfulUpdates.forEach(({ updates, rowIndex }) => {
             updates.forEach(({ month }) => {
-              // Use original month name (capitalized) for key
               const originalMonth = month.charAt(0).toUpperCase() + month.slice(1);
               delete newPending[`${rowIndex}-${originalMonth}`];
             });
@@ -626,18 +650,25 @@ const processBatchUpdates = useCallback(
           const newValues = { ...prev };
           successfulUpdates.forEach(({ updates, rowIndex, updatedRow }) => {
             updates.forEach(({ month }) => {
-              // Use original month name (capitalized) for key
               const originalMonth = month.charAt(0).toUpperCase() + month.slice(1);
               const key = `${rowIndex}-${originalMonth}`;
-              // Get value from backend response (lowercase key)
               newValues[key] = updatedRow[month] || "";
             });
           });
           return newValues;
         });
+
+        // Optional: Fetch fresh payments data to ensure consistency
+        try {
+          await fetchPayments(sessionToken, currentYear, true);
+          console.log("HomePage.jsx: Refreshed payments data after batch update");
+        } catch (error) {
+          console.error("HomePage.jsx: Failed to refresh payments data:", error);
+          setLocalErrorMessage("Updated payments, but failed to refresh data. Please reload if issues persist.");
+        }
       }
 
-      // Handle failures (rest remains same)
+      // Handle failed updates
       if (failedUpdates.length > 0) {
         const retryUpdates = [];
         
@@ -645,6 +676,7 @@ const processBatchUpdates = useCallback(
           const rowData = rowDataCache.get(rowIndex);
           const errorMsg = `Failed to update ${rowData?.Client_Name || "unknown"}: ${error}`;
           
+          console.error(`HomePage.jsx: ${errorMsg}`);
           setLocalErrorMessage(errorMsg);
           setErrorMessage(errorMsg);
 
@@ -655,7 +687,7 @@ const processBatchUpdates = useCallback(
             )
           );
 
-          // Queue retries - convert back to original month format
+          // Queue retries
           updates.forEach((update) => {
             const originalMonth = update.month.charAt(0).toUpperCase() + update.month.slice(1);
             retryUpdates.push({ 
@@ -666,20 +698,18 @@ const processBatchUpdates = useCallback(
           });
         });
 
-        // Add retries to queue
         updateQueueRef.current.unshift(...retryUpdates);
       }
-
-      // Rest of error handling...
       
     } catch (error) {
       console.error("HomePage.jsx: Batch update error:", error);
-      // Error handling remains the same
+      setLocalErrorMessage(`Batch update failed: ${error.message}`);
+      setErrorMessage(`Batch update failed: ${error.message}`);
     } finally {
       setIsUpdating(false);
     }
   },
-  [paymentsData, sessionToken, months, localInputValues, setErrorMessage, setLocalErrorMessage]
+  [paymentsData, sessionToken, months, localInputValues, setErrorMessage, setLocalErrorMessage, fetchPayments, currentYear]
 );
 
 // ADDITIONAL FIX: Remove the legacy updatePayment function calls completely
