@@ -82,27 +82,22 @@ const HomePage = ({
 
 const calculateDuePayment = (rowData, months) => {
   const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
-  console.log(`HomePage.jsx: calculateDuePayment for ${rowData.Client_Name || 'unknown'}: Amount_To_Be_Paid = ${amountToBePaid}`);
   
   if (amountToBePaid <= 0) {
-    console.log(`HomePage.jsx: calculateDuePayment: Returning 0 due to invalid Amount_To_Be_Paid`);
     return 0;
   }
 
   // Calculate total payments made across all months
   const totalPaymentsMade = months.reduce((sum, month) => {
     const payment = parseFloat(rowData[month]) || 0;
-    console.log(`HomePage.jsx: calculateDuePayment: Month ${month} = ${payment}`);
     return sum + payment;
   }, 0);
 
   // Expected payment = Amount_To_Be_Paid * 12 (all months)
   const expectedTotalPayment = amountToBePaid * 12;
-  console.log(`HomePage.jsx: calculateDuePayment: Expected = ${expectedTotalPayment}, Total Paid = ${totalPaymentsMade}`);
   
   // Due payment = expected - actual (minimum 0)
   const duePayment = Math.max(expectedTotalPayment - totalPaymentsMade, 0);
-  console.log(`HomePage.jsx: calculateDuePayment: Due_Payment = ${duePayment}`);
   
   return Math.round(duePayment * 100) / 100; // Round to 2 decimal places
 };
@@ -490,12 +485,13 @@ const processBatchUpdates = useCallback(
           type: rowData.Type,
           clientEmail: rowData.Email || "",
           clientPhone: rowData.Phone_Number || "",
+          duePayment: rowData.Due_Payment || "0.00",
           rowData,
         });
       }
       
       updatesByRow.get(rowIndex).updates.push({ 
-        month: month.toLowerCase(),
+        month: month.toLowerCase(), // Convert to lowercase for backend
         value 
       });
     });
@@ -503,9 +499,10 @@ const processBatchUpdates = useCallback(
     try {
       // Process updates with optimized parallel execution
       const updatePromises = Array.from(updatesByRow.values()).map(async (rowUpdate) => {
-        const { rowIndex, year, updates, clientName, type, clientEmail, clientPhone, rowData } = rowUpdate;
+        const { rowIndex, year, updates, clientName, type, clientEmail, clientPhone, duePayment, rowData } = rowUpdate;
+
         try {
-          console.log(`HomePage.jsx: Sending batch update for ${clientName}, year ${year}`, updates);
+          // API call
           const response = await axios.post(
             `${BASE_URL}/batch-save-payments`,
             { clientName, type, updates },
@@ -522,22 +519,10 @@ const processBatchUpdates = useCallback(
 
           const { updatedRow } = response.data;
           
-          // Recalculate Due_Payment using frontend logic
-          const recalculatedDuePayment = calculateDuePayment(
-            { ...updatedRow, Client_Name: clientName, Type: type },
-            months
-          );
           console.log(`HomePage.jsx: Backend response for ${clientName}`, {
-            Backend_Due_Payment: updatedRow.Due_Payment,
-            Recalculated_Due_Payment: recalculatedDuePayment,
+            Due_Payment: updatedRow.Due_Payment,
             months: updates.map(u => `${u.month}: ${updatedRow[u.month]}`)
           });
-
-          // Update the row with recalculated Due_Payment
-          const correctedRow = {
-            ...updatedRow,
-            Due_Payment: recalculatedDuePayment.toFixed(2)
-          };
 
           // Build notification statuses
           const notifyStatuses = updates.map(({ month, value }) => {
@@ -547,14 +532,14 @@ const processBatchUpdates = useCallback(
             if (paidAmount >= expectedAmount && expectedAmount > 0) status = "Paid";
             else if (paidAmount > 0 && expectedAmount > 0) status = "PartiallyPaid";
             return {
-              month: month.charAt(0).toUpperCase() + month.slice(1),
+              month: month.charAt(0).toUpperCase() + month.slice(1), // Capitalize for notification
               status,
               paidAmount,
               expectedAmount,
             };
           });
 
-          // Trigger notification with recalculated Due_Payment
+          // Trigger notification
           if (clientEmail || clientPhone) {
             await handleNotifications(
               clientName,
@@ -563,14 +548,14 @@ const processBatchUpdates = useCallback(
               type,
               year,
               notifyStatuses,
-              recalculatedDuePayment.toFixed(2)
+              updatedRow.Due_Payment
             );
           }
 
           return {
             success: true,
             rowIndex,
-            updatedRow: correctedRow,
+            updatedRow,
             updates: rowUpdate.updates,
             hasNotificationContact: !!(clientEmail || clientPhone),
           };
@@ -610,7 +595,7 @@ const processBatchUpdates = useCallback(
           
           successfulUpdates.forEach(({ rowIndex, updatedRow }) => {
             if (updatedRow && updated[rowIndex]) {
-              console.log(`HomePage.jsx: Updating row ${rowIndex} with recalculated Due_Payment: ${updatedRow.Due_Payment}`);
+              console.log(`HomePage.jsx: Updating row ${rowIndex} with backend Due_Payment: ${updatedRow.Due_Payment}`);
               
               const mappedRow = {
                 ...updated[rowIndex],
@@ -631,7 +616,7 @@ const processBatchUpdates = useCallback(
                 October: updatedRow.october || "",
                 November: updatedRow.november || "",
                 December: updatedRow.december || "",
-                Due_Payment: updatedRow.Due_Payment // Already recalculated
+                Due_Payment: parseFloat(updatedRow.Due_Payment || 0).toFixed(2)
               };
               
               updated[rowIndex] = mappedRow;
@@ -667,14 +652,8 @@ const processBatchUpdates = useCallback(
           return newValues;
         });
 
-        // Force refresh payments data to ensure consistency
+        // Optional: Fetch fresh payments data to ensure consistency
         try {
-          const paymentsCacheKey = getCacheKey('/get-payments-by-year', {
-            year: currentYear,
-            sessionToken,
-          });
-          console.log(`HomePage.jsx: Clearing cache for ${paymentsCacheKey}`);
-          delete apiCacheRef.current[paymentsCacheKey];
           await fetchPayments(sessionToken, currentYear, true);
           console.log("HomePage.jsx: Refreshed payments data after batch update");
         } catch (error) {
@@ -724,7 +703,7 @@ const processBatchUpdates = useCallback(
       setIsUpdating(false);
     }
   },
-  [paymentsData, sessionToken, months, localInputValues, setErrorMessage, setLocalErrorMessage, fetchPayments, currentYear, getCacheKey]
+  [paymentsData, sessionToken, months, localInputValues, setErrorMessage, setLocalErrorMessage, fetchPayments, currentYear]
 );
 
 // ADDITIONAL FIX: Remove the legacy updatePayment function calls completely
@@ -1072,15 +1051,6 @@ useEffect(() => {
       sessionToken,
     });
 
-    // Force cache invalidation if Due_Payment seems incorrect
-    if (paymentsData.length > 0 && paymentsData.some(row => {
-      const expectedDue = calculateDuePayment(row, months);
-      return parseFloat(row.Due_Payment) !== expectedDue;
-    })) {
-      console.log(`HomePage.jsx: Invalidating cache for payments_${currentYear} due to incorrect Due_Payment`);
-      delete apiCacheRef.current[paymentsCacheKey];
-    }
-
     if (refreshTrigger && refreshTrigger !== lastRefreshTrigger) {
       console.log(`HomePage.jsx: Invalidating cache for payments_${currentYear} due to refreshTrigger change`);
       delete apiCacheRef.current[paymentsCacheKey];
@@ -1088,16 +1058,8 @@ useEffect(() => {
     }
 
     try {
-      await fetchPayments(sessionToken, currentYear, true); // Force fetch
+      await fetchPayments(sessionToken, currentYear, refreshTrigger && refreshTrigger !== lastRefreshTrigger);
       console.log(`HomePage.jsx: Payments fetched for year ${currentYear}: ${paymentsData.length} items`);
-
-      // Recalculate Due_Payment for all rows
-      const correctedData = paymentsData.map(row => ({
-        ...row,
-        Due_Payment: calculateDuePayment(row, months).toFixed(2)
-      }));
-      setPaymentsData(correctedData);
-      console.log(`HomePage.jsx: Corrected Due_Payment for ${correctedData.length} rows`);
 
       if (paymentsData.length > 0) {
         console.log("🔍 Sample Row for Debug:", paymentsData[0]);
@@ -1109,12 +1071,8 @@ useEffect(() => {
       );
       const cachedData = getCachedData(paymentsCacheKey);
       if (cachedData && !refreshTrigger) {
-        const correctedCachedData = cachedData.map(row => ({
-          ...row,
-          Due_Payment: calculateDuePayment(row, months).toFixed(2)
-        }));
-        setPaymentsData(correctedCachedData);
-        console.log(`HomePage.jsx: Using cached payments for ${currentYear}: ${correctedCachedData.length} items`);
+        setPaymentsData(cachedData);
+        console.log(`HomePage.jsx: Using cached payments for ${currentYear}: ${cachedData.length} items`);
       }
     } finally {
       setIsLoadingPayments(false);
@@ -1122,7 +1080,7 @@ useEffect(() => {
   };
 
   loadPaymentsData();
-}, [sessionToken, currentYear, fetchPayments, getCacheKey, getCachedData, setPaymentsData, paymentsData, months, refreshTrigger, lastRefreshTrigger]);
+}, [sessionToken, currentYear, fetchPayments, getCacheKey, getCachedData, setPaymentsData]);
 
 
   useEffect(() => {
