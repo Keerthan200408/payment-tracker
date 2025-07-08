@@ -83,38 +83,25 @@ const HomePage = ({
 
   const months = MONTHS;
 
-  const calculateDuePayment = (rowData, months, currentYear) => {
+const calculateDuePayment = (rowData, months, currentYear) => {
   log(`HomePage.jsx: calculateDuePayment for ${rowData.Client_Name || 'unknown'}, Year = ${currentYear}`);
-  
-  // Validate rowData
+
   const sanitizedData = validateRowData(rowData, currentYear);
   const amountToBePaid = parseFloat(sanitizedData.Amount_To_Be_Paid) || 0;
-  
-  if (amountToBePaid <= 0) {
-    log(`HomePage.jsx: calculateDuePayment: Returning 0 due to invalid Amount_To_Be_Paid: ${amountToBePaid}`);
-    return 0;
-  }
+  if (amountToBePaid <= 0) return 0;
 
-  // Calculate total payments made across all months
   const totalPaymentsMade = months.reduce((sum, month) => {
-    const rawValue = sanitizedData[month];
-    const payment = (rawValue === "" || rawValue === "0.00" || rawValue == null) ? 0 : parseFloat(rawValue);
-    if (isNaN(payment) || payment < 0) {
-      log(`HomePage.jsx: calculateDuePayment: Invalid payment for ${month}: ${rawValue}, treating as 0`);
-      return sum;
-    }
-    log(`HomePage.jsx: calculateDuePayment: Month ${month} = ${payment}`);
-    return sum + payment;
+    const raw = sanitizedData[month];
+    const val = parseFloat(raw);
+    if (isNaN(val) || val < 0) return sum;
+    return sum + val;
   }, 0);
 
-  // Expected payment = Amount_To_Be_Paid * 12 (all months for current year)
-  const expectedTotalPayment = amountToBePaid * 12;
-  const duePayment = Math.max(expectedTotalPayment - totalPaymentsMade, 0);
-  
-  log(`HomePage.jsx: calculateDuePayment: Expected = ${expectedTotalPayment}, Total Paid = ${totalPaymentsMade}, Due_Payment = ${duePayment}`);
-  
-  return Math.round(duePayment * 100) / 100; // Round to 2 decimal places
+  const expectedTotal = amountToBePaid * 12;
+  const due = Math.max(expectedTotal - totalPaymentsMade, 0);
+  return Math.round(due * 100) / 100;
 };
+
 
   const getPaymentStatus = useCallback((row, month) => {
     const globalRowIndex = paymentsData.findIndex(
@@ -1026,18 +1013,18 @@ return {
     [setCurrentYear, sessionToken, fetchPayments]
   );
 
-  const handleInputChange = useCallback(
+const handleInputChange = useCallback(
   (rowIndex, month, value) => {
     const trimmedValue = value.trim();
-    const parsedValue = trimmedValue === "" || trimmedValue === "0.00" ? 0 : parseFloat(trimmedValue);
-    
-    if (trimmedValue !== "" && trimmedValue !== "0.00" && (isNaN(parsedValue) || parsedValue < 0)) {
+    const parsedValue = parseFloat(trimmedValue);
+
+    if (trimmedValue !== "" && (isNaN(parsedValue) || parsedValue < 0)) {
       setErrorMessage("Please enter a valid non-negative number.");
       return;
     }
 
     const key = `${rowIndex}-${month}`;
-    
+
     // Update local input values for UI
     setLocalInputValues((prev) => ({
       ...prev,
@@ -1048,25 +1035,25 @@ return {
     setPaymentsData((prev) => {
       const updatedPayments = [...prev];
       const rowData = { ...updatedPayments[rowIndex] };
-      
-      // Store trimmedValue for UI, but use parsedValue for calculation
+
       rowData[month] = trimmedValue;
-      
+
       const newDuePayment = calculateDuePayment(rowData, months, currentYear);
       debugDuePayment(rowIndex, "Optimistic Update", newDuePayment);
       rowData.Due_Payment = newDuePayment.toFixed(2);
-      
+
       updatedPayments[rowIndex] = rowData;
       log(`HomePage.jsx: handleInputChange: Optimistic update for ${rowData.Client_Name || 'unknown'}, ${month} = ${trimmedValue}, Due_Payment = ${newDuePayment}`);
-      
+
       return updatedPayments;
     });
 
     // Queue update for backend
-    debouncedUpdate(rowIndex, month, trimmedValue === "" || trimmedValue === "0.00" ? "" : trimmedValue, currentYear);
+    debouncedUpdate(rowIndex, month, trimmedValue === "" ? "" : trimmedValue, currentYear);
   },
   [debouncedUpdate, currentYear, setErrorMessage, setPaymentsData, months]
 );
+
 
   useEffect(() => {
     const loadPaymentsData = async () => {
