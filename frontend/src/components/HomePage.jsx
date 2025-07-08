@@ -496,9 +496,8 @@ const processBatchUpdates = useCallback(
         });
       }
       
-      // CRITICAL FIX: Send month in lowercase to match backend expectation
       updatesByRow.get(rowIndex).updates.push({ 
-        month: month.toLowerCase(), // Convert to lowercase for backend
+        month: month.toLowerCase(),
         value 
       });
     });
@@ -506,7 +505,7 @@ const processBatchUpdates = useCallback(
     try {
       // Process updates with optimized parallel execution
       const updatePromises = Array.from(updatesByRow.values()).map(async (rowUpdate) => {
-        const { rowIndex, year, updates, clientName, type, clientEmail, clientPhone, duePayment, rowData } = rowUpdate;
+        const { rowIndex, year, updates, clientName, type, clientEmail, clientPhone, rowData } = rowUpdate;
 
         try {
           // API call
@@ -531,12 +530,27 @@ const processBatchUpdates = useCallback(
             months: updates.map(u => `${u.month}: ${updatedRow[u.month]}`)
           });
 
+          // Verify frontend vs backend Due_Payment
+          const frontendDuePayment = calculateDuePayment(
+            {
+              ...rowData,
+              ...updates.reduce((acc, { month, value }) => {
+                acc[month.charAt(0).toUpperCase() + month.slice(1)] = value;
+                return acc;
+              }, {}),
+              Amount_To_Be_Paid: updatedRow.Amount_To_Be_Paid
+            },
+            months
+          );
+          console.log(`Due_Payment verification for ${clientName}: Frontend=${frontendDuePayment.toFixed(2)}, Backend=${updatedRow.Due_Payment}`);
+
           return {
             success: true,
             rowIndex,
             updatedRow,
-            updates: rowUpdate.updates, // Use original updates with proper month names
+            updates: rowUpdate.updates,
             hasNotificationContact: !!(clientEmail || clientPhone),
+            backendDuePayment: parseFloat(updatedRow.Due_Payment).toFixed(2)
           };
         } catch (error) {
           console.error(`HomePage.jsx: Failed to batch update row ${rowIndex}:`, error);
@@ -567,24 +581,22 @@ const processBatchUpdates = useCallback(
         }
       });
 
-      // CRITICAL FIX: Properly map backend response to frontend state
+      // Update frontend state with backend response
       if (successfulUpdates.length > 0) {
         setPaymentsData((prev) => {
           const updated = [...prev];
           
-          successfulUpdates.forEach(({ rowIndex, updatedRow }) => {
+          successfulUpdates.forEach(({ rowIndex, updatedRow, backendDuePayment }) => {
             if (updatedRow && updated[rowIndex]) {
-              console.log(`Updating row ${rowIndex} with Due_Payment: ${updatedRow.Due_Payment}`);
+              console.log(`Updating row ${rowIndex} with backend Due_Payment: ${backendDuePayment}`);
               
-              // CRITICAL: Backend returns lowercase month names, map them properly
               const mappedRow = {
-                ...updated[rowIndex], // Keep existing data
+                ...updated[rowIndex],
                 Client_Name: updatedRow.Client_Name,
                 Type: updatedRow.Type,
                 Amount_To_Be_Paid: updatedRow.Amount_To_Be_Paid,
                 Email: updatedRow.Email,
                 Phone_Number: updatedRow.Phone_Number,
-                // Map lowercase backend response to frontend format
                 January: updatedRow.january || "",
                 February: updatedRow.february || "",
                 March: updatedRow.march || "",
@@ -597,8 +609,7 @@ const processBatchUpdates = useCallback(
                 October: updatedRow.october || "",
                 November: updatedRow.november || "",
                 December: updatedRow.december || "",
-                // MOST IMPORTANT: Use the backend-calculated Due_Payment
-                Due_Payment: parseFloat(updatedRow.Due_Payment).toFixed(2)
+                Due_Payment: backendDuePayment
               };
               
               updated[rowIndex] = mappedRow;
@@ -613,7 +624,6 @@ const processBatchUpdates = useCallback(
           const newPending = { ...prev };
           successfulUpdates.forEach(({ updates, rowIndex }) => {
             updates.forEach(({ month }) => {
-              // Use original month name (capitalized) for key
               const originalMonth = month.charAt(0).toUpperCase() + month.slice(1);
               delete newPending[`${rowIndex}-${originalMonth}`];
             });
@@ -626,18 +636,37 @@ const processBatchUpdates = useCallback(
           const newValues = { ...prev };
           successfulUpdates.forEach(({ updates, rowIndex, updatedRow }) => {
             updates.forEach(({ month }) => {
-              // Use original month name (capitalized) for key
               const originalMonth = month.charAt(0).toUpperCase() + month.slice(1);
               const key = `${rowIndex}-${originalMonth}`;
-              // Get value from backend response (lowercase key)
               newValues[key] = updatedRow[month] || "";
             });
           });
           return newValues;
         });
+
+        // Trigger notifications with updated due payment
+        successfulUpdates.forEach(({ rowIndex, updatedRow, updates, hasNotificationContact }) => {
+          if (hasNotificationContact) {
+            const notifyStatuses = updates.map(({ month, value }) => ({
+              month: month.charAt(0).toUpperCase() + month.slice(1),
+              status: getPaymentStatus(updatedRow, month.charAt(0).toUpperCase() + month.slice(1)),
+              paidAmount: parseFloat(value) || 0,
+              expectedAmount: parseFloat(updatedRow.Amount_To_Be_Paid) || 0
+            }));
+            handleNotifications(
+              updatedRow.Client_Name,
+              updatedRow.Email,
+              updatedRow.Phone_Number,
+              updatedRow.Type,
+              currentYear,
+              notifyStatuses,
+              updatedRow.Due_Payment // Use backend Due_Payment
+            );
+          }
+        });
       }
 
-      // Handle failures (rest remains same)
+      // Handle failures
       if (failedUpdates.length > 0) {
         const retryUpdates = [];
         
@@ -655,7 +684,7 @@ const processBatchUpdates = useCallback(
             )
           );
 
-          // Queue retries - convert back to original month format
+          // Queue retries
           updates.forEach((update) => {
             const originalMonth = update.month.charAt(0).toUpperCase() + update.month.slice(1);
             retryUpdates.push({ 
@@ -666,20 +695,18 @@ const processBatchUpdates = useCallback(
           });
         });
 
-        // Add retries to queue
         updateQueueRef.current.unshift(...retryUpdates);
       }
-
-      // Rest of error handling...
       
     } catch (error) {
       console.error("HomePage.jsx: Batch update error:", error);
-      // Error handling remains the same
+      setLocalErrorMessage(`Batch update failed: ${error.message}`);
+      setErrorMessage(`Batch update failed: ${error.message}`);
     } finally {
       setIsUpdating(false);
     }
   },
-  [paymentsData, sessionToken, months, localInputValues, setErrorMessage, setLocalErrorMessage]
+  [paymentsData, sessionToken, months, localInputValues, setErrorMessage, setLocalErrorMessage, currentYear, getPaymentStatus, handleNotifications]
 );
 
 // ADDITIONAL FIX: Remove the legacy updatePayment function calls completely
@@ -994,12 +1021,12 @@ const handleInputChange = useCallback(
       const updatedPayments = [...prev];
       const rowData = { ...updatedPayments[rowIndex] };
       
-      // Update the month value
+      // Update the month value first
       rowData[month] = trimmedValue;
       
-      // Calculate new Due_Payment optimistically
+      // Calculate new Due_Payment based on updated rowData
       const newDuePayment = calculateDuePayment(rowData, months);
-      debugDuePayment(rowIndex, "Optimistic Update", newDuePayment);
+      console.log(`handleInputChange: Optimistic update for row ${rowIndex}, ${month}: ${trimmedValue}, Due_Payment: ${newDuePayment}`);
       rowData.Due_Payment = newDuePayment.toFixed(2);
       
       updatedPayments[rowIndex] = rowData;
