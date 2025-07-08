@@ -45,6 +45,7 @@ const HomePage = ({
   fetchTypes = () => {},
   refreshTrigger,
   fetchPayments = () => {},
+  saveTimeouts = { current: {} },
 }) => {
   const [availableYears, setAvailableYears] = useState(["2025"]);
   const [isLoadingYears, setIsLoadingYears] = useState(false);

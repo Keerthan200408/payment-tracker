@@ -1097,6 +1097,7 @@ const updatePayment = async (
                   csvFileInputRef={csvFileInputRef}
                   refreshTrigger={refreshTrigger}
                   fetchPayments={fetchPayments}
+                  saveTimeouts={saveTimeouts}
                 />
               )}
               {page === "addClient" && (
@@ -1166,6 +1167,7 @@ const updatePayment = async (
                   handleYearChange={handleYearChange}
                   setErrorMessage={setErrorMessage}
                   apiCacheRef={apiCacheRef}
+                  saveTimeouts={saveTimeouts}
                 />
               )}
             </main>
