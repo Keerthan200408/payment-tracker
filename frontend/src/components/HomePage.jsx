@@ -495,7 +495,7 @@ const processBatchUpdates = useCallback(
       }
       
       updatesByRow.get(rowIndex).updates.push({ 
-        month: month.toLowerCase(), // Convert to lowercase for backend
+        month: month.toLowerCase(),
         value 
       });
     });
@@ -505,7 +505,7 @@ const processBatchUpdates = useCallback(
       const updatePromises = Array.from(updatesByRow.values()).map(async (rowUpdate) => {
         const { rowIndex, year, updates, clientName, type, clientEmail, clientPhone, rowData } = rowUpdate;
         try {
-          // API call
+          console.log(`HomePage.jsx: Sending batch update for ${clientName}, year ${year}`, updates);
           const response = await axios.post(
             `${BASE_URL}/batch-save-payments`,
             { clientName, type, updates },
@@ -522,7 +522,7 @@ const processBatchUpdates = useCallback(
 
           const { updatedRow } = response.data;
           
-          // Recalculate Due_Payment using frontend logic to ensure consistency
+          // Recalculate Due_Payment using frontend logic
           const recalculatedDuePayment = calculateDuePayment(
             { ...updatedRow, Client_Name: clientName, Type: type },
             months
@@ -673,6 +673,7 @@ const processBatchUpdates = useCallback(
             year: currentYear,
             sessionToken,
           });
+          console.log(`HomePage.jsx: Clearing cache for ${paymentsCacheKey}`);
           delete apiCacheRef.current[paymentsCacheKey];
           await fetchPayments(sessionToken, currentYear, true);
           console.log("HomePage.jsx: Refreshed payments data after batch update");
@@ -1071,6 +1072,15 @@ useEffect(() => {
       sessionToken,
     });
 
+    // Force cache invalidation if Due_Payment seems incorrect
+    if (paymentsData.length > 0 && paymentsData.some(row => {
+      const expectedDue = calculateDuePayment(row, months);
+      return parseFloat(row.Due_Payment) !== expectedDue;
+    })) {
+      console.log(`HomePage.jsx: Invalidating cache for payments_${currentYear} due to incorrect Due_Payment`);
+      delete apiCacheRef.current[paymentsCacheKey];
+    }
+
     if (refreshTrigger && refreshTrigger !== lastRefreshTrigger) {
       console.log(`HomePage.jsx: Invalidating cache for payments_${currentYear} due to refreshTrigger change`);
       delete apiCacheRef.current[paymentsCacheKey];
@@ -1078,8 +1088,16 @@ useEffect(() => {
     }
 
     try {
-      await fetchPayments(sessionToken, currentYear, refreshTrigger && refreshTrigger !== lastRefreshTrigger);
+      await fetchPayments(sessionToken, currentYear, true); // Force fetch
       console.log(`HomePage.jsx: Payments fetched for year ${currentYear}: ${paymentsData.length} items`);
+
+      // Recalculate Due_Payment for all rows
+      const correctedData = paymentsData.map(row => ({
+        ...row,
+        Due_Payment: calculateDuePayment(row, months).toFixed(2)
+      }));
+      setPaymentsData(correctedData);
+      console.log(`HomePage.jsx: Corrected Due_Payment for ${correctedData.length} rows`);
 
       if (paymentsData.length > 0) {
         console.log("🔍 Sample Row for Debug:", paymentsData[0]);
@@ -1091,8 +1109,12 @@ useEffect(() => {
       );
       const cachedData = getCachedData(paymentsCacheKey);
       if (cachedData && !refreshTrigger) {
-        setPaymentsData(cachedData);
-        console.log(`HomePage.jsx: Using cached payments for ${currentYear}: ${cachedData.length} items`);
+        const correctedCachedData = cachedData.map(row => ({
+          ...row,
+          Due_Payment: calculateDuePayment(row, months).toFixed(2)
+        }));
+        setPaymentsData(correctedCachedData);
+        console.log(`HomePage.jsx: Using cached payments for ${currentYear}: ${correctedCachedData.length} items`);
       }
     } finally {
       setIsLoadingPayments(false);
@@ -1100,7 +1122,7 @@ useEffect(() => {
   };
 
   loadPaymentsData();
-}, [sessionToken, currentYear, fetchPayments, getCacheKey, getCachedData, setPaymentsData]);
+}, [sessionToken, currentYear, fetchPayments, getCacheKey, getCachedData, setPaymentsData, paymentsData, months, refreshTrigger, lastRefreshTrigger]);
 
 
   useEffect(() => {
