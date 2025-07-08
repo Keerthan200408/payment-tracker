@@ -1030,7 +1030,22 @@ const handleInputChange = useCallback(
       [key]: trimmedValue,
     }));
 
-    // ✅ Just trigger the backend update, let that handle Due_Payment
+    // ✅ Recalculate Due_Payment for full row before update
+    const updatedRow = { ...paymentsData[rowIndex], [month]: parsedValue };
+    const recalculatedDue = calculateDuePayment(updatedRow, months, currentYear);
+
+    // Update the frontend view immediately
+    setPaymentsData((prev) => {
+      const newData = [...prev];
+      newData[rowIndex] = {
+        ...newData[rowIndex],
+        [month]: parsedValue,
+        Due_Payment: recalculatedDue.toFixed(2),
+      };
+      return newData;
+    });
+
+    // ✅ Backend update
     updatePayment(
       rowIndex,
       month,
@@ -1045,6 +1060,7 @@ const handleInputChange = useCallback(
   },
   [updatePayment, paymentsData, currentYear, sessionToken, setPaymentsData]
 );
+
 
 
 
