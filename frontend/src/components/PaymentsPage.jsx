@@ -16,15 +16,15 @@ const PaymentsPage = ({
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const entriesPerPage = 10;
-  const totalEntries = paymentsData.length;
+  const totalEntries = paymentsData ? paymentsData.length : 0;
   const totalPages = Math.ceil(totalEntries / entriesPerPage);
 
   const [availableYears, setAvailableYears] = useState(() => {
     const storedYears = localStorage.getItem('availableYears');
     return storedYears ? JSON.parse(storedYears) : ['2025'];
   });
-
   const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [error, setError] = useState(null);
 
   const months = [
     'january', 'february', 'march', 'april', 'may', 'june',
@@ -35,7 +35,16 @@ const PaymentsPage = ({
   useEffect(() => {
     setSelectedYear(currentYear);
     if (sessionToken && currentYear) {
-      fetchPayments(sessionToken, currentYear);
+      const fetchData = async () => {
+        try {
+          await fetchPayments(sessionToken, currentYear);
+          setError(null);
+        } catch (err) {
+          console.error('PaymentsPage.jsx: Error fetching payments:', err);
+          setError('Failed to load payments. Please try again.');
+        }
+      };
+      fetchData();
     }
   }, [currentYear, sessionToken, fetchPayments]);
 
@@ -61,10 +70,12 @@ const PaymentsPage = ({
 
       setAvailableYears(yearsToSet);
       localStorage.setItem('availableYears', JSON.stringify(yearsToSet));
+      setError(null);
     } catch (error) {
-      console.error('Error fetching user years:', error);
+      console.error('PaymentsPage.jsx: Error fetching user years:', error);
       setAvailableYears(['2025']);
       localStorage.setItem('availableYears', JSON.stringify(['2025']));
+      setError('Failed to fetch available years. Defaulting to 2025.');
     }
   };
 
@@ -74,14 +85,41 @@ const PaymentsPage = ({
     }
   }, [sessionToken]);
 
+  useEffect(() => {
+    localStorage.setItem('availableYears', JSON.stringify(availableYears));
+  }, [availableYears]);
+
   const handleYearSelection = async (year) => {
+    console.log('PaymentsPage.jsx: handleYearSelection called with year:', year);
     setSelectedYear(year);
     setCurrentYear(year);
     localStorage.setItem('currentYear', year);
     if (typeof handleYearChange === 'function') {
+      console.log('PaymentsPage.jsx: Calling handleYearChange with:', year);
       await handleYearChange(year);
     }
+    if (sessionToken) {
+      console.log('PaymentsPage.jsx: Fetching payments for year:', year);
+      try {
+        await fetchPayments(sessionToken, year);
+        setError(null);
+      } catch (err) {
+        console.error('PaymentsPage.jsx: Error fetching payments for year:', year, err);
+        setError('Failed to load payments for the selected year. Please try again.');
+      }
+    }
   };
+
+  // Check if paymentsData is defined
+  if (!paymentsData) {
+    console.error('PaymentsPage.jsx: paymentsData is undefined or null');
+    return (
+      <div className="p-6 bg-gray-50 min-h-screen">
+        <h2 className="text-xl font-medium text-gray-700 mb-4">Payments</h2>
+        <div className="text-red-600">Error: No payment data available.</div>
+      </div>
+    );
+  }
 
   const paginatedData = paymentsData.slice(
     (currentPage - 1) * entriesPerPage,
@@ -105,6 +143,12 @@ const PaymentsPage = ({
           ))}
         </select>
       </div>
+
+      {error && (
+        <div className="mb-4 text-red-600 text-sm">
+          {error}
+        </div>
+      )}
 
       <div className="bg-white rounded-lg shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
