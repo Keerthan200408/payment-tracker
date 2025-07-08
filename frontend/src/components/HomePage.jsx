@@ -445,214 +445,139 @@ const debugDuePayment = (rowIndex, stage, value) => {
   console.log(`Due Payment Debug - Row ${rowIndex} at ${stage}: ${value}`);
 };
 
-const processBatchUpdates = useCallback(
-  async () => {
-    if (!updateQueueRef.current.length) {
-      console.log("HomePage.jsx: No updates to process");
-      batchTimerRef.current = null;
-      return;
+const processBatchUpdates = useCallback(async () => {
+  if (!updateQueueRef.current.length) {
+    console.log("No updates to process.");
+    batchTimerRef.current = null;
+    return;
+  }
+
+  const updates = [...updateQueueRef.current];
+  updateQueueRef.current = [];
+  batchTimerRef.current = null;
+  setIsUpdating(true);
+
+  const rowDataCache = new Map();
+  updates.forEach(({ rowIndex }) => {
+    if (!rowDataCache.has(rowIndex) && paymentsData[rowIndex]) {
+      rowDataCache.set(rowIndex, paymentsData[rowIndex]);
+    }
+  });
+
+  const updatesByRow = new Map();
+  updates.forEach(({ rowIndex, month, value, year }) => {
+    const rowData = rowDataCache.get(rowIndex);
+    if (!rowData) return;
+
+    if (!updatesByRow.has(rowIndex)) {
+      updatesByRow.set(rowIndex, {
+        rowIndex,
+        year,
+        updates: [],
+        clientName: rowData.Client_Name,
+        type: rowData.Type,
+        clientEmail: rowData.Email || "",
+        clientPhone: rowData.Phone_Number || "",
+        rowData,
+      });
     }
 
-    const updates = [...updateQueueRef.current];
-    updateQueueRef.current = [];
-    batchTimerRef.current = null;
-    
-    console.log(`HomePage.jsx: Processing batch of ${updates.length} updates`, updates);
-    setIsUpdating(true);
-
-    // Pre-build caches for performance
-    const rowDataCache = new Map();
-    const localValuesCache = { ...localInputValues };
-    const missingContactClients = [];
-
-    // Single pass to build row data cache
-    updates.forEach(({ rowIndex }) => {
-      if (!rowDataCache.has(rowIndex) && paymentsData[rowIndex]) {
-        rowDataCache.set(rowIndex, paymentsData[rowIndex]);
-      }
+    updatesByRow.get(rowIndex).updates.push({
+      month: month.toLowerCase(),
+      value,
     });
+  });
 
-    // Optimized grouping by row
-    const updatesByRow = new Map();
-    
-    updates.forEach(({ rowIndex, month, value, year }) => {
-      const rowData = rowDataCache.get(rowIndex);
-      if (!rowData) {
-        console.warn(`HomePage.jsx: Invalid rowIndex ${rowIndex}`);
-        return;
-      }
-
-      if (!updatesByRow.has(rowIndex)) {
-        updatesByRow.set(rowIndex, {
-          rowIndex,
-          year,
-          updates: [],
-          clientName: rowData.Client_Name,
-          type: rowData.Type,
-          clientEmail: rowData.Email || "",
-          clientPhone: rowData.Phone_Number || "",
-          duePayment: rowData.Due_Payment || "0.00",
-          rowData,
-        });
-      }
-      
-      updatesByRow.get(rowIndex).updates.push({ 
-        month: month.toLowerCase(),
-        value 
-      });
-    });
-
-    try {
-      // Process updates with optimized parallel execution
-      const updatePromises = Array.from(updatesByRow.values()).map(async (rowUpdate) => {
-        const { rowIndex, year, updates, clientName, type, clientEmail, clientPhone, rowData } = rowUpdate;
-
-        try {
-          // API call
-          const response = await axios.post(
-            `${BASE_URL}/batch-save-payments`,
-            { clientName, type, updates },
-            {
-              headers: { 
-                Authorization: `Bearer ${sessionToken}`,
-                'Content-Type': 'application/json'
-              },
-              params: { year },
-              timeout: 8000,
-              validateStatus: (status) => status < 500,
-            }
-          );
-
-          const { updatedRow } = response.data;
-          
-          console.log(`Backend response for ${clientName}:`, {
-            Due_Payment: updatedRow.Due_Payment,
-            months: updates.map(u => `${u.month}: ${updatedRow[u.month]}`)
-          });
-
-          // Verify frontend vs backend Due_Payment
-          const frontendDuePayment = calculateDuePayment(
-            {
-              ...rowData,
-              ...updates.reduce((acc, { month, value }) => {
-                acc[month.charAt(0).toUpperCase() + month.slice(1)] = value;
-                return acc;
-              }, {}),
-              Amount_To_Be_Paid: updatedRow.Amount_To_Be_Paid
+  try {
+    const results = await Promise.allSettled(
+      Array.from(updatesByRow.values()).map(async (rowUpdate) => {
+        const { clientName, type, updates, year } = rowUpdate;
+        const response = await axios.post(
+          `${BASE_URL}/batch-save-payments`,
+          { clientName, type, updates },
+          {
+            headers: {
+              Authorization: `Bearer ${sessionToken}`,
+              "Content-Type": "application/json",
             },
-            months
-          );
-          console.log(`Due_Payment verification for ${clientName}: Frontend=${frontendDuePayment.toFixed(2)}, Backend=${updatedRow.Due_Payment}`);
-
-          return {
-            success: true,
-            rowIndex,
-            updatedRow,
-            updates: rowUpdate.updates,
-            hasNotificationContact: !!(clientEmail || clientPhone),
-            backendDuePayment: parseFloat(updatedRow.Due_Payment).toFixed(2)
-          };
-        } catch (error) {
-          console.error(`HomePage.jsx: Failed to batch update row ${rowIndex}:`, error);
-          return {
-            success: false,
-            rowIndex,
-            error: error.response?.data?.error || error.message,
-            updates: rowUpdate.updates,
-          };
-        }
-      });
-
-      // Wait for all updates
-      const results = await Promise.allSettled(updatePromises);
-      
-      const failedUpdates = [];
-      const successfulUpdates = [];
-
-      results.forEach((result) => {
-        if (result.status === 'fulfilled') {
-          if (result.value.success) {
-            successfulUpdates.push(result.value);
-          } else {
-            failedUpdates.push(result.value);
+            params: { year },
+            timeout: 8000,
           }
-        } else {
-          console.error('Promise rejected:', result.reason);
-        }
+        );
+
+        const { updatedRow } = response.data;
+
+        return {
+          success: true,
+          ...rowUpdate,
+          updatedRow,
+          backendDuePayment: parseFloat(updatedRow.Due_Payment).toFixed(2),
+        };
+      })
+    );
+
+    const successful = results
+      .filter((r) => r.status === "fulfilled" && r.value.success)
+      .map((r) => r.value);
+    const failed = results.filter(
+      (r) => r.status === "fulfilled" && !r.value.success
+    );
+
+    if (successful.length > 0) {
+      setPaymentsData((prev) => {
+        const updated = [...prev];
+        successful.forEach(({ rowIndex, updatedRow, backendDuePayment }) => {
+          updated[rowIndex] = {
+            ...updated[rowIndex],
+            ...Object.fromEntries(
+              months.map((m) => [m, updatedRow[m.toLowerCase()] || ""])
+            ),
+            Client_Name: updatedRow.Client_Name,
+            Type: updatedRow.Type,
+            Amount_To_Be_Paid: updatedRow.Amount_To_Be_Paid,
+            Email: updatedRow.Email,
+            Phone_Number: updatedRow.Phone_Number,
+            Due_Payment: backendDuePayment,
+          };
+        });
+        return updated;
       });
 
-      // Update frontend state with backend response
-      if (successfulUpdates.length > 0) {
-        setPaymentsData((prev) => {
-          const updated = [...prev];
-          
-          successfulUpdates.forEach(({ rowIndex, updatedRow, backendDuePayment }) => {
-            if (updatedRow && updated[rowIndex]) {
-              console.log(`Updating row ${rowIndex} with backend Due_Payment: ${backendDuePayment}`);
-              
-              const mappedRow = {
-                ...updated[rowIndex],
-                Client_Name: updatedRow.Client_Name,
-                Type: updatedRow.Type,
-                Amount_To_Be_Paid: updatedRow.Amount_To_Be_Paid,
-                Email: updatedRow.Email,
-                Phone_Number: updatedRow.Phone_Number,
-                January: updatedRow.january || "",
-                February: updatedRow.february || "",
-                March: updatedRow.march || "",
-                April: updatedRow.april || "",
-                May: updatedRow.may || "",
-                June: updatedRow.june || "",
-                July: updatedRow.july || "",
-                August: updatedRow.august || "",
-                September: updatedRow.september || "",
-                October: updatedRow.october || "",
-                November: updatedRow.november || "",
-                December: updatedRow.december || "",
-                Due_Payment: backendDuePayment
+      setPendingUpdates((prev) => {
+        const next = { ...prev };
+        successful.forEach(({ updates, rowIndex }) => {
+          updates.forEach(({ month }) => {
+            const capMonth = month.charAt(0).toUpperCase() + month.slice(1);
+            delete next[`${rowIndex}-${capMonth}`];
+          });
+        });
+        return next;
+      });
+
+      setLocalInputValues((prev) => {
+        const next = { ...prev };
+        successful.forEach(({ updates, rowIndex, updatedRow }) => {
+          updates.forEach(({ month }) => {
+            const capMonth = month.charAt(0).toUpperCase() + month.slice(1);
+            next[`${rowIndex}-${capMonth}`] = updatedRow[month] || "";
+          });
+        });
+        return next;
+      });
+
+      successful.forEach(
+        ({ rowIndex, updatedRow, updates, clientEmail, clientPhone }) => {
+          if (clientEmail || clientPhone) {
+            const notifyStatuses = updates.map(({ month, value }) => {
+              const capMonth = month.charAt(0).toUpperCase() + month.slice(1);
+              return {
+                month: capMonth,
+                status: getPaymentStatus(updatedRow, capMonth),
+                paidAmount: parseFloat(value) || 0,
+                expectedAmount: parseFloat(updatedRow.Amount_To_Be_Paid) || 0,
               };
-              
-              updated[rowIndex] = mappedRow;
-            }
-          });
-          
-          return updated;
-        });
-
-        // Update pending status
-        setPendingUpdates((prev) => {
-          const newPending = { ...prev };
-          successfulUpdates.forEach(({ updates, rowIndex }) => {
-            updates.forEach(({ month }) => {
-              const originalMonth = month.charAt(0).toUpperCase() + month.slice(1);
-              delete newPending[`${rowIndex}-${originalMonth}`];
             });
-          });
-          return newPending;
-        });
 
-        // Update local input values
-        setLocalInputValues((prev) => {
-          const newValues = { ...prev };
-          successfulUpdates.forEach(({ updates, rowIndex, updatedRow }) => {
-            updates.forEach(({ month }) => {
-              const originalMonth = month.charAt(0).toUpperCase() + month.slice(1);
-              const key = `${rowIndex}-${originalMonth}`;
-              newValues[key] = updatedRow[month] || "";
-            });
-          });
-          return newValues;
-        });
-
-        // Trigger notifications with updated due payment
-        successfulUpdates.forEach(({ rowIndex, updatedRow, updates, hasNotificationContact }) => {
-          if (hasNotificationContact) {
-            const notifyStatuses = updates.map(({ month, value }) => ({
-              month: month.charAt(0).toUpperCase() + month.slice(1),
-              status: getPaymentStatus(updatedRow, month.charAt(0).toUpperCase() + month.slice(1)),
-              paidAmount: parseFloat(value) || 0,
-              expectedAmount: parseFloat(updatedRow.Amount_To_Be_Paid) || 0
-            }));
             handleNotifications(
               updatedRow.Client_Name,
               updatedRow.Email,
@@ -660,54 +585,54 @@ const processBatchUpdates = useCallback(
               updatedRow.Type,
               currentYear,
               notifyStatuses,
-              updatedRow.Due_Payment // Use backend Due_Payment
+              updatedRow.Due_Payment
             );
           }
-        });
-      }
-
-      // Handle failures
-      if (failedUpdates.length > 0) {
-        const retryUpdates = [];
-        
-        failedUpdates.forEach(({ rowIndex, updates, error }) => {
-          const rowData = rowDataCache.get(rowIndex);
-          const errorMsg = `Failed to update ${rowData?.Client_Name || "unknown"}: ${error}`;
-          
-          setLocalErrorMessage(errorMsg);
-          setErrorMessage(errorMsg);
-
-          // Revert optimistic updates for failed rows
-          setPaymentsData((prev) =>
-            prev.map((row, idx) =>
-              idx === rowIndex ? rowDataCache.get(rowIndex) || row : row
-            )
-          );
-
-          // Queue retries
-          updates.forEach((update) => {
-            const originalMonth = update.month.charAt(0).toUpperCase() + update.month.slice(1);
-            retryUpdates.push({ 
-              ...update, 
-              month: originalMonth, 
-              rowIndex 
-            });
-          });
-        });
-
-        updateQueueRef.current.unshift(...retryUpdates);
-      }
-      
-    } catch (error) {
-      console.error("HomePage.jsx: Batch update error:", error);
-      setLocalErrorMessage(`Batch update failed: ${error.message}`);
-      setErrorMessage(`Batch update failed: ${error.message}`);
-    } finally {
-      setIsUpdating(false);
+        }
+      );
     }
-  },
-  [paymentsData, sessionToken, months, localInputValues, setErrorMessage, setLocalErrorMessage, currentYear, getPaymentStatus, handleNotifications]
-);
+
+    if (failed.length > 0) {
+      const retryUpdates = [];
+
+      failed.forEach(({ value }) => {
+        const { rowIndex, updates, error } = value;
+        const originalRow = rowDataCache.get(rowIndex);
+
+        setLocalErrorMessage(`Update failed: ${error}`);
+        setErrorMessage(`Update failed: ${error}`);
+
+        setPaymentsData((prev) =>
+          prev.map((r, i) => (i === rowIndex ? originalRow : r))
+        );
+
+        updates.forEach(({ month, value }) => {
+          const capMonth = month.charAt(0).toUpperCase() + month.slice(1);
+          retryUpdates.push({ rowIndex, month: capMonth, value });
+        });
+      });
+
+      updateQueueRef.current.unshift(...retryUpdates);
+    }
+  } catch (error) {
+    console.error("Batch update error:", error);
+    setLocalErrorMessage(`Batch update failed: ${error.message}`);
+    setErrorMessage(`Batch update failed: ${error.message}`);
+  } finally {
+    setIsUpdating(false);
+  }
+}, [
+  paymentsData,
+  sessionToken,
+  months,
+  localInputValues,
+  setErrorMessage,
+  setLocalErrorMessage,
+  currentYear,
+  getPaymentStatus,
+  handleNotifications,
+]);
+
 
 // ADDITIONAL FIX: Remove the legacy updatePayment function calls completely
 // Make sure no other part of your code is calling updatePayment
@@ -999,45 +924,44 @@ const debouncedUpdate = useCallback(
 
 const handleInputChange = useCallback(
   (rowIndex, month, value) => {
-    // Input validation with early return
     const trimmedValue = value.trim();
     const parsedValue = trimmedValue === "" ? "" : parseFloat(trimmedValue);
-    
+
     if (trimmedValue !== "" && (isNaN(parsedValue) || parsedValue < 0)) {
       setErrorMessage("Please enter a valid non-negative number.");
       return;
     }
 
     const key = `${rowIndex}-${month}`;
-    
-    // Update local input values immediately
+
+    // Update local input immediately
     setLocalInputValues((prev) => ({
       ...prev,
       [key]: trimmedValue,
     }));
 
-    // Optimistic update: Update month value and calculate Due_Payment
+    // Optimistic UI update
     setPaymentsData((prev) => {
-      const updatedPayments = [...prev];
-      const rowData = { ...updatedPayments[rowIndex] };
-      
-      // Update the month value first
+      const updated = [...prev];
+      const rowData = { ...updated[rowIndex] };
       rowData[month] = trimmedValue;
-      
-      // Calculate new Due_Payment based on updated rowData
+
       const newDuePayment = calculateDuePayment(rowData, months);
-      console.log(`handleInputChange: Optimistic update for row ${rowIndex}, ${month}: ${trimmedValue}, Due_Payment: ${newDuePayment}`);
+      console.log(
+        `handleInputChange: Updated ${rowData.Client_Name} - ${month} = ${trimmedValue}, Due_Payment: ${newDuePayment}`
+      );
+
       rowData.Due_Payment = newDuePayment.toFixed(2);
-      
-      updatedPayments[rowIndex] = rowData;
-      return updatedPayments;
+      updated[rowIndex] = rowData;
+      return updated;
     });
 
-    // Queue the update for server processing
+    // Queue update for backend
     debouncedUpdate(rowIndex, month, trimmedValue, currentYear);
   },
   [debouncedUpdate, currentYear, setErrorMessage, setPaymentsData, months]
 );
+
 
 useEffect(() => {
   const loadPaymentsData = async () => {
