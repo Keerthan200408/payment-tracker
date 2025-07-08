@@ -990,15 +990,18 @@ const debouncedUpdate = useCallback(
   [paymentsData, setErrorMessage]
 );
 
-  const handleYearChangeDebounced = useCallback(
-    (year) => {
-      console.log("HomePage.jsx: Year change requested to:", year);
-      localStorage.setItem("currentYear", year);
-      setCurrentYear(year);
-      window.location.reload();
-    },
-    [setCurrentYear]
-  );
+ const handleYearChangeDebounced = useCallback(
+  debounce(async (year) => {
+    console.log("HomePage.jsx: Year change requested to:", year);
+    localStorage.setItem("currentYear", year);
+    setCurrentYear(year);
+    if (sessionToken) {
+      console.log("HomePage.jsx: Fetching payments for year:", year);
+      await fetchPayments(sessionToken, year);
+    }
+  }, 300),
+  [setCurrentYear, sessionToken, fetchPayments]
+);
 
 const handleInputChange = useCallback(
   (rowIndex, month, value) => {
