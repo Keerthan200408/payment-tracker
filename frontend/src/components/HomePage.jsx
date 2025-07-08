@@ -1012,18 +1012,50 @@ return {
     [paymentsData, setErrorMessage, processBatchUpdates]
   );
 
-  const handleYearChangeDebounced = useCallback(
-    debounce(async (year) => {
-      log("HomePage.jsx: Year change requested to:", year);
-      localStorage.setItem("currentYear", year);
-      setCurrentYear(year);
-      if (sessionToken) {
-        log("HomePage.jsx: Fetching payments for year:", year);
-        await fetchPayments(sessionToken, year);
+ const handleYearChangeDebounced = useCallback(
+  debounce(async (year) => {
+    log("HomePage.jsx: Year change requested to:", year);
+    
+    // Clear existing states to prevent stale data
+    setPaymentsData([]);
+    setLocalInputValues({});
+    setPendingUpdates({});
+    updateQueueRef.current = []; // Clear pending updates queue
+    if (batchTimerRef.current) {
+      clearTimeout(batchTimerRef.current);
+      batchTimerRef.current = null;
+    }
+
+    // Update currentYear and store in localStorage
+    localStorage.setItem("currentYear", year);
+    setCurrentYear(year);
+
+    if (sessionToken) {
+      setIsLoadingPayments(true);
+      log("HomePage.jsx: Fetching payments for year:", year);
+      
+      // Clear cache for the new year to ensure fresh data
+      const paymentsCacheKey = getCacheKey('/get-payments-by-year', {
+        year,
+        sessionToken,
+      });
+      delete apiCacheRef.current[paymentsCacheKey];
+
+      try {
+        await fetchPayments(sessionToken, year, true); // Force fetch to bypass cache
+        log(`HomePage.jsx: Payments fetched for year ${year}: ${paymentsData.length} items`);
+      } catch (error) {
+        log('HomePage.jsx: Error fetching payments for year:', year, error);
+        setLocalErrorMessage(
+          error.response?.data?.error || 'Failed to load payments data for the selected year.'
+        );
+      } finally {
+        setIsLoadingPayments(false);
       }
-    }, 300),
-    [setCurrentYear, sessionToken, fetchPayments]
-  );
+    }
+  }, 300),
+  [setCurrentYear, sessionToken, fetchPayments, getCacheKey, setPaymentsData, setLocalErrorMessage]
+);
 
 const handleInputChange = useCallback(
   (rowIndex, month, value) => {
@@ -1077,47 +1109,57 @@ const handleInputChange = useCallback(
 
 
   useEffect(() => {
-    const loadPaymentsData = async () => {
-      if (!sessionToken || !currentYear) return;
+  const loadPaymentsData = async () => {
+    if (!sessionToken || !currentYear) return;
 
-      setIsLoadingPayments(true);
-      log(`HomePage.jsx: Fetching payments for year ${currentYear} due to refreshTrigger: ${refreshTrigger}`);
-      
-      const paymentsCacheKey = getCacheKey('/get-payments-by-year', {
-        year: currentYear,
-        sessionToken,
-      });
+    setIsLoadingPayments(true);
+    log(`HomePage.jsx: Fetching payments for year ${currentYear} due to refreshTrigger: ${refreshTrigger}`);
+    
+    const paymentsCacheKey = getCacheKey('/get-payments-by-year', {
+      year: currentYear,
+      sessionToken,
+    });
 
-      if (refreshTrigger && refreshTrigger !== lastRefreshTrigger) {
-        log(`HomePage.jsx: Invalidating cache for payments_${currentYear} due to refreshTrigger change`);
-        delete apiCacheRef.current[paymentsCacheKey];
-        setLastRefreshTrigger(refreshTrigger);
+    // Clear stale states
+    setLocalInputValues({});
+    setPendingUpdates({});
+    updateQueueRef.current = [];
+    if (batchTimerRef.current) {
+      clearTimeout(batchTimerRef.current);
+      batchTimerRef.current = null;
+    }
+
+    // Invalidate cache if refreshTrigger changes
+    if (refreshTrigger && refreshTrigger !== lastRefreshTrigger) {
+      log(`HomePage.jsx: Invalidating cache for payments_${currentYear} due to refreshTrigger change`);
+      delete apiCacheRef.current[paymentsCacheKey];
+      setLastRefreshTrigger(refreshTrigger);
+    }
+
+    try {
+      await fetchPayments(sessionToken, currentYear, refreshTrigger && refreshTrigger !== lastRefreshTrigger);
+      log(`HomePage.jsx: Payments fetched for year ${currentYear}: ${paymentsData.length} items`);
+
+      if (paymentsData.length > 0) {
+        log("🔍 Sample Row for Debug:", paymentsData[0]);
       }
-
-      try {
-        await fetchPayments(sessionToken, currentYear, refreshTrigger && refreshTrigger !== lastRefreshTrigger);
-        log(`HomePage.jsx: Payments fetched for year ${currentYear}: ${paymentsData.length} items`);
-
-        if (paymentsData.length > 0) {
-          log("🔍 Sample Row for Debug:", paymentsData[0]);
-        }
-      } catch (error) {
-        log('HomePage.jsx: Error fetching payments:', error);
-        setLocalErrorMessage(
-          error.response?.data?.error || 'Failed to load payments data.'
-        );
-        const cachedData = getCachedData(paymentsCacheKey);
-        if (cachedData && !refreshTrigger) {
-          setPaymentsData(cachedData);
-          log(`HomePage.jsx: Using cached payments for ${currentYear}: ${cachedData.length} items`);
-        }
-      } finally {
-        setIsLoadingPayments(false);
+    } catch (error) {
+      log('HomePage.jsx: Error fetching payments:', error);
+      setLocalErrorMessage(
+        error.response?.data?.error || 'Failed to load payments data.'
+      );
+      const cachedData = getCachedData(paymentsCacheKey);
+      if (cachedData && !refreshTrigger) {
+        setPaymentsData(cachedData);
+        log(`HomePage.jsx: Using cached payments for ${currentYear}: ${cachedData.length} items`);
       }
-    };
+    } finally {
+      setIsLoadingPayments(false);
+    }
+  };
 
-    loadPaymentsData();
-  }, [sessionToken, currentYear, fetchPayments, getCacheKey, getCachedData, setPaymentsData]);
+  loadPaymentsData();
+}, [sessionToken, currentYear, fetchPayments, getCacheKey, getCachedData, setPaymentsData, refreshTrigger, lastRefreshTrigger, setLocalErrorMessage]);
 
   useEffect(() => {
     onMount();
