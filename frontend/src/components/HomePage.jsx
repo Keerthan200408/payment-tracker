@@ -84,35 +84,36 @@ const HomePage = ({
 
   const months = MONTHS;
 
-  const calculateDuePayment = (rowData, months, currentYear) => {
-    log(`HomePage.jsx: calculateDuePayment for ${rowData.Client_Name || 'unknown'}, Year = ${currentYear}`);
+const calculateDuePayment = (rowData, months, currentYear) => {
+  log(`HomePage.jsx: calculateDuePayment for ${rowData.Client_Name || 'unknown'}, Year = ${currentYear}`);
 
-    const sanitizedData = validateRowData(rowData, currentYear);
-    const amountToBePaid = parseFloat(sanitizedData.Amount_To_Be_Paid) || 0;
-    
-    if (amountToBePaid <= 0) {
-      log(`HomePage.jsx: calculateDuePayment: Returning 0 due to invalid Amount_To_Be_Paid: ${amountToBePaid}`);
-      return 0;
+  const sanitizedData = validateRowData(rowData, currentYear);
+  const amountToBePaid = parseFloat(sanitizedData.Amount_To_Be_Paid) || 0;
+  
+  if (amountToBePaid <= 0) {
+    log(`HomePage.jsx: calculateDuePayment: Returning 0 due to invalid Amount_To_Be_Paid: ${amountToBePaid}`);
+    return 0;
+  }
+
+  const totalPaymentsMade = months.reduce((sum, month) => {
+    const rawValue = sanitizedData[month];
+    const payment = (rawValue === "" || rawValue === "0.00" || rawValue == null) ? 0 : parseFloat(rawValue);
+    if (isNaN(payment) || payment < 0) {
+      log(`HomePage.jsx: calculateDuePayment: Invalid payment for ${month}: ${rawValue}, treating as 0`);
+      return sum;
     }
+    log(`HomePage.jsx: calculateDuePayment: Month ${month} = ${payment}`);
+    return sum + payment;
+  }, 0);
 
-    const totalPaymentsMade = months.reduce((sum, month) => {
-      const rawValue = sanitizedData[month];
-      const payment = (rawValue === "" || rawValue === "0.00" || rawValue == null) ? 0 : parseFloat(rawValue);
-      if (isNaN(payment) || payment < 0) {
-        log(`HomePage.jsx: calculateDuePayment: Invalid payment for ${month}: w: ${rawValue}, treating as 0`);
-        return sum;
-      }
-      log(`HomePage.jsx: calculateDuePayment: Month ${month} = ${payment}`);
-      return sum + payment;
-    }, 0);
+  const expectedTotal = amountToBePaid * 12;
+  const due = Math.max(expectedTotal - totalPaymentsMade, 0);
+  
+  log(`HomePage.jsx: calculateDuePayment: Expected = ${expectedTotal}, Total Paid = ${totalPaymentsMade}, Due_Payment = ${due}`);
+  
+  return Math.round(due * 100) / 100;
+};
 
-    const expectedTotal = amountToBePaid * 12;
-    const due = Math.max(expectedTotal - totalPaymentsMade, 0);
-    
-    log(`HomePage.jsx: calculateDuePayment: Expected = ${expectedTotal}, Total Paid = ${totalPaymentsMade}, Due_Payment = ${due}`);
-    
-    return Math.round(due * 100) / 100;
-  };
 
   const getPaymentStatus = useCallback((row, month) => {
     const globalRowIndex = paymentsData.findIndex(
@@ -182,33 +183,33 @@ const HomePage = ({
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  const validateRowData = (rowData, currentYear) => {
-    log(`HomePage.jsx: Validating rowData for ${rowData.Client_Name || 'unknown'}, Year = ${currentYear}`);
-    
-    const sanitizedData = { ...rowData, Year: rowData.Year || currentYear };
-    const amountToBePaid = parseFloat(sanitizedData.Amount_To_Be_Paid) || 0;
-    
-    if (isNaN(amountToBePaid) || amountToBePaid < 0) {
-      log(`HomePage.jsx: Invalid Amount_To_Be_Paid for ${rowData.Client_Name || 'unknown'}: ${rowData.Amount_To_Be_Paid}, defaulting to 0`);
-      sanitizedData.Amount_To_Be_Paid = 0;
+const validateRowData = (rowData, currentYear) => {
+  log(`HomePage.jsx: Validating rowData for ${rowData.Client_Name || 'unknown'}, Year = ${currentYear}`);
+  
+  const sanitizedData = { ...rowData, Year: rowData.Year || currentYear };
+  const amountToBePaid = parseFloat(sanitizedData.Amount_To_Be_Paid) || 0;
+  
+  if (isNaN(amountToBePaid) || amountToBePaid < 0) {
+    log(`HomePage.jsx: Invalid Amount_To_Be_Paid for ${rowData.Client_Name || 'unknown'}: ${rowData.Amount_To_Be_Paid}, defaulting to 0`);
+    sanitizedData.Amount_To_Be_Paid = 0;
+  }
+  
+  MONTHS.forEach((month) => {
+    const rawValue = rowData[month];
+    if (rawValue == null || rawValue === "" || rawValue === "0.00" || isNaN(parseFloat(rawValue)) || parseFloat(rawValue) < 0) {
+      log(`HomePage.jsx: Invalid payment for ${rowData.Client_Name || 'unknown'}, ${month}: ${rawValue}, defaulting to empty string for UI`);
+      sanitizedData[month] = "";
+    } else {
+      sanitizedData[month] = parseFloat(rawValue).toString(); // Normalize to string for UI consistency
     }
-    
-    MONTHS.forEach((month) => {
-      const rawValue = rowData[month];
-      if (rawValue == null || rawValue === "" || rawValue === "0.00" || isNaN(parseFloat(rawValue)) || parseFloat(rawValue) < 0) {
-        log(`HomePage.jsx: Invalid payment for ${rowData.Client_Name || 'unknown'}, ${month}: ${rawValue}, defaulting to empty string for UI`);
-        sanitizedData[month] = "";
-      } else {
-        sanitizedData[month] = parseFloat(rawValue).toString();
-      }
-    });
-    
-    if (sanitizedData.Year !== currentYear) {
-      log(`HomePage.jsx: Year mismatch for ${rowData.Client_Name || 'unknown'}: Expected ${currentYear}, Got ${sanitizedData.Year}`);
-    }
-    
-    return sanitizedData;
-  };
+  });
+  
+  if (sanitizedData.Year !== currentYear) {
+    log(`HomePage.jsx: Year mismatch for ${rowData.Client_Name || 'unknown'}: Expected ${currentYear}, Got ${sanitizedData.Year}`);
+  }
+  
+  return sanitizedData;
+};
 
   const retryWithBackoff = async (fn, retries = 3, delay = 500) => {
     for (let i = 0; i < retries; i++) {
@@ -485,6 +486,9 @@ const HomePage = ({
       setIsUpdating(true);
 
       const rowDataCache = new Map();
+      const localValuesCache = { ...localInputValues };
+      const missingContactClients = [];
+
       updates.forEach(({ rowIndex }) => {
         if (!rowDataCache.has(rowIndex) && paymentsData[rowIndex]) {
           rowDataCache.set(rowIndex, paymentsData[rowIndex]);
@@ -525,88 +529,81 @@ const HomePage = ({
           try {
             log(`HomePage.jsx: Sending batch update for ${clientName}, year ${year}`, updates);
             const response = await axios.post(
-              `${BASE_URL}/batch-save-payments`,
-              { clientName, type, updates },
-              {
-                headers: { 
-                  Authorization: `Bearer ${sessionToken}`,
-                  'Content-Type': 'application/json'
-                },
-                params: { year },
-                timeout: 8000,
-                validateStatus: (status) => status < 500,
-              }
-            );
+  `${BASE_URL}/batch-save-payments`,
+  { clientName, type, updates },
+  {
+    headers: { 
+      Authorization: `Bearer ${sessionToken}`,
+      'Content-Type': 'application/json'
+    },
+    params: { year },
+    timeout: 8000,
+    validateStatus: (status) => status < 500,
+  }
+);
 
-            const { updatedRow } = response.data;
+const { updatedRow } = response.data;
 
-            // Recalculate Due_Payment to ensure correctness
-            const recalculatedDuePayment = calculateDuePayment(
-              { ...updatedRow, Client_Name: clientName, Type: type },
-              months,
-              currentYear
-            );
+// Recalculate Due_Payment to ensure correctness
+const recalculatedDuePayment = calculateDuePayment(
+  { ...updatedRow, Client_Name: clientName, Type: type },
+  months,
+  currentYear
+);
 
-            // Log for debugging
-            log(`HomePage.jsx: Backend response for ${clientName}`, {
-              Backend_Due_Payment: updatedRow.Due_Payment,
-              Recalculated_Due_Payment: recalculatedDuePayment,
-              Year: year,
-              Updates: updates.map(u => `${u.month}: ${u.value}`),
-              Response_Raw: JSON.stringify(updatedRow)
-            });
+// Log for debugging
+log(`HomePage.jsx: Backend response for ${clientName}`, {
+  Backend_Due_Payment: updatedRow.Due_Payment,
+  Recalculated_Due_Payment: recalculatedDuePayment,
+  Year: year,
+  Updates: updates.map(u => `${u.month}: ${u.value}`)
+});
 
-            // Always use recalculated value
-            const correctedRow = {
-              ...updatedRow,
-              Due_Payment: recalculatedDuePayment.toFixed(2)
-            };
+// Always use recalculated value
+const correctedRow = {
+  ...updatedRow,
+  Due_Payment: recalculatedDuePayment.toFixed(2)
+};
 
-            // Validate backend response
-            if (Math.abs(parseFloat(updatedRow.Due_Payment) - recalculatedDuePayment) > 0.01) {
-              log(`HomePage.jsx: Backend Due_Payment mismatch for ${clientName}: Backend = ${updatedRow.Due_Payment}, Frontend = ${recalculatedDuePayment}`);
-              // Force frontend to use corrected value
-              setPaymentsData((prev) => {
-                const newData = [...prev];
-                newData[rowIndex] = correctedRow;
-                log(`HomePage.jsx: Forced update with corrected Due_Payment: ${recalculatedDuePayment} for ${clientName}`);
-                return newData;
-              });
-            }
+// Validate backend response
+if (Math.abs(parseFloat(updatedRow.Due_Payment) - recalculatedDuePayment) > 0.01) {
+  log(`HomePage.jsx: Backend Due_Payment mismatch for ${clientName}: Backend = ${updatedRow.Due_Payment}, Frontend = ${recalculatedDuePayment}`);
+}
 
-            const notifyStatuses = updates.map(({ month, value }) => {
-              const paidAmount = parseFloat(value) || 0;
-              const expectedAmount = parseFloat(rowData.Amount_To_Be_Paid) || 0;
-              let status = "Unpaid";
-              if (paidAmount >= expectedAmount && expectedAmount > 0) status = "Paid";
-              else if (paidAmount > 0 && expectedAmount > 0) status = "PartiallyPaid";
-              return {
-                month: month.charAt(0).toUpperCase() + month.slice(1),
-                status,
-                paidAmount,
-                expectedAmount,
-              };
-            });
+const notifyStatuses = updates.map(({ month, value }) => {
+  const paidAmount = parseFloat(value) || 0;
+  const expectedAmount = parseFloat(rowData.Amount_To_Be_Paid) || 0;
+  let status = "Unpaid";
+  if (paidAmount >= expectedAmount && expectedAmount > 0) status = "Paid";
+  else if (paidAmount > 0 && expectedAmount > 0) status = "PartiallyPaid";
+  return {
+    month: month.charAt(0).toUpperCase() + month.slice(1),
+    status,
+    paidAmount,
+    expectedAmount,
+  };
+});
 
-            if (clientEmail || clientPhone) {
-              await handleNotifications(
-                clientName,
-                clientEmail,
-                clientPhone,
-                type,
-                year,
-                notifyStatuses,
-                recalculatedDuePayment.toFixed(2)
-              );
-            }
+if (clientEmail || clientPhone) {
+  await handleNotifications(
+    clientName,
+    clientEmail,
+    clientPhone,
+    type,
+    year,
+    notifyStatuses,
+    recalculatedDuePayment.toFixed(2)
+  );
+}
 
-            return {
-              success: true,
-              rowIndex,
-              updatedRow: correctedRow,
-              updates: rowUpdate.updates,
-              hasNotificationContact: !!(clientEmail || clientPhone),
-            };
+return {
+  success: true,
+  rowIndex,
+  updatedRow: correctedRow,
+  updates: rowUpdate.updates,
+  hasNotificationContact: !!(clientEmail || clientPhone),
+};
+
           } catch (error) {
             log(`HomePage.jsx: Failed to batch update row ${rowIndex}:`, error);
             return {
@@ -624,14 +621,14 @@ const HomePage = ({
         const successfulUpdates = [];
 
         results.forEach((result) => {
-          if (result.status === "fulfilled") {
+          if (result.status === 'fulfilled') {
             if (result.value.success) {
               successfulUpdates.push(result.value);
             } else {
               failedUpdates.push(result.value);
             }
           } else {
-            log("HomePage.jsx: Promise rejected:", result.reason);
+            log('HomePage.jsx: Promise rejected:', result.reason);
           }
         });
 
@@ -696,15 +693,19 @@ const HomePage = ({
             return newValues;
           });
 
-          // Refresh payments to ensure consistency
-          const paymentsCacheKey = getCacheKey("/get-payments-by-year", {
-            year: currentYear,
-            sessionToken,
-          });
-          log(`HomePage.jsx: Clearing cache for ${paymentsCacheKey}`);
-          delete apiCacheRef.current[paymentsCacheKey];
-          await fetchPayments(sessionToken, currentYear, true);
-          log("HomePage.jsx: Refreshed payments data after batch update");
+          try {
+            const paymentsCacheKey = getCacheKey('/get-payments-by-year', {
+              year: currentYear,
+              sessionToken,
+            });
+            log(`HomePage.jsx: Clearing cache for ${paymentsCacheKey}`);
+            delete apiCacheRef.current[paymentsCacheKey];
+            await fetchPayments(sessionToken, currentYear, true);
+            log("HomePage.jsx: Refreshed payments data after batch update");
+          } catch (error) {
+            log("HomePage.jsx: Failed to refresh payments data:", error);
+            setLocalErrorMessage("Updated payments, but failed to refresh data. Please reload if issues persist.");
+          }
         }
 
         if (failedUpdates.length > 0) {
@@ -1013,99 +1014,76 @@ const HomePage = ({
 
   const handleYearChangeDebounced = useCallback(
     debounce(async (year) => {
-      log(`HomePage.jsx: Year change requested to: ${year}`);
-      // Clear states to prevent stale data
-      setPaymentsData([]);
-      setLocalInputValues({});
-      setPendingUpdates({});
-      setIsLoadingPayments(true);
+      log("HomePage.jsx: Year change requested to:", year);
       localStorage.setItem("currentYear", year);
       setCurrentYear(year);
-      
-      // Clear cache for the new year
-      const paymentsCacheKey = getCacheKey("/get-payments-by-year", {
-        year,
-        sessionToken,
-      });
-      delete apiCacheRef.current[paymentsCacheKey];
-      log(`HomePage.jsx: Cleared cache for ${paymentsCacheKey}`);
-
       if (sessionToken) {
-        log(`HomePage.jsx: Fetching payments for year: ${year}`);
-        try {
-          await fetchPayments(sessionToken, year, true); // Force fetch
-          log(`HomePage.jsx: Successfully fetched payments for year: ${year}`);
-        } catch (error) {
-          log(`HomePage.jsx: Error fetching payments for ${year}:`, error);
-          setLocalErrorMessage(`Failed to load payments for ${year}: ${error.message}`);
-        }
+        log("HomePage.jsx: Fetching payments for year:", year);
+        await fetchPayments(sessionToken, year);
       }
     }, 300),
-    [setCurrentYear, sessionToken, fetchPayments, getCacheKey, setLocalErrorMessage]
+    [setCurrentYear, sessionToken, fetchPayments]
   );
 
-  const handleInputChange = useCallback(
-    (rowIndex, month, value) => {
-      const trimmedValue = value.trim();
-      const parsedValue = trimmedValue === "" || trimmedValue === "0.00" ? "0" : trimmedValue;
+const handleInputChange = useCallback(
+  (rowIndex, month, value) => {
+    const trimmedValue = value.trim();
+    const parsedValue = trimmedValue === "" || trimmedValue === "0.00" ? "0" : trimmedValue;
 
-      if (trimmedValue !== "" && trimmedValue !== "0.00" && (isNaN(parseFloat(parsedValue)) || parseFloat(parsedValue) < 0)) {
-        setErrorMessage("Please enter a valid non-negative number.");
-        return;
-      }
+    if (trimmedValue !== "" && trimmedValue !== "0.00" && (isNaN(parseFloat(parsedValue)) || parseFloat(parsedValue) < 0)) {
+      setErrorMessage("Please enter a valid non-negative number.");
+      return;
+    }
 
-      const key = `${rowIndex}-${month}`;
-      setLocalInputValues((prev) => ({
-        ...prev,
-        [key]: trimmedValue,
-      }));
+    const key = `${rowIndex}-${month}`;
+    setLocalInputValues((prev) => ({
+      ...prev,
+      [key]: trimmedValue,
+    }));
 
-      // Recalculate Due_Payment for full row before update
-      const updatedRow = { ...paymentsData[rowIndex], [month]: parsedValue };
-      const recalculatedDue = calculateDuePayment(updatedRow, months, currentYear);
+    // Recalculate Due_Payment for full row before update
+    const updatedRow = { ...paymentsData[rowIndex], [month]: parsedValue };
+    const recalculatedDue = calculateDuePayment(updatedRow, months, currentYear);
 
-      // Update the frontend view immediately
-      setPaymentsData((prev) => {
-        const newData = [...prev];
-        newData[rowIndex] = {
-          ...newData[rowIndex],
-          [month]: trimmedValue,
-          Due_Payment: recalculatedDue.toFixed(2),
-        };
-        log(`HomePage.jsx: handleInputChange: Optimistic update for ${newData[rowIndex].Client_Name || 'unknown'}, ${month} = ${trimmedValue}, Due_Payment = ${recalculatedDue}`);
-        return newData;
-      });
+    // Update the frontend view immediately
+    setPaymentsData((prev) => {
+      const newData = [...prev];
+      newData[rowIndex] = {
+        ...newData[rowIndex],
+        [month]: trimmedValue, // Use trimmedValue for UI consistency
+        Due_Payment: recalculatedDue.toFixed(2),
+      };
+      log(`HomePage.jsx: handleInputChange: Optimistic update for ${newData[rowIndex].Client_Name || 'unknown'}, ${month} = ${trimmedValue}, Due_Payment = ${recalculatedDue}`);
+      return newData;
+    });
 
-      // Log before sending to backend
-      log(`HomePage.jsx: Queuing backend update for ${paymentsData[rowIndex].Client_Name}, ${month} = ${parsedValue}, Expected Due_Payment = ${recalculatedDue}`);
+    // Backend update
+    updatePayment(
+      rowIndex,
+      month,
+      parsedValue, // Send parsedValue as a string number (e.g., "0" or "1000")
+      currentYear,
+      paymentsData,
+      setPaymentsData,
+      setErrorMessage,
+      sessionToken,
+      saveTimeouts
+    );
+  },
+  [updatePayment, paymentsData, currentYear, sessionToken, setPaymentsData, setErrorMessage, months]
+);
 
-      // Backend update
-      updatePayment(
-        rowIndex,
-        month,
-        parsedValue,
-        currentYear,
-        paymentsData,
-        setPaymentsData,
-        setErrorMessage,
-        sessionToken,
-        saveTimeouts
-      );
-    },
-    [updatePayment, paymentsData, currentYear, sessionToken, setPaymentsData, setErrorMessage, months]
-  );
+
+
 
   useEffect(() => {
     const loadPaymentsData = async () => {
-      if (!sessionToken || !currentYear) {
-        log("HomePage.jsx: Missing sessionToken or currentYear, skipping loadPaymentsData");
-        return;
-      }
+      if (!sessionToken || !currentYear) return;
 
       setIsLoadingPayments(true);
       log(`HomePage.jsx: Fetching payments for year ${currentYear} due to refreshTrigger: ${refreshTrigger}`);
       
-      const paymentsCacheKey = getCacheKey("/get-payments-by-year", {
+      const paymentsCacheKey = getCacheKey('/get-payments-by-year', {
         year: currentYear,
         sessionToken,
       });
@@ -1117,16 +1095,16 @@ const HomePage = ({
       }
 
       try {
-        await fetchPayments(sessionToken, currentYear, true); // Force fetch to ensure fresh data
+        await fetchPayments(sessionToken, currentYear, refreshTrigger && refreshTrigger !== lastRefreshTrigger);
         log(`HomePage.jsx: Payments fetched for year ${currentYear}: ${paymentsData.length} items`);
 
         if (paymentsData.length > 0) {
           log("🔍 Sample Row for Debug:", paymentsData[0]);
         }
       } catch (error) {
-        log("HomePage.jsx: Error fetching payments:", error);
+        log('HomePage.jsx: Error fetching payments:', error);
         setLocalErrorMessage(
-          error.response?.data?.error || "Failed to load payments data."
+          error.response?.data?.error || 'Failed to load payments data.'
         );
         const cachedData = getCachedData(paymentsCacheKey);
         if (cachedData && !refreshTrigger) {
@@ -1139,7 +1117,7 @@ const HomePage = ({
     };
 
     loadPaymentsData();
-  }, [sessionToken, currentYear, fetchPayments, getCacheKey, getCachedData, setPaymentsData, refreshTrigger, lastRefreshTrigger]);
+  }, [sessionToken, currentYear, fetchPayments, getCacheKey, getCachedData, setPaymentsData]);
 
   useEffect(() => {
     onMount();
@@ -1310,336 +1288,326 @@ const HomePage = ({
 
     return (
       <>
-        {isLoadingPayments && (
-          <div className="flex justify-center items-center py-12">
-            <i className="fas fa-spinner animate-spin text-2xl text-gray-500 mr-2"></i>
-            <p className="text-gray-500">Loading payments for {currentYear}...</p>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+          <div className="flex gap-3 mb-4 sm:mb-0">
+            <button
+              onClick={() => setPage("addClient")}
+              className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition duration-200 flex items-center"
+            >
+              <i className="fas fa-plus mr-2"></i> Add Client
+            </button>
+            <input
+              type="file"
+              accept=".csv"
+              ref={csvFileInputRef}
+              onChange={importCsv}
+              className="hidden"
+              id="csv-import"
+              disabled={isImporting}
+            />
+            <label
+              htmlFor="csv-import"
+              className={`px-4 py-2 rounded-lg text-gray-700 bg-white border border-gray-300 flex items-center ${
+                isImporting
+                  ? "opacity-50 cursor-not-allowed"
+                  : "hover:bg-gray-50 cursor-pointer"
+              } transition duration-200`}
+            >
+              <i className="fas fa-upload mr-2"></i>
+              {isImporting ? "Importing..." : "Bulk Import(in CSV format)"}
+            </label>
+            <button
+              onClick={handleAddNewYear}
+              className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition duration-200 flex items-center"
+              disabled={isLoadingYears}
+            >
+              <i className="fas fa-calendar-plus mr-2"></i>
+              {isLoadingYears ? "Loading..." : "Add New Year"}
+            </button>
           </div>
-        )}
-        {!isLoadingPayments && (
-          <>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
-              <div className="flex gap-3 mb-4 sm:mb-0">
-                <button
-                  onClick={() => setPage("addClient")}
-                  className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition duration-200 flex items-center"
-                >
-                  <i className="fas fa-plus mr-2"></i> Add Client
-                </button>
-                <input
-                  type="file"
-                  accept=".csv"
-                  ref={csvFileInputRef}
-                  onChange={importCsv}
-                  className="hidden"
-                  id="csv-import"
-                  disabled={isImporting}
-                />
-                <label
-                  htmlFor="csv-import"
-                  className={`px-4 py-2 rounded-lg text-gray-700 bg-white border border-gray-300 flex items-center ${
-                    isImporting
-                      ? "opacity-50 cursor-not-allowed"
-                      : "hover:bg-gray-50 cursor-pointer"
-                  } transition duration-200`}
-                >
-                  <i className="fas fa-upload mr-2"></i>
-                  {isImporting ? "Importing..." : "Bulk Import(in CSV format)"}
-                </label>
-                <button
-                  onClick={handleAddNewYear}
-                  className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition duration-200 flex items-center"
-                  disabled={isLoadingYears}
-                >
-                  <i className="fas fa-calendar-plus mr-2"></i>
-                  {isLoadingYears ? "Loading..." : "Add New Year"}
-                </button>
-              </div>
-              <select
-                value={currentYear}
-                onChange={(e) => handleYearChangeDebounced(e.target.value)}
-                className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
-                disabled={isLoadingYears}
-              >
-                {availableYears.map((year) => (
-                  <option key={year} value={year}>
-                    {year}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <select
+            value={currentYear}
+            onChange={(e) => handleYearChangeDebounced(e.target.value)}
+            className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+            disabled={isLoadingYears}
+          >
+            {availableYears.map((year) => (
+              <option key={year} value={year}>
+                {year}
+              </option>
+            ))}
+          </select>
+        </div>
 
-            <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 mb-6">
-              <div className="relative flex-1 sm:w-1/3">
-                <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                <input
-                  type="text"
-                  placeholder="Search by client or type..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base"
-                />
-              </div>
-              <select
-                value={monthFilter}
-                onChange={(e) => setMonthFilter(e.target.value)}
-                className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
-              >
-                <option value="">All Months</option>
-                {months.map((month) => (
-                  <option key={month} value={month.toLowerCase()}>
-                    {month.charAt(0).toUpperCase() + month.slice(1)}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
-                disabled={!monthFilter}
-              >
-                <option value="">Status</option>
-                <option value="Paid">Paid</option>
-                <option value="PartiallyPaid">Partially Paid</option>
-                <option value="Unpaid">Unpaid</option>
-              </select>
-            </div>
+        <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 mb-6">
+          <div className="relative flex-1 sm:w-1/3">
+            <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+            <input
+              type="text"
+              placeholder="Search by client or type..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base"
+            />
+          </div>
+          <select
+            value={monthFilter}
+            onChange={(e) => setMonthFilter(e.target.value)}
+            className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+          >
+            <option value="">All Months</option>
+            {months.map((month) => (
+              <option key={month} value={month.toLowerCase()}>
+                {month.charAt(0).toUpperCase() + month.slice(1)}
+              </option>
+            ))}
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+            disabled={!monthFilter}
+          >
+            <option value="">Status</option>
+            <option value="Paid">Paid</option>
+            <option value="PartiallyPaid">Partially Paid</option>
+            <option value="Unpaid">Unpaid</option>
+          </select>
+        </div>
 
-            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full" ref={tableRef}>
-                  <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
-                    <tr>
-                      <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-                        Client
-                      </th>
-                      <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-                        Type
-                        <button
-                          onClick={() => {
-                            log("HomePage.jsx: Add Type button clicked");
-                            setIsTypeModalOpen(true);
-                          }}
-                          className="ml-2 text-blue-600 hover:text-blue-800 text-xs"
-                          title="Add New Type"
-                        >
-                          <span className="inline-flex items-center">
-                            {typeof window !== "undefined" && window.FontAwesome ? (
-                              <i className="fas fa-plus-circle mr-1"></i>
-                            ) : (
-                              <span className="mr-1">+</span>
-                            )}
-                            Add Type
-                          </span>
-                        </button>
-                      </th>
-                      <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-                        Amount To Be Paid
-                      </th>
-                      {months.map((month, index) => (
-                        <th
-                          key={index}
-                          className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50"
-                        >
-                          {month.charAt(0).toUpperCase() + month.slice(1)}
-                        </th>
-                      ))}
-                      <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-                        Total Due
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {paginatedData.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={15}
-                          className="px-6 py-12 text-center text-gray-500"
-                        >
-                          <div className="flex flex-col items-center">
-                            <i className="fas fa-users text-4xl text-gray-300 mb-3"></i>
-                            <p className="text-lg font-medium text-gray-600">
-                              {searchQuery
-                                ? "No clients found matching your search."
-                                : "No payments found."}
-                            </p>
-                            <p className="text-sm text-gray-400 mt-1">
-                              {!searchQuery && "No payment data found. Try refreshing or check the Clients sheet."}
-                            </p>
-                          </div>
+        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full" ref={tableRef}>
+              <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
+                <tr>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                    Client
+                  </th>
+                  <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                    Type
+                    <button
+                      onClick={() => {
+                        log("HomePage.jsx: Add Type button clicked");
+                        setIsTypeModalOpen(true);
+                      }}
+                      className="ml-2 text-blue-600 hover:text-blue-800 text-xs"
+                      title="Add New Type"
+                    >
+                      <span className="inline-flex items-center">
+                        {typeof window !== "undefined" && window.FontAwesome ? (
+                          <i className="fas fa-plus-circle mr-1"></i>
+                        ) : (
+                          <span className="mr-1">+</span>
+                        )}
+                        Add Type
+                      </span>
+                    </button>
+                  </th>
+                  <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                    Amount To Be Paid
+                  </th>
+                  {months.map((month, index) => (
+                    <th
+                      key={index}
+                      className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50"
+                    >
+                      {month.charAt(0).toUpperCase() + month.slice(1)}
+                    </th>
+                  ))}
+                  <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
+                    Total Due
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {paginatedData.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={15}
+                      className="px-6 py-12 text-center text-gray-500"
+                    >
+                      <div className="flex flex-col items-center">
+                        <i className="fas fa-users text-4xl text-gray-300 mb-3"></i>
+                        <p className="text-lg font-medium text-gray-600">
+                          {searchQuery
+                            ? "No clients found matching your search."
+                            : "No payments found."}
+                        </p>
+                        <p className="text-sm text-gray-400 mt-1">
+                          {!searchQuery && "No payment data found. Try refreshing or check the Clients sheet."}
+                        </p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedData.map((row, localRowIndex) => {
+                    const globalRowIndex = paymentsData.findIndex(
+                      (r) => r.Client_Name === row.Client_Name
+                    );
+                    return (
+                      <tr
+                        key={`${row?.Client_Name || "unknown"}-${localRowIndex}`}
+                        onContextMenu={(e) => handleContextMenu(e, globalRowIndex)}
+                        className="hover:bg-gray-50"
+                      >
+                        <td className="px-6 py-4 whitespace-nowrap flex items-center text-sm sm:text-base text-gray-900">
+                          <i className="fas fa-user-circle mr-2 text-gray-400"></i>
+                          {row?.Client_Name || "N/A"}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center text-sm sm:text-base text-gray-900">
+                          {row?.Type || "N/A"}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm sm:text-base text-gray-900">
+                          ₹{(parseFloat(row?.Amount_To_Be_Paid) || 0).toLocaleString()}.00
+                        </td>
+                        {months.map((month, colIndex) => (
+                          <td
+                            key={colIndex}
+                            className="px-6 py-4 whitespace-nowrap text-center"
+                          >
+                            <input
+                              type="text"
+                              value={
+                                localInputValues[`${globalRowIndex}-${month}`] !== undefined
+                                  ? localInputValues[`${globalRowIndex}-${month}`]
+                                  : row?.[month] || ""
+                              }
+                              onChange={(e) =>
+                                handleInputChange(globalRowIndex, month, e.target.value)
+                              }
+                              className={`w-20 p-1 border border-gray-300 rounded text-right focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base ${getInputBackgroundColor(
+                                row,
+                                month,
+                                globalRowIndex
+                              )}`}
+                              placeholder="0.00"
+                              title={
+                                pendingUpdates[`${globalRowIndex}-${month}`]
+                                  ? "Saving..."
+                                  : ""
+                              }
+                            />
+                          </td>
+                        ))}
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm sm:text-base text-gray-900">
+                          ₹{(parseFloat(row?.Due_Payment) || 0).toLocaleString()}.00
                         </td>
                       </tr>
-                    ) : (
-                      paginatedData.map((row, localRowIndex) => {
-                        const globalRowIndex = paymentsData.findIndex(
-                          (r) => r.Client_Name === row.Client_Name
-                        );
-                        return (
-                          <tr
-                            key={`${row?.Client_Name || "unknown"}-${localRowIndex}`}
-                            onContextMenu={(e) => handleContextMenu(e, globalRowIndex)}
-                            className="hover:bg-gray-50"
-                          >
-                            <td className="px-6 py-4 whitespace-nowrap flex items-center text-sm sm:text-base text-gray-900">
-                              <i className="fas fa-user-circle mr-2 text-gray-400"></i>
-                              {row?.Client_Name || "N/A"}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-center text-sm sm:text-base text-gray-900">
-                              {row?.Type || "N/A"}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm sm:text-base text-gray-900">
-                              ₹{(parseFloat(row?.Amount_To_Be_Paid) || 0).toLocaleString()}.00
-                            </td>
-                            {months.map((month, colIndex) => (
-                              <td
-                                key={colIndex}
-                                className="px-6 py-4 whitespace-nowrap text-center"
-                              >
-                                <input
-                                  type="text"
-                                  value={
-                                    localInputValues[`${globalRowIndex}-${month}`] !== undefined
-                                      ? localInputValues[`${globalRowIndex}-${month}`]
-                                      : row?.[month] || ""
-                                  }
-                                  onChange={(e) =>
-                                    handleInputChange(globalRowIndex, month, e.target.value)
-                                  }
-                                  className={`w-20 p-1 border border-gray-300 rounded text-right focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base ${getInputBackgroundColor(
-                                    row,
-                                    month,
-                                    globalRowIndex
-                                  )}`}
-                                  placeholder="0.00"
-                                  title={
-                                    pendingUpdates[`${globalRowIndex}-${month}`]
-                                      ? "Saving..."
-                                      : ""
-                                  }
-                                />
-                              </td>
-                            ))}
-                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm sm:text-base text-gray-900">
-                              ₹{(parseFloat(row?.Due_Payment) || 0).toLocaleString()}.00
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
 
-            {paginatedData.length > 0 && (
-              <div className="flex flex-col sm:flex-row justify-between items-center mt-6 space-y-3 sm:space-y-0">
-                <p className="text-sm sm:text-base text-gray-700">
-                  Showing {(currentPage - 1) * entriesPerPage + 1} to{" "}
-                  {Math.min(currentPage * entriesPerPage, totalEntries)} of{" "}
-                  {totalEntries} entries
-                </p>
-                <div className="flex flex-wrap justify-center gap-2 max-w-md">
+        {paginatedData.length > 0 && (
+          <div className="flex flex-col sm:flex-row justify-between items-center mt-6 space-y-3 sm:space-y-0">
+            <p className="text-sm sm:text-base text-gray-700">
+              Showing {(currentPage - 1) * entriesPerPage + 1} to{" "}
+              {Math.min(currentPage * entriesPerPage, totalEntries)} of{" "}
+              {totalEntries} entries
+            </p>
+            <div className="flex flex-wrap justify-center gap-2 max-w-md">
+              <button
+                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base disabled:opacity-50 hover:bg-gray-50 transition duration-200"
+              >
+                Previous
+              </button>
+              {totalPages <= 5 ? (
+                [...Array(totalPages)].map((_, i) => (
                   <button
-                    onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                    disabled={currentPage === 1}
-                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base disabled:opacity-50 hover:bg-gray-50 transition duration-200"
+                    key={i}
+                    onClick={() => setCurrentPage(i + 1)}
+                    className={`px-4 py-2 border border-gray-300 rounded-md text-sm sm:text-base ${
+                      currentPage === i + 1
+                        ? "bg-gray-800 text-white"
+                        : "text-gray-700 hover:bg-gray-50"
+                    } transition duration-200`}
                   >
-                    Previous
+                    {i + 1}
                   </button>
-                  {totalPages <= 5 ? (
-                    [...Array(totalPages)].map((_, i) => (
-                      <button
-                        key={i}
-                        onClick={() => setCurrentPage(i + 1)}
-                        className={`px-4 py-2 border border-gray-300 rounded-md text-sm sm:text-base ${
-                          currentPage === i + 1
-                            ? "bg-gray-800 text-white"
-                            : "text-gray-700 hover:bg-gray-50"
-                        } transition duration-200`}
-                      >
-                        {i + 1}
-                      </button>
-                    ))
-                  ) : (
+                ))
+              ) : (
+                <>
+                  {currentPage > 3 && (
                     <>
-                      {currentPage > 3 && (
-                        <>
-                          <button
-                            onClick={() => setCurrentPage(1)}
-                            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base hover:bg-gray-50 transition duration-200"
-                          >
-                            1
-                          </button>
-                          {currentPage > 4 && (
-                            <span className="px-4 py-2 text-gray-700">...</span>
-                          )}
-                        </>
-                      )}
-                      {[...Array(5)].map((_, i) => {
-                        const pageNum =
-                          currentPage <= 3 ? i + 1 : currentPage - 2 + i;
-                        if (pageNum <= totalPages && pageNum > 0) {
-                          return (
-                            <button
-                              key={pageNum}
-                              onClick={() => setCurrentPage(pageNum)}
-                              className={`px-4 py-2 border border-gray-300 rounded-md text-sm sm:text-base ${
-                                currentPage === pageNum
-                                  ? "bg-gray-800 text-white"
-                                  : "text-gray-700 hover:bg-gray-50"
-                              } transition duration-200`}
-                            >
-                              {pageNum}
-                            </button>
-                          );
-                        }
-                        return null;
-                      })}
-                      {currentPage < totalPages - 2 && (
-                        <>
-                          {currentPage < totalPages - 3 && (
-                            <span className="px-4 py-2 text-gray-700">...</span>
-                          )}
-                          <button
-                            onClick={() => setCurrentPage(totalPages)}
-                            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base hover:bg-gray-50 transition duration-200"
-                          >
-                            {totalPages}
-                          </button>
-                        </>
+                      <button
+                        onClick={() => setCurrentPage(1)}
+                        className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base hover:bg-gray-50 transition duration-200"
+                      >
+                        1
+                      </button>
+                      {currentPage > 4 && (
+                        <span className="px-4 py-2 text-gray-700">...</span>
                       )}
                     </>
                   )}
-                  <button
-                    onClick={() =>
-                      setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                  {[...Array(5)].map((_, i) => {
+                    const pageNum =
+                      currentPage <= 3 ? i + 1 : currentPage - 2 + i;
+                    if (pageNum <= totalPages && pageNum > 0) {
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setCurrentPage(pageNum)}
+                          className={`px-4 py-2 border border-gray-300 rounded-md text-sm sm:text-base ${
+                            currentPage === pageNum
+                              ? "bg-gray-800 text-white"
+                              : "text-gray-700 hover:bg-gray-50"
+                          } transition duration-200`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
                     }
-                    disabled={currentPage === totalPages}
-                    className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base disabled:opacity-50 hover:bg-gray-50 transition duration-200"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div className="relative">
-              {contextMenu && (
-                <div
-                  className="absolute bg-white border border-gray-300 rounded-lg shadow-sm p-2 z-50"
-                  style={{ top: contextMenu.y, left: contextMenu.x }}
-                >
-                  <button
-                    onClick={deleteRow}
-                    className="w-full text-left px-4 py-2 hover:bg-gray-50 text-gray-700 flex items-center"
-                  >
-                    <i className="fas fa-trash mr-2"></i> Delete
-                  </button>
-                </div>
+                    return null;
+                  })}
+                  {currentPage < totalPages - 2 && (
+                    <>
+                      {currentPage < totalPages - 3 && (
+                        <span className="px-4 py-2 text-gray-700">...</span>
+                      )}
+                      <button
+                        onClick={() => setCurrentPage(totalPages)}
+                        className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base hover:bg-gray-50 transition duration-200"
+                      >
+                        {totalPages}
+                      </button>
+                    </>
+                  )}
+                </>
               )}
+              <button
+                onClick={() =>
+                  setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                }
+                disabled={currentPage === totalPages}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 text-sm sm:text-base disabled:opacity-50 hover:bg-gray-50 transition duration-200"
+              >
+                Next
+              </button>
             </div>
-          </>
+          </div>
         )}
+
+        <div className="relative">
+          {contextMenu && (
+            <div
+              className="absolute bg-white border border-gray-300 rounded-lg shadow-sm p-2 z-50"
+              style={{ top: contextMenu.y, left: contextMenu.x }}
+            >
+              <button
+                onClick={deleteRow}
+                className="w-full text-left px-4 py-2 hover:bg-gray-50 text-gray-700 flex items-center"
+              >
+                <i className="fas fa-trash mr-2"></i> Delete
+              </button>
+            </div>
+          )}
+        </div>
       </>
     );
   };
@@ -1827,7 +1795,7 @@ const HomePage = ({
                   } transition duration-200`}
                 >
                   {i + 1}
-              </button>
+                </button>
               ))}
               <button
                 onClick={() =>
@@ -1901,13 +1869,16 @@ const HomePage = ({
                   setNewType("");
                   setLocalErrorMessage("");
                 }}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition duration-200"
+                className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
               >
                 Cancel
               </button>
               <button
-                onClick={handleAddType}
-                className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition duration-200"
+                onClick={() => {
+                  log("HomePage.jsx: Add Type submit button clicked");
+                  handleAddType();
+                }}
+                className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700"
               >
                 Add Type
               </button>
@@ -1920,3 +1891,4 @@ const HomePage = ({
 };
 
 export default HomePage;
+//what happening
