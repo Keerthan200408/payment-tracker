@@ -16,11 +16,15 @@ const PaymentsPage = ({ paymentsData, setPaymentsData, fetchClients, fetchPaymen
   });
   const [selectedYear, setSelectedYear] = useState(currentYear);
 
-  // Sync selectedYear with currentYear on mount or when currentYear changes
+  // Sync selectedYear with currentYear and fetch payments
   useEffect(() => {
     console.log('PaymentsPage.jsx: Syncing selectedYear to currentYear:', currentYear);
     setSelectedYear(currentYear);
-  }, [currentYear]);
+    if (sessionToken && currentYear) {
+      console.log('PaymentsPage.jsx: Fetching payments for year:', currentYear);
+      fetchPayments(sessionToken, currentYear);
+    }
+  }, [currentYear, sessionToken, fetchPayments]);
 
   // Function to search for user-specific years
 const searchUserYears = async (forceFetch = false) => {
@@ -166,18 +170,32 @@ const searchUserYears = async (forceFetch = false) => {
     currentPage * entriesPerPage
   );
 
+  const handleYearSelection = async (year) => {
+    console.log('PaymentsPage.jsx: handleYearSelection called with year:', year);
+    setSelectedYear(year);
+    setCurrentYear(year);
+    localStorage.setItem('currentYear', year);
+    if (typeof handleYearChange === 'function') {
+      console.log('PaymentsPage.jsx: Calling handleYearChange with:', year);
+      await handleYearChange(year);
+    }
+    if (sessionToken) {
+      console.log('PaymentsPage.jsx: Fetching payments for year:', year);
+      try {
+        await fetchPayments(sessionToken, year);
+      } catch (err) {
+        console.error('PaymentsPage.jsx: Error fetching payments for year:', year, err);
+      }
+    }
+  };
+
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       <h2 className="text-xl font-medium text-gray-700 mb-4">Payments</h2>
       <div className="mb-6">
         <select
           value={selectedYear}
-          onChange={(e) => {
-            const year = e.target.value;
-            console.log('PaymentsPage.jsx: Dropdown year changed to:', year);
-            setSelectedYear(year);
-            handleYearChange(year);
-          }}
+          onChange={(e) => handleYearSelection(e.target.value)}
           className="p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
         >
           {availableYears.map((year) => (
