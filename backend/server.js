@@ -578,7 +578,7 @@ app.put("/api/update-client", authenticateToken, async (req, res) => {
 });
 
 // Delete Client
-app.delete("/api/delete-client", authenticateToken, async (req, res) => {
+app.post("/api/delete-client", authenticateToken, async (req, res) => {
   let { Client_Name, Type } = req.body;
   if (!Client_Name || !Type) {
     return res.status(400).json({ error: "Client name and type are required" });

@@ -93,46 +93,23 @@ const ClientsPage = ({
     currentPage * entriesPerPage
   );
 
-const handleDelete = async (client) => {
+ const handleDelete = async (client) => {
   if (!confirm(`Are you sure you want to delete ${client.Client_Name}?`)) {
     return;
   }
 
   setDeleteInProgress(true);
   try {
-    console.log("Deleting client:", {
-      clientName: client.Client_Name,
-      type: client.Type,
-      token: sessionToken?.substring(0, 10) + "...",
-    });
-
-    const retryAxiosDelete = async (url, config, retries = 3, delay = 1000) => {
-      for (let i = 0; i < retries; i++) {
-        try {
-          return await axios.delete(url, config);
-        } catch (error) {
-          if (
-            (error.code === "ECONNABORTED" || error.message.includes("Network Error")) &&
-            i < retries - 1
-          ) {
-            console.log(`Retrying delete request (${i + 1}/${retries}) in ${delay}ms...`);
-            await new Promise((resolve) => setTimeout(resolve, delay));
-            delay *= 2; // Exponential backoff
-          } else {
-            throw error;
-          }
-        }
-      }
-    };
-
-    await retryAxiosDelete(`${BASE_URL}/delete-client`, {
+    console.log("Deleting client:", client.Client_Name);
+    await axios.post(`${BASE_URL}/delete-client`, {
+      Client_Name: client.Client_Name,
+      Type: client.Type,
+    }, {
       headers: {
-        Authorization: `Bearer ${sessionToken}`,
-        "Cache-Control": "no-cache",
-      },
-      data: { Client_Name: client.Client_Name, Type: client.Type },
-      timeout: 15000, // 15-second timeout
-    });
+      Authorization: `Bearer ${sessionToken}`,
+      "Content-Type": "application/json",
+    }
+});
 
     // Fetch updated clients with cache refresh
     const updatedClients = await fetchClients(sessionToken, true); // forceRefresh: true
@@ -149,17 +126,14 @@ const handleDelete = async (client) => {
     setSuccessMessage(`Client ${client.Client_Name} deleted successfully!`);
     setSearchQuery(""); // Clear search query to avoid stale filtered results
   } catch (error) {
-    console.error("Delete client error:", {
-      message: error.message,
-      response: error.response?.data,
-      status: error.response?.status,
-      clientName: client.Client_Name,
-      type: client.Type,
-    });
+    console.error(
+      "Delete client error:",
+      error.response?.data?.error || error.message
+    );
     setErrorMessage(
       `Failed to delete client: ${error.response?.data?.error || error.message}`
     );
-    await fetchClients(sessionToken, true); // Refresh even on error to ensure consistency
+    await fetchClients(sessionToken, true); // Refresh even on error
   } finally {
     setDeleteInProgress(false);
   }
