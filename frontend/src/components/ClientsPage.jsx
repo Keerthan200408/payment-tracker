@@ -108,17 +108,15 @@ const ClientsPage = ({
 
       console.log("Delete response:", response.data);
 
-      const updatedClients = clientsData.filter(
-        (c) => !(c.Client_Name === client.Client_Name && c.Type === client.Type)
-      );
-      setClientsData(updatedClients);
+      await fetchClients(sessionToken);
 
+      const newTotalClients = (await fetchClients(sessionToken)).length;
       const newTotalPages = Math.ceil(updatedClients.length / entriesPerPage);
       if (currentPage > newTotalPages && newTotalPages > 0) {
         setCurrentPage(newTotalPages);
       }
 
-      const refreshPromises = [fetchClients(sessionToken)];
+      const refreshPromises = [];
 
       if (fetchPayments.length >= 2) {
         refreshPromises.push(fetchPayments(sessionToken, currentYear));
@@ -132,12 +130,10 @@ const ClientsPage = ({
         "Delete client error:",
         error.response?.data?.error || error.message
       );
-      alert(
-        `Failed to delete client: ${
-          error.response?.data?.error || error.message
-        }`
-      );
 
+      setErrorMessage(
+        `Failed to delete client: ${error.response?.data?.error || error.message}`
+      );
       await fetchClients(sessionToken);
     } finally {
       setDeleteInProgress(false);

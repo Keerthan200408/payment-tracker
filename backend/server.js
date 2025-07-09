@@ -26,7 +26,7 @@ app.use(
   cors({
     origin: [
       "https://reliable-eclair-abf03c.netlify.app",
-      "http://localhost:5174",
+      "http://localhost:5173",
     ],
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -1770,7 +1770,7 @@ app.post("/api/send-whatsapp", authenticateToken, whatsappLimiter, async (req, r
 });
 
 // Start server
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5173;
 app.listen(PORT, async () => {
   try {
     await mongoClient.connect();
