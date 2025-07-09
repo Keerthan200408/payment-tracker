@@ -93,52 +93,49 @@ const ClientsPage = ({
     currentPage * entriesPerPage
   );
 
-  const handleDelete = async (client) => {
-    if (!confirm(`Are you sure you want to delete ${client.Client_Name}?`)) {
-      return;
+ const handleDelete = async (client) => {
+  if (!confirm(`Are you sure you want to delete ${client.Client_Name}?`)) {
+    return;
+  }
+
+  setDeleteInProgress(true);
+  try {
+    console.log("Deleting client:", client.Client_Name);
+    await axios.delete(`${BASE_URL}/delete-client`, {
+      headers: {
+        Authorization: `Bearer ${sessionToken}`,
+        "Cache-Control": "no-cache",
+      },
+      data: { Client_Name: client.Client_Name, Type: client.Type },
+    });
+
+    // Fetch updated clients with cache refresh
+    const updatedClients = await fetchClients(sessionToken, true); // forceRefresh: true
+
+    // Adjust current page
+    const newTotalPages = Math.ceil((updatedClients?.length || 0) / entriesPerPage);
+    if (currentPage > newTotalPages && newTotalPages > 0) {
+      setCurrentPage(newTotalPages);
     }
 
-    setDeleteInProgress(true);
-    try {
-      console.log("Deleting client:", client.Client_Name);
-      const response = await axios.delete(`${BASE_URL}/delete-client`, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-        data: { Client_Name: client.Client_Name, Type: client.Type },
-      });
+    // Fetch payments for the current year with cache refresh
+    await fetchPayments(sessionToken, currentYear, true); // forceRefresh: true
 
-      console.log("Delete response:", response.data);
-
-      await fetchClients(sessionToken);
-
-      const newTotalClients = (await fetchClients(sessionToken)).length;
-      const newTotalPages = Math.ceil(updatedClients.length / entriesPerPage);
-      if (currentPage > newTotalPages && newTotalPages > 0) {
-        setCurrentPage(newTotalPages);
-      }
-
-      const refreshPromises = [];
-
-      if (fetchPayments.length >= 2) {
-        refreshPromises.push(fetchPayments(sessionToken, currentYear));
-      } else {
-        refreshPromises.push(fetchPayments(sessionToken));
-      }
-
-      await Promise.all(refreshPromises);
-    } catch (error) {
-      console.error(
-        "Delete client error:",
-        error.response?.data?.error || error.message
-      );
-
-      setErrorMessage(
-        `Failed to delete client: ${error.response?.data?.error || error.message}`
-      );
-      await fetchClients(sessionToken);
-    } finally {
-      setDeleteInProgress(false);
-    }
-  };
+    setSuccessMessage(`Client ${client.Client_Name} deleted successfully!`);
+    setSearchQuery(""); // Clear search query to avoid stale filtered results
+  } catch (error) {
+    console.error(
+      "Delete client error:",
+      error.response?.data?.error || error.message
+    );
+    setErrorMessage(
+      `Failed to delete client: ${error.response?.data?.error || error.message}`
+    );
+    await fetchClients(sessionToken, true); // Refresh even on error
+  } finally {
+    setDeleteInProgress(false);
+  }
+};
 
   if (isLoading && (!clientsData || clientsData.length === 0)) {
     return (
