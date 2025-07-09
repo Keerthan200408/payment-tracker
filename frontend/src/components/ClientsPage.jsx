@@ -123,7 +123,6 @@ const ClientsPage = ({
     // Fetch payments for the current year with cache refresh
     await fetchPayments(sessionToken, currentYear, true); // forceRefresh: true
 
-    setSuccessMessage(`Client ${client.Client_Name} deleted successfully!`);
     setSearchQuery(""); // Clear search query to avoid stale filtered results
   } catch (error) {
     console.error(
