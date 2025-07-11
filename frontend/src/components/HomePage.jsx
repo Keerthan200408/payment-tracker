@@ -116,7 +116,7 @@ const calculateDuePayment = (rowData, months, currentYear) => {
     return 0;
   }
 
-  // Calculate total payments made
+  // Calculate current year's due payment
   const totalPaymentsMade = months.reduce((sum, month) => {
     const rawValue = sanitizedData[month];
     const payment = (rawValue === "" || rawValue === "0.00" || rawValue == null) ? 0 : parseFloat(rawValue);
@@ -129,7 +129,6 @@ const calculateDuePayment = (rowData, months, currentYear) => {
   }, 0);
 
   // Calculate active months (months with any value, not just positive payments)
-  // This matches the backend logic
   const activeMonths = months.filter((month) => {
     const rawValue = sanitizedData[month];
     return rawValue !== "" && rawValue !== null && rawValue !== undefined;
@@ -137,11 +136,19 @@ const calculateDuePayment = (rowData, months, currentYear) => {
 
   // Use active months for expected total (matches backend logic)
   const expectedTotal = activeMonths * amountToBePaid;
-  const due = Math.max(expectedTotal - totalPaymentsMade, 0);
+  const currentYearDue = Math.max(expectedTotal - totalPaymentsMade, 0);
   
-  log(`HomePage.jsx: calculateDuePayment: Expected = ${expectedTotal}, Total Paid = ${totalPaymentsMade}, Due_Payment = ${due}, Active Months = ${activeMonths}`);
+  // For cumulative calculation, use the existing Due_Payment from backend
+  // The backend already calculates cumulative dues including previous years
+  const existingDuePayment = parseFloat(rowData.Due_Payment) || 0;
   
-  return Math.round(due * 100) / 100;
+  // If the existing due payment is higher than current year due, it includes previous years
+  // Otherwise, use the current year due
+  const totalDue = existingDuePayment > currentYearDue ? existingDuePayment : currentYearDue;
+  
+  log(`HomePage.jsx: calculateDuePayment: Expected = ${expectedTotal}, Total Paid = ${totalPaymentsMade}, Current Year Due = ${currentYearDue}, Existing Due = ${existingDuePayment}, Total Due = ${totalDue}, Active Months = ${activeMonths}`);
+  
+  return Math.round(totalDue * 100) / 100;
 };
 
 
@@ -770,7 +777,6 @@ const handleYearChangeDebounced = useCallback(
     log("HomePage.jsx: Year change requested to:", year);
     
     // Clear existing states to prevent stale data
-    setPaymentsData([]);
     setLocalInputValues({});
     setPendingUpdates({});
     if (batchTimerRef.current) {
@@ -778,35 +784,18 @@ const handleYearChangeDebounced = useCallback(
       batchTimerRef.current = null;
     }
 
-    // Update currentYear and store in localStorage
-    localStorage.setItem("currentYear", year);
-    setCurrentYear(year);
-
-    if (sessionToken) {
-      setIsLoadingPayments(true);
-      log("HomePage.jsx: Fetching payments for year:", year);
-      
-      // Clear cache for the new year to ensure fresh data
-      const paymentsCacheKey = getCacheKey('/get-payments-by-year', {
-        year,
-        sessionToken,
-      });
-      delete apiCacheRef.current[paymentsCacheKey];
-
-      try {
-        await fetchPayments(sessionToken, year, true); // Force fetch to bypass cache
-        log(`HomePage.jsx: Payments fetched for year ${year}: ${paymentsData.length} items`);
-      } catch (error) {
-        log('HomePage.jsx: Error fetching payments for year:', year, error);
-        setLocalErrorMessage(
-          error.response?.data?.error || 'Failed to load payments data for the selected year.'
-        );
-      } finally {
-        setIsLoadingPayments(false);
-      }
+    // Use the parent's handleYearChange function to properly update the parent's state
+    if (handleYearChange) {
+      await handleYearChange(year);
+    } else {
+      // Fallback: update currentYear and localStorage
+      localStorage.setItem("currentYear", year);
+      setCurrentYear(year);
     }
+    
+    log("HomePage.jsx: Year change completed");
   }, 1000), // Increased from 300ms to 1000ms
-  [setCurrentYear, sessionToken, fetchPayments, getCacheKey, setPaymentsData, setLocalErrorMessage]
+  [setCurrentYear, handleYearChange, setLocalInputValues, setPendingUpdates]
 );
 
 const handleInputChange = useCallback(
@@ -956,6 +945,15 @@ const handleInputChange = useCallback(
     });
     setLocalInputValues((prev) => ({ ...prev, ...initialValues }));
   }, [paymentsData, months]);
+
+  // Clear local states when paymentsData changes (e.g., when year changes)
+  useEffect(() => {
+    if (paymentsData.length > 0) {
+      setLocalInputValues({});
+      setPendingUpdates({});
+      log(`HomePage.jsx: Cleared local states for new paymentsData with ${paymentsData.length} items`);
+    }
+  }, [paymentsData]);
 
   useEffect(() => {
     if (paymentsData?.length) {
