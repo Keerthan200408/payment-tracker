@@ -340,6 +340,12 @@ const validateRowData = (rowData, currentYear) => {
     const newYear = (parseInt(currentYear) + 1).toString();
     log(`HomePage.jsx: Attempting to add new year: ${newYear}`);
 
+    // Prevent multiple simultaneous requests
+    if (isLoadingYears) {
+      log("HomePage.jsx: Add new year request already in progress, skipping");
+      return;
+    }
+
     if (mountedRef.current) {
       setIsLoadingYears(true);
     }
@@ -347,6 +353,9 @@ const validateRowData = (rowData, currentYear) => {
     const controller = new AbortController();
 
     try {
+      // Add a small delay to ensure any previous requests are completed
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       const response = await yearsAPI.addNewYear({ year: newYear });
       log("HomePage.jsx: Add new year response:", response.data);
 
@@ -395,13 +404,25 @@ const validateRowData = (rowData, currentYear) => {
       log("HomePage.jsx: Error adding new year:", error);
       let errorMsg = error.response?.data?.error || "An unknown error occurred";
       let userMessage = `Failed to add new year: ${errorMsg}`;
-      if (errorMsg.includes("Please add or import payment data")) {
-        userMessage = "Please add or import payment data for the current year before adding a new year.";
-      } else if (errorMsg.includes("Sheet already exists")) {
-        userMessage = "This year already exists for your account.";
+      
+      // Handle specific error cases
+      if (errorMsg.includes("already exists")) {
+        userMessage = `Year ${newYear} already exists. Switching to ${newYear}...`;
+        // Automatically switch to the new year even if it already exists
+        setCurrentYear(newYear);
+        localStorage.setItem("currentYear", newYear);
+        setLocalErrorMessage("");
+        setErrorMessage("");
+        alert(userMessage);
+        return;
       } else if (errorMsg.includes("No clients found")) {
-        userMessage = "No clients found in the Clients sheet. Please add clients before creating a new year.";
+        userMessage = "No clients found. Please add clients before creating a new year.";
+      } else if (errorMsg.includes("Database connection failed") || errorMsg.includes("Database collections not accessible")) {
+        userMessage = "Database connection issue. Please try again in a few seconds.";
+      } else if (errorMsg.includes("Failed to fetch clients") || errorMsg.includes("Failed to insert payment records")) {
+        userMessage = "Database operation failed. Please try again.";
       }
+      
       setLocalErrorMessage(userMessage);
       setErrorMessage(userMessage);
       alert(userMessage);

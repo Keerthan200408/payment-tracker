@@ -647,19 +647,60 @@ app.post("/api/add-new-year", authenticateToken, asyncHandler(async (req, res) =
   }
   
   try {
+    // Ensure database connection is established
     const db = await database.getDb();
+    if (!db) {
+      throw new Error("Database connection failed");
+    }
+    
     const clientsCollection = database.getClientsCollection(username);
     const paymentsCollection = database.getPaymentsCollection(username);
     
-    // Get all clients
-    const clients = await clientsCollection.find({}).toArray();
+    // Verify collections exist and are accessible
+    if (!clientsCollection || !paymentsCollection) {
+      throw new Error("Database collections not accessible");
+    }
+    
+    // Get all clients with retry logic
+    let clients = [];
+    let retryCount = 0;
+    const maxRetries = 3;
+    
+    while (retryCount < maxRetries) {
+      try {
+        clients = await clientsCollection.find({}).toArray();
+        break;
+      } catch (error) {
+        retryCount++;
+        if (retryCount >= maxRetries) {
+          throw new Error(`Failed to fetch clients after ${maxRetries} attempts: ${error.message}`);
+        }
+        // Wait before retry
+        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+      }
+    }
     
     if (clients.length === 0) {
       throw new Error("No clients found. Please add clients first.");
     }
     
-    // Check if year already exists
-    const existingYear = await paymentsCollection.findOne({ Year: parseInt(year) });
+    // Check if year already exists with retry logic
+    let existingYear = null;
+    retryCount = 0;
+    
+    while (retryCount < maxRetries) {
+      try {
+        existingYear = await paymentsCollection.findOne({ Year: parseInt(year) });
+        break;
+      } catch (error) {
+        retryCount++;
+        if (retryCount >= maxRetries) {
+          throw new Error(`Failed to check existing year after ${maxRetries} attempts: ${error.message}`);
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+      }
+    }
+    
     if (existingYear) {
       throw new Error(`Year ${year} already exists`);
     }
@@ -675,7 +716,20 @@ app.post("/api/add-new-year", authenticateToken, asyncHandler(async (req, res) =
       )
     );
     
-    await paymentsCollection.insertMany(paymentDocs);
+    // Insert payment records with retry logic
+    retryCount = 0;
+    while (retryCount < maxRetries) {
+      try {
+        await paymentsCollection.insertMany(paymentDocs);
+        break;
+      } catch (error) {
+        retryCount++;
+        if (retryCount >= maxRetries) {
+          throw new Error(`Failed to insert payment records after ${maxRetries} attempts: ${error.message}`);
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+      }
+    }
     
     logger.client(`Added new year ${year} with ${paymentDocs.length} payment records`, username);
     res.status(config.statusCodes.CREATED).json({ 
