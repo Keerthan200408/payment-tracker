@@ -138,15 +138,12 @@ const calculateDuePayment = (rowData, months, currentYear) => {
   const expectedTotal = activeMonths * amountToBePaid;
   const currentYearDue = Math.max(expectedTotal - totalPaymentsMade, 0);
   
-  // For cumulative calculation, use the existing Due_Payment from backend
-  // The backend already calculates cumulative dues including previous years
-  const existingDuePayment = parseFloat(rowData.Due_Payment) || 0;
+  // For cumulative calculation, we need to get the previous year's due payment
+  // For now, we'll use the current year due as the backend will handle cumulative calculation
+  // The backend's processPaymentUpdate function handles the cumulative logic properly
+  const totalDue = currentYearDue;
   
-  // If the existing due payment is higher than current year due, it includes previous years
-  // Otherwise, use the current year due
-  const totalDue = existingDuePayment > currentYearDue ? existingDuePayment : currentYearDue;
-  
-  log(`HomePage.jsx: calculateDuePayment: Expected = ${expectedTotal}, Total Paid = ${totalPaymentsMade}, Current Year Due = ${currentYearDue}, Existing Due = ${existingDuePayment}, Total Due = ${totalDue}, Active Months = ${activeMonths}`);
+  log(`HomePage.jsx: calculateDuePayment: Expected = ${expectedTotal}, Total Paid = ${totalPaymentsMade}, Current Year Due = ${currentYearDue}, Total Due = ${totalDue}, Active Months = ${activeMonths}`);
   
   return Math.round(totalDue * 100) / 100;
 };
@@ -730,11 +727,22 @@ const validateRowData = (rowData, currentYear) => {
             setPaymentsData((prev) =>
               prev.map((row, idx) => {
                 if (idx !== rowIndex) return row;
-                return {
+                
+                // Preserve the real-time due payment calculation
+                // The backend response might have stale due payment data
+                const updatedRow = {
                   ...row,
                   ...response.data.updatedRow,
                   Email: row.Email || response.data.updatedRow.Email,
                 };
+                
+                // Recalculate due payment with current data to ensure accuracy
+                const recalculatedDue = calculateDuePayment(updatedRow, months, currentYear);
+                updatedRow.Due_Payment = recalculatedDue.toFixed(2);
+                
+                log(`HomePage.jsx: debouncedUpdate: Updated due payment for ${updatedRow.Client_Name || 'unknown'} to ${recalculatedDue}`);
+                
+                return updatedRow;
               })
             );
           }
@@ -768,7 +776,7 @@ const validateRowData = (rowData, currentYear) => {
         delete debounceTimersRef.current[key];
       }, 1000); // Simple 1 second delay
     },
-    [paymentsData, setErrorMessage, setPaymentsData, currentYear]
+    [paymentsData, setErrorMessage, setPaymentsData, currentYear, months, calculateDuePayment]
   );
   
 
