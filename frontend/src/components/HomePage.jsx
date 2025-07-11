@@ -21,8 +21,8 @@ import usePerformanceMonitor from '../hooks/usePerformanceMonitor';
 import useBatchOperations from '../hooks/useBatchOperations';
 import apiCacheManager from '../utils/apiCache';
 import PerformanceDashboard from './PerformanceDashboard.jsx';
-const BATCH_DELAY = 1000;
-const BATCH_SIZE = 5;
+const BATCH_DELAY = 3000; // Increased from 1000 to 3000ms
+const BATCH_SIZE = 3; // Reduced from 5 to 3
 const CACHE_DURATION = 5 * 60 * 1000;
 
 // Conditional logging for production
@@ -92,10 +92,10 @@ const HomePage = ({
 
   // Batch operations hook
   const batchOperations = useBatchOperations({
-    maxBatchSize: 5, // Reduced from 10 to prevent server overload
-    batchDelay: 3000, // Increased from 2000 to give more time between batches
-    retryAttempts: 2, // Reduced from 3 to prevent too many retries
-    retryDelay: 2000, // Increased from 1000 to give more time between retries
+    maxBatchSize: 3, // Reduced from 5 to prevent server overload
+    batchDelay: 5000, // Increased from 3000 to 5000ms to give more time between batches
+    retryAttempts: 1, // Reduced from 2 to prevent too many retries
+    retryDelay: 3000, // Increased from 2000 to give more time between retries
     onBatchComplete: ({ completedCount, failedCount, errors }) => {
       if (completedCount > 0) {
         showToast(`Successfully updated ${completedCount} payments`, 'success');
@@ -796,6 +796,7 @@ const validateRowData = (rowData, currentYear) => {
 
       const key = `${rowIndex}-${month}`;
       
+      // Clear any existing timer for this key
       if (debounceTimersRef.current[key]) {
         clearTimeout(debounceTimersRef.current[key]);
       }
@@ -805,18 +806,17 @@ const validateRowData = (rowData, currentYear) => {
         [key]: true,
       }));
 
+      // Use a much longer debounce delay to prevent rapid API calls
       debounceTimersRef.current[key] = setTimeout(() => {
-        // Add a small delay to prevent rapid API calls
-        setTimeout(() => {
-          // Check if there are too many pending operations
-          if (batchOperations.pendingCount > 20) {
-            log("HomePage.jsx: Too many pending operations, skipping this update");
-            setErrorMessage("Too many pending updates. Please wait for current operations to complete.");
-            return;
-          }
-          
-          // Use the batch operations hook instead of manual queue
-          batchOperations.addToBatch({
+        // Check if there are too many pending operations
+        if (batchOperations.pendingCount > 5) { // Reduced from 10 to 5
+          log("HomePage.jsx: Too many pending operations, skipping this update");
+          setErrorMessage("Too many pending updates. Please wait for current operations to complete.");
+          return;
+        }
+        
+        // Use the batch operations hook instead of manual queue
+        batchOperations.addToBatch({
           id: key,
           execute: async () => {
             const startTime = performance.now();
@@ -878,13 +878,12 @@ const validateRowData = (rowData, currentYear) => {
 
         log("HomePage.jsx: Added to batch:", { rowIndex, month, value, year });
         delete debounceTimersRef.current[key];
-        }, 100); // Small delay to prevent rapid API calls
-      }, 600);
+        }, 2000); // Increased from 100ms to 2000ms to prevent rapid API calls
+      }, 2000); // Increased from 600ms to 2000ms
     },
-    [paymentsData, setErrorMessage, batchOperations, performanceMonitor, setPaymentsData, setErrorMessage]
+    [paymentsData, setErrorMessage, batchOperations, performanceMonitor, setPaymentsData]
   );
-
- const handleYearChangeDebounced = useCallback(
+const handleYearChangeDebounced = useCallback(
   debounce(async (year) => {
     log("HomePage.jsx: Year change requested to:", year);
     
@@ -925,7 +924,7 @@ const validateRowData = (rowData, currentYear) => {
         setIsLoadingPayments(false);
       }
     }
-  }, 300),
+  }, 1000), // Increased from 300ms to 1000ms
   [setCurrentYear, sessionToken, fetchPayments, getCacheKey, setPaymentsData, setLocalErrorMessage]
 );
 
@@ -963,8 +962,11 @@ const handleInputChange = useCallback(
       return newData;
     });
 
-    // Queue backend update (debounced)
-    debouncedUpdate(rowIndex, month, parsedValue, currentYear);
+    // Queue backend update (debounced) - only if value actually changed
+    const currentValue = paymentsData[rowIndex]?.[month] || "";
+    if (trimmedValue !== currentValue) {
+      debouncedUpdate(rowIndex, month, parsedValue, currentYear);
+    }
   },
   [debouncedUpdate, paymentsData, currentYear, setPaymentsData, setErrorMessage, months, calculateDuePayment]
 );
@@ -975,6 +977,12 @@ const handleInputChange = useCallback(
   useEffect(() => {
   const loadPaymentsData = async () => {
     if (!sessionToken || !currentYear) return;
+
+    // Prevent multiple simultaneous loads
+    if (isLoadingPayments) {
+      log("HomePage.jsx: Already loading payments, skipping");
+      return;
+    }
 
     setIsLoadingPayments(true);
     log(`HomePage.jsx: Fetching payments for year ${currentYear} due to refreshTrigger: ${refreshTrigger}`);
@@ -1007,8 +1015,8 @@ const handleInputChange = useCallback(
         {
           forceRefresh,
           cacheDuration: 5 * 60 * 1000, // 5 minutes
-          retries: 3,
-          retryDelay: 1000
+          retries: 2, // Reduced from 3 to 2
+          retryDelay: 2000 // Increased from 1000 to 2000ms
         }
       );
 
@@ -1035,8 +1043,13 @@ const handleInputChange = useCallback(
     }
   };
 
-  loadPaymentsData();
-}, [sessionToken, currentYear, fetchPayments, setPaymentsData, refreshTrigger, lastRefreshTrigger, setLocalErrorMessage, currentUser, performanceMonitor]);
+  // Add a small delay to prevent rapid successive calls
+  const timeoutId = setTimeout(() => {
+    loadPaymentsData();
+  }, 100);
+
+  return () => clearTimeout(timeoutId);
+}, [sessionToken, currentYear, fetchPayments, setPaymentsData, refreshTrigger, lastRefreshTrigger, setLocalErrorMessage, currentUser, performanceMonitor, isLoadingPayments]);
 
   useEffect(() => {
     onMount();
