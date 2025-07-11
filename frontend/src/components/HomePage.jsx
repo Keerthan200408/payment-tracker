@@ -707,16 +707,17 @@ const validateRowData = (rowData, currentYear) => {
           
           // Ensure currentYear is valid
           if (!currentYear || currentYear === 'undefined' || currentYear === 'null') {
+            log(`HomePage.jsx: Invalid currentYear: ${currentYear}, type: ${typeof currentYear}`);
             throw new Error(`Invalid year: ${currentYear}`);
           }
           
+          log(`HomePage.jsx: Making API call with year: ${currentYear}`);
           const response = await paymentsAPI.savePayment({
             clientName: originalRow.Client_Name,
             type: originalRow.Type,
             month: month.toLowerCase(),
-            value: value || "",
-            year: currentYear
-          });
+            value: value || ""
+          }, currentYear);
           
           if (response.data.updatedRow) {
             setPaymentsData((prev) =>
