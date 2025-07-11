@@ -165,40 +165,8 @@ const fetchTypes = async (token) => {
   return () => clearTimeout(timeoutId);
 }, [sessionToken, currentUser]); // Add currentUser as dependency
 
-  // Set axios defaults
-  useEffect(() => {
-    axios.defaults.withCredentials = true;
-
-    // Set up Axios interceptor
-    const interceptor = axios.interceptors.response.use(
-      (response) => response,
-      async (error) => {
-        const originalRequest = error.config;
-        if (error.response?.status === 403 && !originalRequest._retry) {
-          originalRequest._retry = true;
-          try {
-            const storedToken = localStorage.getItem("sessionToken");
-                    const response = await authAPI.refreshToken();
-            const { sessionToken: newToken } = response.data;
-            localStorage.setItem("sessionToken", newToken);
-            setSessionToken(newToken);
-            originalRequest.headers.Authorization = `Bearer ${newToken}`;
-            return axios(originalRequest);
-          } catch (refreshError) {
-            console.error("Token refresh failed:", refreshError);
-            logout();
-            return Promise.reject(refreshError);
-          }
-        }
-        return Promise.reject(error);
-      }
-    );
-
-    // Cleanup interceptor on unmount
-    return () => {
-      axios.interceptors.response.eject(interceptor);
-    };
-  }, []);
+  // Note: Axios interceptors are now handled in the centralized API configuration
+  // No need for additional axios setup here
 
   useEffect(() => {
   return () => {
