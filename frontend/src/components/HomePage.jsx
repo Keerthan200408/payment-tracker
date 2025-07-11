@@ -523,33 +523,29 @@ const validateRowData = (rowData, currentYear) => {
               year 
             });
 
-const { updatedRow } = response.data;
+const { updatedPayments } = response.data;
 
-// Recalculate Due_Payment to ensure correctness
-const recalculatedDuePayment = calculateDuePayment(
-  { ...updatedRow, Client_Name: clientName, Type: type },
-  months,
-  currentYear
+// Find the updated payment for this specific client and type
+const updatedPayment = updatedPayments.find(payment => 
+  payment.Client_Name === clientName && payment.Type === type
 );
+
+if (!updatedPayment) {
+  throw new Error(`No updated payment found for ${clientName} (${type})`);
+}
 
 // Log for debugging
 log(`HomePage.jsx: Backend response for ${clientName}`, {
-  Backend_Due_Payment: updatedRow.Due_Payment,
-  Recalculated_Due_Payment: recalculatedDuePayment,
+  Backend_Due_Payment: updatedPayment.Due_Payment,
   Year: year,
   Updates: updates.map(u => `${u.month}: ${u.value}`)
 });
 
-// Always use recalculated value
+// Use the backend's calculated due payment
 const correctedRow = {
-  ...updatedRow,
-  Due_Payment: recalculatedDuePayment.toFixed(2)
+  ...updatedPayment,
+  Due_Payment: updatedPayment.Due_Payment
 };
-
-// Validate backend response
-if (Math.abs(parseFloat(updatedRow.Due_Payment) - recalculatedDuePayment) > 0.01) {
-  log(`HomePage.jsx: Backend Due_Payment mismatch for ${clientName}: Backend = ${updatedRow.Due_Payment}, Frontend = ${recalculatedDuePayment}`);
-}
 
 const notifyStatuses = updates.map(({ month, value }) => {
   const paidAmount = parseFloat(value) || 0;
@@ -573,7 +569,7 @@ if (clientEmail || clientPhone) {
     type,
     year,
     notifyStatuses,
-    recalculatedDuePayment.toFixed(2)
+    updatedPayment.Due_Payment
   );
 }
 
@@ -628,18 +624,18 @@ return {
                   Amount_To_Be_Paid: updatedRow.Amount_To_Be_Paid,
                   Email: updatedRow.Email,
                   Phone_Number: updatedRow.Phone_Number,
-                  January: updatedRow.january || "",
-                  February: updatedRow.february || "",
-                  March: updatedRow.march || "",
-                  April: updatedRow.april || "",
-                  May: updatedRow.may || "",
-                  June: updatedRow.june || "",
-                  July: updatedRow.july || "",
-                  August: updatedRow.august || "",
-                  September: updatedRow.september || "",
-                  October: updatedRow.october || "",
-                  November: updatedRow.november || "",
-                  December: updatedRow.december || "",
+                  January: updatedRow.January || "",
+                  February: updatedRow.February || "",
+                  March: updatedRow.March || "",
+                  April: updatedRow.April || "",
+                  May: updatedRow.May || "",
+                  June: updatedRow.June || "",
+                  July: updatedRow.July || "",
+                  August: updatedRow.August || "",
+                  September: updatedRow.September || "",
+                  October: updatedRow.October || "",
+                  November: updatedRow.November || "",
+                  December: updatedRow.December || "",
                   Due_Payment: updatedRow.Due_Payment
                 };
                 
@@ -668,7 +664,7 @@ return {
               updates.forEach(({ month }) => {
                 const originalMonth = month.charAt(0).toUpperCase() + month.slice(1);
                 const key = `${rowIndex}-${originalMonth}`;
-                newValues[key] = updatedRow[month] || "";
+                newValues[key] = updatedRow[originalMonth] || "";
               });
             });
             return newValues;

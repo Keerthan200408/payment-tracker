@@ -749,9 +749,53 @@ app.post("/api/batch-save-payments", authenticateToken, paymentLimiter, asyncHan
       year 
     });
     
+    // Get the updated payment data to return with recalculated due payment
+    const updatedPayments = [];
+    for (const payment of payments) {
+      const { clientName, type } = payment;
+      
+      const updatedPayment = await paymentsCollection.findOne({ 
+        Client_Name: clientName, 
+        Type: type, 
+        Year: parseInt(year) 
+      });
+      
+      if (updatedPayment) {
+        // Recalculate due payment
+        const duePayment = calculateDuePayment(updatedPayment);
+        
+        // Format the response to match frontend expectations
+        const formattedPayment = {
+          Client_Name: updatedPayment.Client_Name,
+          Type: updatedPayment.Type,
+          Amount_To_Be_Paid: updatedPayment.Amount_To_Be_Paid,
+          Email: updatedPayment.Email,
+          Phone_Number: updatedPayment.Phone_Number,
+          Due_Payment: duePayment.toFixed(2),
+          Year: updatedPayment.Year,
+          // Add individual month fields
+          January: updatedPayment.Payments?.January || "",
+          February: updatedPayment.Payments?.February || "",
+          March: updatedPayment.Payments?.March || "",
+          April: updatedPayment.Payments?.April || "",
+          May: updatedPayment.Payments?.May || "",
+          June: updatedPayment.Payments?.June || "",
+          July: updatedPayment.Payments?.July || "",
+          August: updatedPayment.Payments?.August || "",
+          September: updatedPayment.Payments?.September || "",
+          October: updatedPayment.Payments?.October || "",
+          November: updatedPayment.Payments?.November || "",
+          December: updatedPayment.Payments?.December || "",
+        };
+        
+        updatedPayments.push(formattedPayment);
+      }
+    }
+    
     res.json({ 
       message: "Batch payments updated successfully",
-      modifiedCount: result.modifiedCount
+      modifiedCount: result.modifiedCount,
+      updatedPayments: updatedPayments
     });
   } catch (error) {
     logger.error("Batch save payments error", error, { username, year });
