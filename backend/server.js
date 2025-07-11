@@ -18,9 +18,17 @@ const {
   sanitizeClientName, 
   sanitizeType, 
   validatePaymentAmount,
-  sanitizeHtmlContent 
+  sanitizeHtmlContent,
+  validateInput 
 } = require("./utils/sanitize");
 const logger = require("./utils/logger");
+const {
+  calculateDuePayment,
+  processPaymentUpdate,
+  createPaymentDocument,
+  isValidPaymentAmount,
+  getMonthKey
+} = require("./utils/paymentCalculations");
 
 const app = express();
 
