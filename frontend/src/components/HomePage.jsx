@@ -100,6 +100,7 @@ const calculateDuePayment = (rowData, months, currentYear) => {
     return 0;
   }
 
+  // Calculate total payments made
   const totalPaymentsMade = months.reduce((sum, month) => {
     const rawValue = sanitizedData[month];
     const payment = (rawValue === "" || rawValue === "0.00" || rawValue == null) ? 0 : parseFloat(rawValue);
@@ -111,18 +112,18 @@ const calculateDuePayment = (rowData, months, currentYear) => {
     return sum + payment;
   }, 0);
 
-  // Calculate active months (months with non-zero payments)
+  // Calculate active months (months with any value, not just positive payments)
+  // This matches the backend logic
   const activeMonths = months.filter((month) => {
     const rawValue = sanitizedData[month];
-    const payment = (rawValue === "" || rawValue === "0.00" || rawValue == null) ? 0 : parseFloat(rawValue);
-    return !isNaN(payment) && payment > 0;
+    return rawValue !== "" && rawValue !== null && rawValue !== undefined;
   }).length;
 
-  // Use active months for expected total
-  const expectedTotal = activeMonths > 0 ? amountToBePaid * activeMonths : 0;
+  // Use active months for expected total (matches backend logic)
+  const expectedTotal = activeMonths * amountToBePaid;
   const due = Math.max(expectedTotal - totalPaymentsMade, 0);
   
-  log(`HomePage.jsx: calculateDuePayment: Expected = ${expectedTotal}, Total Paid = ${totalPaymentsMade}, Due_Payment = ${due}`);
+  log(`HomePage.jsx: calculateDuePayment: Expected = ${expectedTotal}, Total Paid = ${totalPaymentsMade}, Due_Payment = ${due}, Active Months = ${activeMonths}`);
   
   return Math.round(due * 100) / 100;
 };
@@ -1034,11 +1035,13 @@ const handleInputChange = useCallback(
       [key]: trimmedValue,
     }));
 
-    // Recalculate Due_Payment for full row before update
+    // Create updated row with new value
     const updatedRow = { ...paymentsData[rowIndex], [month]: parsedValue };
+    
+    // Recalculate Due_Payment using the same logic as backend
     const recalculatedDue = calculateDuePayment(updatedRow, months, currentYear);
 
-    // Update the frontend view immediately
+    // Update the frontend view immediately with new due payment
     setPaymentsData((prev) => {
       const newData = [...prev];
       newData[rowIndex] = {
@@ -1046,24 +1049,14 @@ const handleInputChange = useCallback(
         [month]: trimmedValue, // Use trimmedValue for UI consistency
         Due_Payment: recalculatedDue.toFixed(2),
       };
-      log(`HomePage.jsx: handleInputChange: Optimistic update for ${newData[rowIndex].Client_Name || 'unknown'}, ${month} = ${trimmedValue}, Due_Payment = ${recalculatedDue}`);
+      log(`HomePage.jsx: handleInputChange: Real-time update for ${newData[rowIndex].Client_Name || 'unknown'}, ${month} = ${trimmedValue}, Due_Payment = ${recalculatedDue}`);
       return newData;
     });
 
-    // Backend update
-    updatePayment(
-      rowIndex,
-      month,
-      parsedValue, // Send parsedValue as a string number (e.g., "0" or "1000")
-      currentYear,
-      paymentsData,
-      setPaymentsData,
-      setErrorMessage,
-      sessionToken,
-      saveTimeouts
-    );
+    // Queue backend update (debounced)
+    debouncedUpdate(rowIndex, month, parsedValue, currentYear);
   },
-  [updatePayment, paymentsData, currentYear, sessionToken, setPaymentsData, setErrorMessage, months]
+  [debouncedUpdate, paymentsData, currentYear, setPaymentsData, setErrorMessage, months, calculateDuePayment]
 );
 
 
