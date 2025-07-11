@@ -1,13 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import axios from "axios";
 import SignInPage from "./components/SignInPage.jsx";
 import HomePage from "./components/HomePage.jsx";
 import AddClientPage from "./components/AddClientPage.jsx";
 import ClientsPage from "./components/ClientsPage.jsx";
 import PaymentsPage from "./components/PaymentsPage.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
-
-const BASE_URL = "https://payment-tracker-aswa.onrender.com/api";
+import { 
+  authAPI, 
+  clientsAPI, 
+  paymentsAPI, 
+  typesAPI, 
+  importAPI,
+  handleAPIError 
+} from './utils/api';
 
 const App = () => {
   const [sessionToken, setSessionToken] = useState(null);
@@ -63,9 +68,7 @@ const App = () => {
   
   // Invalidate token on backend (fire and forget)
   if (sessionToken) {
-    axios.post(`${BASE_URL}/logout`, {}, {
-      headers: { Authorization: `Bearer ${sessionToken}` },
-    }).catch(error => {
+    authAPI.logout().catch(error => {
       console.error("Logout API error:", error.message);
     });
   }
@@ -123,10 +126,7 @@ const fetchTypes = async (token) => {
     try {
       console.log(`App.jsx: Fetching types for ${currentUser} with token:`, token?.substring(0, 10) + "...");
       
-      const response = await axios.get(`${BASE_URL}/get-types`, {
-        headers: { Authorization: `Bearer ${token}` },
-        timeout: 10000,
-      });
+      const response = await typesAPI.getTypes();
       
       const typesData = Array.isArray(response.data) ? response.data : [];
       console.log(`App.jsx: Types fetched for ${currentUser}:`, typesData);
@@ -178,14 +178,7 @@ const fetchTypes = async (token) => {
           originalRequest._retry = true;
           try {
             const storedToken = localStorage.getItem("sessionToken");
-            const response = await axios.post(
-              `${BASE_URL}/refresh-token`,
-              {},
-              {
-                headers: { Authorization: `Bearer ${storedToken}` },
-                withCredentials: true,
-              }
-            );
+                    const response = await authAPI.refreshToken();
             const { sessionToken: newToken } = response.data;
             localStorage.setItem("sessionToken", newToken);
             setSessionToken(newToken);
@@ -331,10 +324,7 @@ const fetchClients = async (token, forceRefresh = false) => {
   const requestPromise = (async () => {
     try {
       console.log("Fetching clients with token:", token?.substring(0, 10) + "...");
-      const response = await axios.get(`${BASE_URL}/get-clients`, {
-        headers: { Authorization: `Bearer ${token}` },
-        timeout: 10000,
-      });
+      const response = await clientsAPI.getClients();
       
       console.log("Clients fetched:", response.data);
       const clientsData = Array.isArray(response.data) ? response.data : [];
@@ -401,11 +391,7 @@ const fetchPayments = async (token, year, forceRefresh = false) => {
   const requestPromise = (async () => {
     try {
       console.log(`Fetching payments for ${year} with token:`, token?.substring(0, 10) + "...");
-      const response = await axios.get(`${BASE_URL}/get-payments-by-year`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params: { year },
-        timeout: 10000,
-      });
+      const response = await paymentsAPI.getPaymentsByYear(year);
 
       const data = Array.isArray(response.data) ? response.data : [];
       console.log(`Fetched payments for ${year}:`, data);
@@ -470,9 +456,9 @@ const fetchPayments = async (token, year, forceRefresh = false) => {
     if (!rowData) return;
     try {
       console.log("Deleting row:", rowData.Client_Name, rowData.Type);
-      await axios.delete(`${BASE_URL}/delete-client`, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-        data: { Client_Name: rowData.Client_Name, Type: rowData.Type },
+      await clientsAPI.deleteClient({ 
+        clientName: rowData.Client_Name, 
+        type: rowData.Type 
       });
       // Optimistic updates after successful deletion
       setPaymentsData(
@@ -631,12 +617,7 @@ const importCsv = async (e) => {
     
     try {
       const response = await retryWithBackoff(
-        () =>
-          axios.post(`${BASE_URL}/import-csv`, records, {
-            headers: { Authorization: `Bearer ${sessionToken}` },
-            params: { year: currentYear },
-            timeout: 60000, // Increased timeout for large imports
-          }),
+        () => importAPI.importCSV({ records }),
         3,
         1000
       );
@@ -800,15 +781,7 @@ const updatePayment = async (
   const savePaymentWithRetry = async (payload, retries = 3, delayMs = 1000) => {
     for (let i = 0; i < retries; i++) {
       try {
-        const response = await axios.post(
-          `${BASE_URL}/save-payment`,
-          payload,
-          {
-            headers: { Authorization: `Bearer ${sessionToken}` },
-            params: { year },
-            timeout: 10000,
-          }
-        );
+        const response = await paymentsAPI.savePayment(payload, year);
         return response.data;
       } catch (error) {
         if (

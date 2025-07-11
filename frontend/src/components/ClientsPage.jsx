@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import axios from "axios";
-
-const BASE_URL = "https://payment-tracker-aswa.onrender.com/api";
+import { clientsAPI, handleAPIError } from '../utils/api';
 
 const ClientsPage = ({
   clientsData,
@@ -101,15 +99,10 @@ const ClientsPage = ({
   setDeleteInProgress(true);
   try {
     console.log("Deleting client:", client.Client_Name);
-    await axios.post(`${BASE_URL}/delete-client`, {
-      Client_Name: client.Client_Name,
-      Type: client.Type,
-    }, {
-      headers: {
-      Authorization: `Bearer ${sessionToken}`,
-      "Content-Type": "application/json",
-    }
-});
+    await clientsAPI.deleteClient({
+      clientName: client.Client_Name,
+      type: client.Type,
+    });
 
     // Fetch updated clients with cache refresh
     const updatedClients = await fetchClients(sessionToken, true); // forceRefresh: true
@@ -125,13 +118,7 @@ const ClientsPage = ({
 
     setSearchQuery(""); // Clear search query to avoid stale filtered results
   } catch (error) {
-    console.error(
-      "Delete client error:",
-      error.response?.data?.error || error.message
-    );
-    setErrorMessage(
-      `Failed to delete client: ${error.response?.data?.error || error.message}`
-    );
+    handleAPIError(error, setErrorMessage);
     await fetchClients(sessionToken, true); // Refresh even on error
   } finally {
     setDeleteInProgress(false);

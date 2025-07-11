@@ -5,10 +5,15 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
-import axios from "axios";
 import { debounce } from "lodash";
-
-const BASE_URL = "https://payment-tracker-aswa.onrender.com/api";
+import { 
+  yearsAPI, 
+  typesAPI, 
+  paymentsAPI, 
+  communicationAPI, 
+  importAPI,
+  handleAPIError 
+} from '../utils/api';
 const BATCH_DELAY = 1000;
 const BATCH_SIZE = 5;
 const CACHE_DURATION = 5 * 60 * 1000;
@@ -296,12 +301,7 @@ const validateRowData = (rowData, currentYear) => {
         log("HomePage.jsx: Fetching user-specific years from API");
 
         try {
-          const response = await axios.get(`${BASE_URL}/get-user-years`, {
-            headers: { Authorization: `Bearer ${sessionToken}` },
-            timeout: 10000,
-            signal: abortSignal,
-          });
-
+          const response = await yearsAPI.getUserYears();
           const years = Array.isArray(response.data) ? response.data : ["2025"];
           setAvailableYears(years);
           setCachedData(cacheKey, years);
@@ -312,14 +312,7 @@ const validateRowData = (rowData, currentYear) => {
             return;
           }
           log('HomePage.jsx: Error fetching user years:', error);
-          const errorMsg = error.response?.data?.error || error.message;
-          let userMessage = 'Failed to fetch available years. Defaulting to current year.';
-          if (errorMsg.includes('Sheet not found')) {
-            userMessage = 'No payment data found. Defaulting to current year.';
-          } else if (errorMsg.includes('Quota exceeded')) {
-            userMessage = 'Server is busy. Defaulting to current year.';
-          }
-          setLocalErrorMessage(userMessage);
+          handleAPIError(error, setLocalErrorMessage);
           setAvailableYears([new Date().getFullYear().toString()]);
         } finally {
           if (mountedRef.current) {
@@ -353,15 +346,7 @@ const validateRowData = (rowData, currentYear) => {
     const controller = new AbortController();
 
     try {
-      const response = await axios.post(
-        `${BASE_URL}/add-new-year`,
-        { year: newYear },
-        {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-          timeout: 10000,
-          signal: controller.signal,
-        }
-      );
+      const response = await yearsAPI.addNewYear({ year: newYear });
       log("HomePage.jsx: Add new year response:", response.data);
 
       const yearsCacheKey = getCacheKey("/get-user-years", { sessionToken });
@@ -371,19 +356,10 @@ const validateRowData = (rowData, currentYear) => {
 
       await searchUserYears(controller.signal);
 
-      const clientsResponse = await axios.get(`${BASE_URL}/get-clients`, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-        timeout: 10000,
-        signal: controller.signal,
-      });
+      const clientsResponse = await clientsAPI.getClients();
       const expectedClientCount = clientsResponse.data.length;
 
-      const paymentsResponse = await axios.get(`${BASE_URL}/get-payments-by-year`, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-        params: { year: newYear },
-        timeout: 10000,
-        signal: controller.signal,
-      });
+      const paymentsResponse = await paymentsAPI.getPaymentsByYear(newYear);
 
       const paymentsData = paymentsResponse.data || [];
       setPaymentsData(paymentsData);
@@ -536,19 +512,15 @@ const validateRowData = (rowData, currentYear) => {
           const { rowIndex, year, updates, clientName, type, clientEmail, clientPhone, rowData } = rowUpdate;
           try {
             log(`HomePage.jsx: Sending batch update for ${clientName}, year ${year}`, updates);
-            const response = await axios.post(
-  `${BASE_URL}/batch-save-payments`,
-  { clientName, type, updates },
-  {
-    headers: { 
-      Authorization: `Bearer ${sessionToken}`,
-      'Content-Type': 'application/json'
-    },
-    params: { year },
-    timeout: 8000,
-    validateStatus: (status) => status < 500,
-  }
-);
+            const response = await paymentsAPI.batchSavePayments({ 
+              payments: updates.map(update => ({
+                clientName,
+                type,
+                month: update.month,
+                value: update.value
+              })),
+              year 
+            });
 
 const { updatedRow } = response.data;
 
@@ -783,14 +755,9 @@ return {
 
         try {
           log(`HomePage.jsx: Verifying WhatsApp for ${clientPhone}`);
-          const verifyResponse = await axios.post(
-            `${BASE_URL}/verify-whatsapp-contact`,
-            { phone: clientPhone.trim() },
-            {
-              headers: { Authorization: `Bearer ${sessionToken}` },
-              timeout: 5000,
-            }
-          );
+          const verifyResponse = await communicationAPI.verifyWhatsAppContact({
+            phoneNumber: clientPhone.trim()
+          });
 
           if (!verifyResponse.data.isValidWhatsApp) {
             log(`HomePage.jsx: ${clientPhone} is not registered with WhatsApp`);
@@ -826,17 +793,10 @@ return {
               .join("\n")}${duePaymentText}\n\nPlease review your account or contact us for clarifications.\nBest regards,\nPayment Tracker Team`;
 
             log(`HomePage.jsx: Sending WhatsApp to ${clientPhone}`);
-            const response = await axios.post(
-              `${BASE_URL}/send-whatsapp`,
-              {
-                to: clientPhone.trim(),
-                message: messageContent,
-              },
-              {
-                headers: { Authorization: `Bearer ${sessionToken}` },
-                timeout: 10000,
-              }
-            );
+            const response = await communicationAPI.sendWhatsApp({
+              to: clientPhone.trim(),
+              message: messageContent,
+            });
 
             log(`HomePage.jsx: WhatsApp sent successfully to ${clientPhone} for ${clientName}`, {
               messageId: response.data.messageId || "N/A",
@@ -912,18 +872,11 @@ return {
           `;
 
           log(`HomePage.jsx: Sending email to ${clientEmail} for ${clientName}`);
-          const response = await axios.post(
-            `${BASE_URL}/send-email`,
-            {
-              to: clientEmail.trim(),
-              subject: `Payment Status Update - ${clientName} (${type}) - ${year}`,
-              html: emailContent,
-            },
-            {
-              headers: { Authorization: `Bearer ${sessionToken}` },
-              timeout: 10000,
-            }
-          );
+          const response = await communicationAPI.sendEmail({
+            to: clientEmail.trim(),
+            subject: `Payment Status Update - ${clientName} (${type}) - ${year}`,
+            html: emailContent,
+          });
 
           log(`HomePage.jsx: Email sent successfully to ${clientEmail} for ${clientName}`, {
             messageId: response.data.messageId || "N/A",
@@ -1268,15 +1221,7 @@ const handleInputChange = useCallback(
     const capitalizedType = newType.trim().toUpperCase();
     try {
       const response = await retryWithBackoff(
-        () =>
-          axios.post(
-            `${BASE_URL}/add-type`,
-            { type: capitalizedType },
-            {
-              headers: { Authorization: `Bearer ${sessionToken}` },
-              timeout: 5000,
-            }
-          ),
+        () => typesAPI.addType({ type: capitalizedType }),
         3,
         1000
       );
