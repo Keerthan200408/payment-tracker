@@ -165,10 +165,10 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(config.rateLimit.global);
-app.use("/api/save-payment", config.rateLimit.payment);
-app.use("/api/batch-save-payments", config.rateLimit.payment);
-app.use("/api/send-whatsapp", config.rateLimit.whatsapp);
+app.use(rateLimit(config.rateLimit.global));
+app.use("/api/save-payment", rateLimit(config.rateLimit.payment));
+app.use("/api/batch-save-payments", rateLimit(config.rateLimit.payment));
+app.use("/api/send-whatsapp", rateLimit(config.rateLimit.whatsapp));
 
 app.use(cookieParser());
 app.use(express.json());
