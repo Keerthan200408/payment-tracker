@@ -18,7 +18,6 @@ import BatchStatus from './BatchStatus.jsx';
 import LoadingSkeleton from './LoadingSkeleton.jsx';
 import DataTable from './DataTable.jsx';
 import usePerformanceMonitor from '../hooks/usePerformanceMonitor';
-import useBatchOperations from '../hooks/useBatchOperations';
 import apiCacheManager from '../utils/apiCache';
 import PerformanceDashboard from './PerformanceDashboard.jsx';
 const BATCH_DELAY = 3000; // Increased from 1000 to 3000ms
@@ -67,7 +66,6 @@ const HomePage = ({
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isUpdating, setIsUpdating] = useState(false);
   const debounceTimersRef = useRef({});
-  const updateQueueRef = useRef([]);
   const batchTimerRef = useRef(null);
   const activeRequestsRef = useRef(new Set());
   const tableRef = useRef(null);
@@ -88,26 +86,6 @@ const HomePage = ({
     trackRenders: true,
     trackApiCalls: true,
     logToConsole: process.env.NODE_ENV === 'development'
-  });
-
-  // Batch operations hook
-  const batchOperations = useBatchOperations({
-    maxBatchSize: 3, // Reduced from 5 to prevent server overload
-    batchDelay: 5000, // Increased from 3000 to 5000ms to give more time between batches
-    retryAttempts: 1, // Reduced from 2 to prevent too many retries
-    retryDelay: 3000, // Increased from 2000 to give more time between retries
-    onBatchComplete: ({ completedCount, failedCount, errors }) => {
-      if (completedCount > 0) {
-        showToast(`Successfully updated ${completedCount} payments`, 'success');
-      }
-      if (failedCount > 0) {
-        showToast(`${failedCount} updates failed. Please check the data.`, 'error');
-      }
-    },
-    onBatchError: (errors) => {
-      console.error('Batch operation errors:', errors);
-      showToast('Some updates failed. Please try again.', 'error');
-    }
   });
 
   const MONTHS = [
@@ -514,89 +492,6 @@ const validateRowData = (rowData, currentYear) => {
     log(`Due Payment Debug - Row ${rowIndex} at ${stage}: ${value}`);
   };
 
-  const processBatchUpdates = useCallback(
-    async () => {
-      if (!updateQueueRef.current.length) {
-        log("HomePage.jsx: No updates to process");
-        batchTimerRef.current = null;
-        return;
-      }
-
-      const updates = [...updateQueueRef.current];
-      updateQueueRef.current = [];
-      batchTimerRef.current = null;
-
-      // Group updates by unique key (rowIndex-month)
-      const uniqueUpdates = updates.filter(({ rowIndex, month }) => {
-        const key = `${rowIndex}-${month}`;
-        if (pendingUpdatesRef.current[key]) return false; // Skip if already pending
-        pendingUpdatesRef.current[key] = true;
-        return true;
-      });
-
-      const updatesByRow = new Map();
-      uniqueUpdates.forEach(({ rowIndex, month, value, year }) => {
-        if (!updatesByRow.has(rowIndex)) {
-          updatesByRow.set(rowIndex, { rowIndex, year, updates: [] });
-        }
-        updatesByRow.get(rowIndex).updates.push({ month: month.toLowerCase(), value });
-      });
-
-      // Use the batch operations hook for processing
-      const batchOperations = Array.from(updatesByRow.values()).map((rowUpdate) => ({
-        id: `update-${rowUpdate.rowIndex}-${Date.now()}`,
-        execute: async () => {
-          const { rowIndex, updates } = rowUpdate;
-          const keyList = updates.map(u => `${rowIndex}-${u.month}`);
-          const originalRow = paymentsData[rowIndex];
-          
-          const startTime = performance.now();
-          performanceMonitor.trackApiCall('batchSavePayments', startTime);
-          
-          const response = await paymentsAPI.batchSavePayments({
-            payments: updates.map(update => ({
-              clientName: originalRow.Client_Name,
-              type: originalRow.Type,
-              month: update.month,
-              value: update.value
-            })),
-            year: currentYear // Use currentYear prop instead of year parameter
-          });
-          
-          const { updatedPayments } = response.data;
-          const updatedPayment = updatedPayments.find(payment => 
-            payment.Client_Name === originalRow.Client_Name && 
-            payment.Type === originalRow.Type
-          );
-          
-          if (!updatedPayment) throw new Error("No updated payment found");
-          
-          setPaymentsData(prev => {
-            const updated = [...prev];
-            updated[rowIndex] = { ...updated[rowIndex], ...updatedPayment };
-            return updated;
-          });
-          
-          // Clear pending
-          keyList.forEach(key => { delete pendingUpdatesRef.current[key]; });
-          
-          return { success: true, clientName: originalRow.Client_Name };
-        }
-      }));
-
-      // Process all batch operations
-      const { completedCount, failedCount, errors } = await batchOperations.processBatchNow();
-      
-      // Show results
-      if (completedCount > 0) {
-        showToast(`Successfully updated ${completedCount} payment records`, 'success');
-      }
-      if (failedCount > 0) {
-        showToast(`${failedCount} updates failed. Please check the data.`, 'error');
-        console.error('Batch update errors:', errors);
-      }
-    }, [paymentsData, showToast, setPaymentsData, performanceMonitor, batchOperations]);
-
   const handleNotifications = useCallback(
     async (clientName, clientEmail, clientPhone, type, year, notifyStatuses, duePayment) => {
       log(`HomePage.jsx: Starting notification for ${clientName}`, {
@@ -793,87 +688,79 @@ const validateRowData = (rowData, currentYear) => {
         setErrorMessage("Invalid row index.");
         return;
       }
-  
+
       const key = `${rowIndex}-${month}`;
       
       if (debounceTimersRef.current[key]) {
         clearTimeout(debounceTimersRef.current[key]);
       }
-  
+
       setPendingUpdates((prev) => ({
         ...prev,
         [key]: true,
       }));
-  
-      debounceTimersRef.current[key] = setTimeout(() => {
-        if (batchOperations.pendingCount > 5) {
-          log("HomePage.jsx: Too many pending operations, skipping this update");
-          setErrorMessage("Too many pending updates. Please wait for current operations to complete.");
-          return;
-        }
-  
-        batchOperations.addToBatch({
-          id: key,
-          execute: async () => {
-            const startTime = performance.now();
-            performanceMonitor.trackApiCall('updatePayment', startTime);
-  
-            const originalRow = paymentsData[rowIndex];
-            log(`HomePage.jsx: Saving payment for ${originalRow.Client_Name}, month: ${month}, value: ${value}, year: ${currentYear}`);
-  
-            if (!currentYear || currentYear === 'undefined' || currentYear === 'null') {
-              throw new Error(`Invalid year: ${currentYear}`);
-            }
-  
-            try {
-              const response = await paymentsAPI.savePayment({
-                clientName: originalRow.Client_Name,
-                type: originalRow.Type,
-                month: month.toLowerCase(),
-                value: value || "",
-                year: currentYear
-              });
-  
-              if (response.data.updatedRow) {
-                setPaymentsData((prev) =>
-                  prev.map((row, idx) => {
-                    if (idx !== rowIndex) return row;
-                    return {
-                      ...row,
-                      ...response.data.updatedRow,
-                      Email: row.Email || response.data.updatedRow.Email,
-                    };
-                  })
-                );
-              }
-  
-              setPendingUpdates((prev) => {
-                const newPending = { ...prev };
-                delete newPending[key];
-                return newPending;
-              });
-  
-              return { success: true, clientName: originalRow.Client_Name };
-            } catch (error) {
-              log(`HomePage.jsx: Error saving payment for ${originalRow?.Client_Name}:`, error);
-              log(`HomePage.jsx: Error details - status: ${error.response?.status}, data:`, error.response?.data);
-  
-              setPendingUpdates((prev) => {
-                const newPending = { ...prev };
-                delete newPending[key];
-                return newPending;
-              });
-  
-              throw error;
-            }
+
+      debounceTimersRef.current[key] = setTimeout(async () => {
+        try {
+          const originalRow = paymentsData[rowIndex];
+          log(`HomePage.jsx: Saving payment for ${originalRow.Client_Name}, month: ${month}, value: ${value}, year: ${currentYear}`);
+          
+          // Ensure currentYear is valid
+          if (!currentYear || currentYear === 'undefined' || currentYear === 'null') {
+            throw new Error(`Invalid year: ${currentYear}`);
           }
-        });
-  
-        log("HomePage.jsx: Added to batch:", { rowIndex, month, value, year });
+          
+          const response = await paymentsAPI.savePayment({
+            clientName: originalRow.Client_Name,
+            type: originalRow.Type,
+            month: month.toLowerCase(),
+            value: value || "",
+            year: currentYear
+          });
+          
+          if (response.data.updatedRow) {
+            setPaymentsData((prev) =>
+              prev.map((row, idx) => {
+                if (idx !== rowIndex) return row;
+                return {
+                  ...row,
+                  ...response.data.updatedRow,
+                  Email: row.Email || response.data.updatedRow.Email,
+                };
+              })
+            );
+          }
+          
+          // Clear pending status
+          setPendingUpdates((prev) => {
+            const newPending = { ...prev };
+            delete newPending[key];
+            return newPending;
+          });
+          
+          // Update last update time
+          setLastUpdateTime(Date.now());
+          
+          log("HomePage.jsx: Payment saved successfully");
+          
+        } catch (error) {
+          log(`HomePage.jsx: Error saving payment:`, error);
+          log(`HomePage.jsx: Error details - status: ${error.response?.status}, data:`, error.response?.data);
+          
+          // Clear pending status on error
+          setPendingUpdates((prev) => {
+            const newPending = { ...prev };
+            delete newPending[key];
+            return newPending;
+          });
+          
+          setErrorMessage(`Failed to save payment: ${error.response?.data?.error || error.message}`);
+        }
+        
         delete debounceTimersRef.current[key];
-      }, 2000); // debounce delay
+      }, 1000); // Simple 1 second delay
     },
-    [paymentsData, setErrorMessage, batchOperations, performanceMonitor, setPaymentsData, currentYear]
+    [paymentsData, setErrorMessage, setPaymentsData, currentYear]
   );
   
 
@@ -885,7 +772,6 @@ const handleYearChangeDebounced = useCallback(
     setPaymentsData([]);
     setLocalInputValues({});
     setPendingUpdates({});
-    updateQueueRef.current = []; // Clear pending updates queue
     if (batchTimerRef.current) {
       clearTimeout(batchTimerRef.current);
       batchTimerRef.current = null;
@@ -987,7 +873,6 @@ const handleInputChange = useCallback(
     // Clear stale states
     setLocalInputValues({});
     setPendingUpdates({});
-    updateQueueRef.current = [];
     if (batchTimerRef.current) {
       clearTimeout(batchTimerRef.current);
       batchTimerRef.current = null;
@@ -1111,11 +996,6 @@ const handleInputChange = useCallback(
         clearTimeout(batchTimerRef.current);
         batchTimerRef.current = null;
       }
-
-      if (updateQueueRef.current.length > 0 && mountedRef.current) {
-        const updates = [...updateQueueRef.current];
-        updateQueueRef.current = [];
-      }
     };
   }, []);
 
@@ -1207,11 +1087,11 @@ const handleInputChange = useCallback(
     return (
       <>
         <BatchStatus
-          isUpdating={batchOperations.isProcessing}
-          pendingCount={batchOperations.pendingCount}
+          isUpdating={Object.keys(pendingUpdates).length > 0}
+          pendingCount={Object.keys(pendingUpdates).length}
           lastUpdateTime={lastUpdateTime}
-          hasUnsavedChanges={batchOperations.pendingCount > 0}
-          batchStatus={batchOperations.batchStatus}
+          hasUnsavedChanges={Object.keys(pendingUpdates).length > 0}
+          batchStatus={null}
         />
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
           <div className="flex gap-3 mb-4 sm:mb-0">

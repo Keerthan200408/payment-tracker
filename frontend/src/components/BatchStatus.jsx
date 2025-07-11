@@ -12,15 +12,13 @@ const BatchStatus = ({
   }
 
   return (
-    <div className="fixed bottom-4 left-4 z-40">
+    <div className="fixed bottom-4 right-4 z-40">
       <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-3">
         <div className="flex items-center space-x-2">
           {isUpdating ? (
             <>
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-              <span className="text-sm text-gray-700">
-                {batchStatus ? `Processing batch ${batchStatus.currentBatch}/${batchStatus.totalBatches}...` : 'Saving changes...'}
-              </span>
+              <span className="text-sm text-gray-700">Saving changes...</span>
             </>
           ) : pendingCount > 0 ? (
             <>
