@@ -5,6 +5,7 @@ import AddClientPage from "./components/AddClientPage.jsx";
 import ClientsPage from "./components/ClientsPage.jsx";
 import PaymentsPage from "./components/PaymentsPage.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
+import ToastManager from "./components/ToastManager.jsx";
 import { 
   authAPI, 
   clientsAPI, 
@@ -854,8 +855,9 @@ const updatePayment = async (
 
   return (
     <ErrorBoundary>
-      
-      <div className="min-h-screen bg-gray-50">
+      <ToastManager>
+        {(toastContext) => (
+          <div className="min-h-screen bg-gray-50">
         {page === "signIn" && (
           <SignInPage
             setSessionToken={setSessionToken}
@@ -1042,6 +1044,7 @@ const updatePayment = async (
                   refreshTrigger={refreshTrigger}
                   fetchPayments={fetchPayments}
                   saveTimeouts={saveTimeouts}
+                  showToast={toastContext.showToast}
                 />
               )}
               {page === "addClient" && (
@@ -1112,12 +1115,15 @@ const updatePayment = async (
                   setErrorMessage={setErrorMessage}
                   apiCacheRef={apiCacheRef}
                   saveTimeouts={saveTimeouts}
+                  showToast={toastContext.showToast}
                 />
               )}
             </main>
           </div>
         )}
       </div>
+        )}
+    </ToastManager>
     </ErrorBoundary>
   );
 };
