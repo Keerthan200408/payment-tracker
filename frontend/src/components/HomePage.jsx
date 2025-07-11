@@ -793,52 +793,47 @@ const validateRowData = (rowData, currentYear) => {
         setErrorMessage("Invalid row index.");
         return;
       }
-
+  
       const key = `${rowIndex}-${month}`;
       
-      // Clear any existing timer for this key
       if (debounceTimersRef.current[key]) {
         clearTimeout(debounceTimersRef.current[key]);
       }
-
+  
       setPendingUpdates((prev) => ({
         ...prev,
         [key]: true,
       }));
-
-      // Use a much longer debounce delay to prevent rapid API calls
+  
       debounceTimersRef.current[key] = setTimeout(() => {
-        // Check if there are too many pending operations
-        if (batchOperations.pendingCount > 5) { // Reduced from 10 to 5
+        if (batchOperations.pendingCount > 5) {
           log("HomePage.jsx: Too many pending operations, skipping this update");
           setErrorMessage("Too many pending updates. Please wait for current operations to complete.");
           return;
         }
-        
-        // Use the batch operations hook instead of manual queue
+  
         batchOperations.addToBatch({
           id: key,
           execute: async () => {
             const startTime = performance.now();
             performanceMonitor.trackApiCall('updatePayment', startTime);
-            
+  
             const originalRow = paymentsData[rowIndex];
             log(`HomePage.jsx: Saving payment for ${originalRow.Client_Name}, month: ${month}, value: ${value}, year: ${currentYear}`);
-            
-            // Validate currentYear before making API call
+  
             if (!currentYear || currentYear === 'undefined' || currentYear === 'null') {
               throw new Error(`Invalid year: ${currentYear}`);
             }
-            
+  
             try {
               const response = await paymentsAPI.savePayment({
                 clientName: originalRow.Client_Name,
                 type: originalRow.Type,
                 month: month.toLowerCase(),
                 value: value || "",
-                year: currentYear // Use currentYear prop instead of year parameter
+                year: currentYear
               });
-              
+  
               if (response.data.updatedRow) {
                 setPaymentsData((prev) =>
                   prev.map((row, idx) => {
@@ -851,38 +846,37 @@ const validateRowData = (rowData, currentYear) => {
                   })
                 );
               }
-              
-              // Clear pending status
+  
               setPendingUpdates((prev) => {
                 const newPending = { ...prev };
                 delete newPending[key];
                 return newPending;
               });
-              
+  
               return { success: true, clientName: originalRow.Client_Name };
             } catch (error) {
               log(`HomePage.jsx: Error saving payment for ${originalRow?.Client_Name}:`, error);
               log(`HomePage.jsx: Error details - status: ${error.response?.status}, data:`, error.response?.data);
-              
-              // Clear pending status on error
+  
               setPendingUpdates((prev) => {
                 const newPending = { ...prev };
                 delete newPending[key];
                 return newPending;
               });
-              
-              throw error; // Re-throw to let batch operations handle it
+  
+              throw error;
             }
           }
         });
-
+  
         log("HomePage.jsx: Added to batch:", { rowIndex, month, value, year });
         delete debounceTimersRef.current[key];
-        }, 2000); // Increased from 100ms to 2000ms to prevent rapid API calls
-      }, 2000); // Increased from 600ms to 2000ms
+      }, 2000); // debounce delay
     },
-    [paymentsData, setErrorMessage, batchOperations, performanceMonitor, setPaymentsData]
+    [paymentsData, setErrorMessage, batchOperations, performanceMonitor, setPaymentsData, currentYear]
   );
+  
+
 const handleYearChangeDebounced = useCallback(
   debounce(async (year) => {
     log("HomePage.jsx: Year change requested to:", year);
