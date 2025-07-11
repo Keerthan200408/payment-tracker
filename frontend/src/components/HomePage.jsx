@@ -92,10 +92,10 @@ const HomePage = ({
 
   // Batch operations hook
   const batchOperations = useBatchOperations({
-    maxBatchSize: 10,
-    batchDelay: 2000,
-    retryAttempts: 3,
-    retryDelay: 1000,
+    maxBatchSize: 5, // Reduced from 10 to prevent server overload
+    batchDelay: 3000, // Increased from 2000 to give more time between batches
+    retryAttempts: 2, // Reduced from 3 to prevent too many retries
+    retryDelay: 2000, // Increased from 1000 to give more time between retries
     onBatchComplete: ({ completedCount, failedCount, errors }) => {
       if (completedCount > 0) {
         showToast(`Successfully updated ${completedCount} payments`, 'success');
@@ -106,6 +106,7 @@ const HomePage = ({
     },
     onBatchError: (errors) => {
       console.error('Batch operation errors:', errors);
+      showToast('Some updates failed. Please try again.', 'error');
     }
   });
 
@@ -545,7 +546,7 @@ const validateRowData = (rowData, currentYear) => {
       const batchOperations = Array.from(updatesByRow.values()).map((rowUpdate) => ({
         id: `update-${rowUpdate.rowIndex}-${Date.now()}`,
         execute: async () => {
-          const { rowIndex, year, updates } = rowUpdate;
+          const { rowIndex, updates } = rowUpdate;
           const keyList = updates.map(u => `${rowIndex}-${u.month}`);
           const originalRow = paymentsData[rowIndex];
           
@@ -559,7 +560,7 @@ const validateRowData = (rowData, currentYear) => {
               month: update.month,
               value: update.value
             })),
-            year
+            year: currentYear // Use currentYear prop instead of year parameter
           });
           
           const { updatedPayments } = response.data;
@@ -805,51 +806,82 @@ const validateRowData = (rowData, currentYear) => {
       }));
 
       debounceTimersRef.current[key] = setTimeout(() => {
-        // Use the batch operations hook instead of manual queue
-        batchOperations.addToBatch({
+        // Add a small delay to prevent rapid API calls
+        setTimeout(() => {
+          // Check if there are too many pending operations
+          if (batchOperations.pendingCount > 20) {
+            log("HomePage.jsx: Too many pending operations, skipping this update");
+            setErrorMessage("Too many pending updates. Please wait for current operations to complete.");
+            return;
+          }
+          
+          // Use the batch operations hook instead of manual queue
+          batchOperations.addToBatch({
           id: key,
           execute: async () => {
             const startTime = performance.now();
             performanceMonitor.trackApiCall('updatePayment', startTime);
             
             const originalRow = paymentsData[rowIndex];
-            const response = await paymentsAPI.savePayment({
-              clientName: originalRow.Client_Name,
-              type: originalRow.Type,
-              month: month.toLowerCase(),
-              value: value || "",
-              year
-            });
+            log(`HomePage.jsx: Saving payment for ${originalRow.Client_Name}, month: ${month}, value: ${value}, year: ${currentYear}`);
             
-            if (response.data.updatedRow) {
-              setPaymentsData((prev) =>
-                prev.map((row, idx) => {
-                  if (idx !== rowIndex) return row;
-                  return {
-                    ...row,
-                    ...response.data.updatedRow,
-                    Email: row.Email || response.data.updatedRow.Email,
-                  };
-                })
-              );
+            // Validate currentYear before making API call
+            if (!currentYear || currentYear === 'undefined' || currentYear === 'null') {
+              throw new Error(`Invalid year: ${currentYear}`);
             }
             
-            // Clear pending status
-            setPendingUpdates((prev) => {
-              const newPending = { ...prev };
-              delete newPending[key];
-              return newPending;
-            });
-            
-            return { success: true, clientName: originalRow.Client_Name };
+            try {
+              const response = await paymentsAPI.savePayment({
+                clientName: originalRow.Client_Name,
+                type: originalRow.Type,
+                month: month.toLowerCase(),
+                value: value || "",
+                year: currentYear // Use currentYear prop instead of year parameter
+              });
+              
+              if (response.data.updatedRow) {
+                setPaymentsData((prev) =>
+                  prev.map((row, idx) => {
+                    if (idx !== rowIndex) return row;
+                    return {
+                      ...row,
+                      ...response.data.updatedRow,
+                      Email: row.Email || response.data.updatedRow.Email,
+                    };
+                  })
+                );
+              }
+              
+              // Clear pending status
+              setPendingUpdates((prev) => {
+                const newPending = { ...prev };
+                delete newPending[key];
+                return newPending;
+              });
+              
+              return { success: true, clientName: originalRow.Client_Name };
+            } catch (error) {
+              log(`HomePage.jsx: Error saving payment for ${originalRow?.Client_Name}:`, error);
+              log(`HomePage.jsx: Error details - status: ${error.response?.status}, data:`, error.response?.data);
+              
+              // Clear pending status on error
+              setPendingUpdates((prev) => {
+                const newPending = { ...prev };
+                delete newPending[key];
+                return newPending;
+              });
+              
+              throw error; // Re-throw to let batch operations handle it
+            }
           }
         });
 
         log("HomePage.jsx: Added to batch:", { rowIndex, month, value, year });
         delete debounceTimersRef.current[key];
+        }, 100); // Small delay to prevent rapid API calls
       }, 600);
     },
-    [paymentsData, setErrorMessage, batchOperations, performanceMonitor, setPaymentsData]
+    [paymentsData, setErrorMessage, batchOperations, performanceMonitor, setPaymentsData, setErrorMessage]
   );
 
  const handleYearChangeDebounced = useCallback(
