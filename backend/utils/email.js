@@ -3,7 +3,7 @@ const config = require("../config");
 const { sanitizeHtmlContent } = require("./sanitize");
 
 // Create transporter instance
-const transporter = nodemailer.createTransporter({
+const transporter = nodemailer.createTransport({
   host: config.EMAIL_HOST,
   port: config.EMAIL_PORT,
   secure: config.EMAIL_SECURE,
