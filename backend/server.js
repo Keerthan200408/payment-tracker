@@ -20,6 +20,7 @@ const {
   validatePaymentAmount,
   sanitizeHtmlContent 
 } = require("./utils/sanitize");
+const logger = require("./utils/logger");
 
 const app = express();
 
