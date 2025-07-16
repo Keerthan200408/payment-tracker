@@ -393,7 +393,7 @@ const validateRowData = (rowData, currentYear) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentYear, previousYearDueMap]);
 
-  // Patch: When adding a new year, use latest due from frontend state if available
+  // Patch: When adding a new year, always fetch and recalculate previous year's due before using as base
   const handleAddNewYear = useCallback(async () => {
     const newYear = (parseInt(currentYear) + 1).toString();
     log(`HomePage.jsx: Attempting to add new year: ${newYear}`);
@@ -407,10 +407,23 @@ const validateRowData = (rowData, currentYear) => {
     const controller = new AbortController();
     try {
       await new Promise(resolve => setTimeout(resolve, 100));
-      // Use latest due from frontend state if available
+      // Always fetch previous year's data and recalculate due
+      const prevYear = currentYear;
+      let prevYearPayments = [];
+      try {
+        const prevYearResp = await paymentsAPI.getPaymentsByYear(prevYear);
+        prevYearPayments = Array.isArray(prevYearResp.data) ? prevYearResp.data : [];
+      } catch (err) {
+        prevYearPayments = [];
+      }
+      // Recalculate all due payments for previous year
       let prevYearDueMapToSend = {};
-      if (paymentsData && paymentsData.length > 0) {
-        paymentsData.forEach(row => {
+      if (prevYearPayments.length > 0) {
+        // Use the latest previousYearDueMap for prevYear if available
+        // (If user is on prevYear, use frontend state, else recalc)
+        const prevYearDueMap = buildPreviousYearDueMap(prevYearPayments);
+        const recalculatedPrevYear = recalculateAllDuePayments(prevYearPayments, prevYearDueMap, months, prevYear);
+        recalculatedPrevYear.forEach(row => {
           const key = `${row.Client_Name}|||${row.Type}`;
           prevYearDueMapToSend[key] = parseFloat(row.Due_Payment) || 0;
         });
@@ -482,7 +495,7 @@ const validateRowData = (rowData, currentYear) => {
         setIsLoadingYears(false);
       }
     }
-  }, [currentYear, sessionToken, getCacheKey, searchUserYears, setPaymentsData, setCurrentYear, setErrorMessage, paymentsData]);
+  }, [currentYear, sessionToken, getCacheKey, searchUserYears, setPaymentsData, setCurrentYear, setErrorMessage, months, buildPreviousYearDueMap, recalculateAllDuePayments, paymentsAPI, clientsAPI, paymentsData]);
 
   const hasValidEmail = useCallback((clientData) => {
     const email = clientData?.Email || '';
