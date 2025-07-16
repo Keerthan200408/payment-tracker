@@ -374,65 +374,82 @@ const validateRowData = (rowData, currentYear) => {
     [searchUserYears]
   );
 
+  // Helper to recalculate all due payments after data load
+  const recalculateAllDuePayments = useCallback((data, prevYearDueMap, months, year) => {
+    return data.map(row => {
+      const key = `${row.Client_Name}|||${row.Type}`;
+      const previousYearsDue = parseInt(year) > 2025 ? (prevYearDueMap[key] || 0) : 0;
+      const recalculatedDue = calculateDuePayment(row, months, year, previousYearsDue);
+      return { ...row, Due_Payment: recalculatedDue.toFixed(2) };
+    });
+  }, [calculateDuePayment]);
+
+  // Patch: After fetching payments, recalculate due for all rows
+  useEffect(() => {
+    if (paymentsData && paymentsData.length > 0) {
+      // Use the latest previousYearDueMap (from frontend state)
+      setPaymentsData(prevData => recalculateAllDuePayments(prevData, previousYearDueMap, months, currentYear));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentYear, previousYearDueMap]);
+
+  // Patch: When adding a new year, use latest due from frontend state if available
   const handleAddNewYear = useCallback(async () => {
     const newYear = (parseInt(currentYear) + 1).toString();
     log(`HomePage.jsx: Attempting to add new year: ${newYear}`);
-
-    // Prevent multiple simultaneous requests
     if (isLoadingYears) {
       log("HomePage.jsx: Add new year request already in progress, skipping");
       return;
     }
-
     if (mountedRef.current) {
       setIsLoadingYears(true);
     }
-
     const controller = new AbortController();
-
     try {
-      // Add a small delay to ensure any previous requests are completed
       await new Promise(resolve => setTimeout(resolve, 100));
-      
+      // Use latest due from frontend state if available
+      let prevYearDueMapToSend = {};
+      if (paymentsData && paymentsData.length > 0) {
+        paymentsData.forEach(row => {
+          const key = `${row.Client_Name}|||${row.Type}`;
+          prevYearDueMapToSend[key] = parseFloat(row.Due_Payment) || 0;
+        });
+      }
+      // Optionally, send this map to backend if API supports it (not shown here)
       const response = await yearsAPI.addNewYear({ year: newYear });
       log("HomePage.jsx: Add new year response:", response.data);
-
       const yearsCacheKey = getCacheKey("/get-user-years", { sessionToken });
       const paymentsCacheKey = getCacheKey("/get-payments-by-year", { year: newYear, sessionToken });
       delete apiCacheRef.current[yearsCacheKey];
       delete apiCacheRef.current[paymentsCacheKey];
-
       await searchUserYears(controller.signal);
-
       const clientsResponse = await clientsAPI.getClients();
       const expectedClientCount = clientsResponse.data.length;
-
       const paymentsResponse = await paymentsAPI.getPaymentsByYear(newYear);
-
-      const paymentsData = paymentsResponse.data || [];
-      setPaymentsData(paymentsData);
-      const correctedPaymentsData = paymentsData.map((row) => ({
-        ...row,
-        Due_Payment: "0.00"
-      }));
-      setPaymentsData(correctedPaymentsData);
+      let paymentsDataNewYear = paymentsResponse.data || [];
+      // Patch: set Due_Payment to previous year's due if available
+      paymentsDataNewYear = paymentsDataNewYear.map(row => {
+        const key = `${row.Client_Name}|||${row.Type}`;
+        const prevDue = prevYearDueMapToSend[key] || 0;
+        return { ...row, Due_Payment: prevDue.toFixed(2) };
+      });
+      setPaymentsData(paymentsDataNewYear);
       setCurrentYear(newYear);
       localStorage.setItem("currentYear", newYear);
-
-      if (paymentsData.length === 0 && expectedClientCount > 0) {
+      if (paymentsDataNewYear.length === 0 && expectedClientCount > 0) {
         const errorMsg = `No clients found for ${newYear}. Please check the Clients sheet.`;
         setLocalErrorMessage(errorMsg);
         setErrorMessage(errorMsg);
         showToast(errorMsg, 'error', 5000);
-      } else if (paymentsData.length < expectedClientCount) {
-        const errorMsg = `Warning: Only ${paymentsData.length} client(s) found for ${newYear}. Expected ${expectedClientCount} clients from the Clients sheet.`;
+      } else if (paymentsDataNewYear.length < expectedClientCount) {
+        const errorMsg = `Warning: Only ${paymentsDataNewYear.length} client(s) found for ${newYear}. Expected ${expectedClientCount} clients from the Clients sheet.`;
         setLocalErrorMessage(errorMsg);
         setErrorMessage(errorMsg);
         showToast(errorMsg, 'warning', 5000);
       } else {
         setLocalErrorMessage("");
         setErrorMessage("");
-        showToast(`Year ${newYear} added successfully with ${paymentsData.length} clients.`, 'success', 3000);
+        showToast(`Year ${newYear} added successfully with ${paymentsDataNewYear.length} clients.`, 'success', 3000);
       }
     } catch (error) {
       if (error.name === "AbortError") {
@@ -442,11 +459,8 @@ const validateRowData = (rowData, currentYear) => {
       log("HomePage.jsx: Error adding new year:", error);
       let errorMsg = error.response?.data?.error || "An unknown error occurred";
       let userMessage = `Failed to add new year: ${errorMsg}`;
-      
-      // Handle specific error cases
       if (errorMsg.includes("already exists")) {
         userMessage = `Year ${newYear} already exists. Switching to ${newYear}...`;
-        // Automatically switch to the new year even if it already exists
         setCurrentYear(newYear);
         localStorage.setItem("currentYear", newYear);
         setLocalErrorMessage("");
@@ -460,7 +474,6 @@ const validateRowData = (rowData, currentYear) => {
       } else if (errorMsg.includes("Failed to fetch clients") || errorMsg.includes("Failed to insert payment records")) {
         userMessage = "Database operation failed. Please try again.";
       }
-      
       setLocalErrorMessage(userMessage);
       setErrorMessage(userMessage);
       showToast(userMessage, 'error', 5000);
@@ -469,7 +482,7 @@ const validateRowData = (rowData, currentYear) => {
         setIsLoadingYears(false);
       }
     }
-  }, [currentYear, sessionToken, getCacheKey, searchUserYears, setPaymentsData, setCurrentYear, setErrorMessage]);
+  }, [currentYear, sessionToken, getCacheKey, searchUserYears, setPaymentsData, setCurrentYear, setErrorMessage, paymentsData]);
 
   const hasValidEmail = useCallback((clientData) => {
     const email = clientData?.Email || '';
