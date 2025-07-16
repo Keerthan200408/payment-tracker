@@ -1508,6 +1508,27 @@ const validateRowData = (rowData, currentYear) => {
     );
   };
 
+  // Restore handleYearChangeDebounced
+  const handleYearChangeDebounced = useCallback(
+    debounce(async (year) => {
+      log("HomePage.jsx: Year change requested to:", year);
+      setLocalInputValues({});
+      setPendingUpdates({});
+      if (batchTimerRef.current) {
+        clearTimeout(batchTimerRef.current);
+        batchTimerRef.current = null;
+      }
+      if (handleYearChange) {
+        await handleYearChange(year);
+      } else {
+        localStorage.setItem("currentYear", year);
+        setCurrentYear(year);
+      }
+      log("HomePage.jsx: Year change completed");
+    }, 1000),
+    [setCurrentYear, handleYearChange, setLocalInputValues, setPendingUpdates]
+  );
+
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       {!isOnline && (
