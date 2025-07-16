@@ -157,13 +157,14 @@ const HomePage = ({
       const rawValue = sanitizedData[month];
       return rawValue !== "" && rawValue !== null && rawValue !== undefined;
     }).length;
-    const expectedTotal = activeMonths * amountToBePaid;
-    const currentYearDue = Math.max(expectedTotal - totalPaymentsMade, 0);
-    let totalDue = currentYearDue;
+    let totalDue;
     if (parseInt(currentYear) > 2025) {
-      totalDue = previousYearsDue + currentYearDue;
+      // Correct formula: previousYearsDue + (activeMonths * amountToBePaid - totalPaymentsMade)
+      totalDue = previousYearsDue + (activeMonths * amountToBePaid - totalPaymentsMade);
+    } else {
+      totalDue = activeMonths * amountToBePaid - totalPaymentsMade;
     }
-    return Math.round(totalDue * 100) / 100;
+    return Math.max(Math.round(totalDue * 100) / 100, 0);
   };
 
   const getPaymentStatus = useCallback((row, month) => {
