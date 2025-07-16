@@ -54,7 +54,7 @@ const config = {
   SANITIZE_OPTIONS: {
     allowedTags: [
       "div", "h1", "h2", "p", "table", "thead", "tbody", "tr", "th", "td",
-      "strong", "em", "ul", "ol", "li", "a", "span", "br", "style",
+      "strong", "em", "ul", "ol", "li", "a", "span", "br"
     ],
     allowedAttributes: { "*": ["style", "class", "href", "target"] },
     allowedStyles: {

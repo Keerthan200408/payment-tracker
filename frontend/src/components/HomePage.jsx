@@ -12,7 +12,8 @@ import {
   paymentsAPI, 
   communicationAPI, 
   importAPI,
-  handleAPIError 
+  handleAPIError,
+  clientsAPI
 } from '../utils/api';
 import BatchStatus from './BatchStatus.jsx';
 import LoadingSkeleton from './LoadingSkeleton.jsx';
