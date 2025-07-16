@@ -80,6 +80,7 @@ const HomePage = ({
   const [lastUpdateTime, setLastUpdateTime] = useState(null);
   const pendingUpdatesRef = useRef({}); // Track in-flight updates by key
   const [showPerformanceDashboard, setShowPerformanceDashboard] = useState(false);
+  const [previousYearDueMap, setPreviousYearDueMap] = useState({});
 
   // Performance monitoring
   const performanceMonitor = usePerformanceMonitor('HomePage', {
@@ -105,49 +106,65 @@ const HomePage = ({
 
   const months = MONTHS;
 
-const calculateDuePayment = (rowData, months, currentYear) => {
-  log(`HomePage.jsx: calculateDuePayment for ${rowData.Client_Name || 'unknown'}, Year = ${currentYear}`);
+  // Helper to build previous year due map
+  const buildPreviousYearDueMap = useCallback((prevYearPayments) => {
+    const map = {};
+    prevYearPayments.forEach(row => {
+      const key = `${row.Client_Name}|||${row.Type}`;
+      map[key] = parseFloat(row.Due_Payment) || 0;
+    });
+    return map;
+  }, []);
 
-  const sanitizedData = validateRowData(rowData, currentYear);
-  const amountToBePaid = parseFloat(sanitizedData.Amount_To_Be_Paid) || 0;
-  
-  if (amountToBePaid <= 0) {
-    log(`HomePage.jsx: calculateDuePayment: Returning 0 due to invalid Amount_To_Be_Paid: ${amountToBePaid}`);
-    return 0;
-  }
+  // Load previous year's payments if currentYear > 2025
+  useEffect(() => {
+    const loadPrevYearDue = async () => {
+      if (parseInt(currentYear) > 2025 && sessionToken) {
+        const prevYear = (parseInt(currentYear) - 1).toString();
+        try {
+          const response = await paymentsAPI.getPaymentsByYear(prevYear);
+          const prevYearPayments = Array.isArray(response.data) ? response.data : [];
+          setPreviousYearDueMap(buildPreviousYearDueMap(prevYearPayments));
+        } catch (err) {
+          setPreviousYearDueMap({});
+        }
+      } else {
+        setPreviousYearDueMap({});
+      }
+    };
+    loadPrevYearDue();
+  }, [currentYear, sessionToken, buildPreviousYearDueMap]);
 
-  // Calculate current year's due payment
-  const totalPaymentsMade = months.reduce((sum, month) => {
-    const rawValue = sanitizedData[month];
-    const payment = (rawValue === "" || rawValue === "0.00" || rawValue == null) ? 0 : parseFloat(rawValue);
-    if (isNaN(payment) || payment < 0) {
-      log(`HomePage.jsx: calculateDuePayment: Invalid payment for ${month}: ${rawValue}, treating as 0`);
-      return sum;
+  // Updated calculateDuePayment to accept previousYearsDue
+  const calculateDuePayment = (rowData, months, currentYear, previousYearsDue = 0) => {
+    log(`HomePage.jsx: calculateDuePayment for ${rowData.Client_Name || 'unknown'}, Year = ${currentYear}`);
+    const sanitizedData = validateRowData(rowData, currentYear);
+    const amountToBePaid = parseFloat(sanitizedData.Amount_To_Be_Paid) || 0;
+    if (amountToBePaid <= 0) {
+      log(`HomePage.jsx: calculateDuePayment: Returning 0 due to invalid Amount_To_Be_Paid: ${amountToBePaid}`);
+      return 0;
     }
-    log(`HomePage.jsx: calculateDuePayment: Month ${month} = ${payment}`);
-    return sum + payment;
-  }, 0);
-
-  // Calculate active months (months with any value, not just positive payments)
-  const activeMonths = months.filter((month) => {
-    const rawValue = sanitizedData[month];
-    return rawValue !== "" && rawValue !== null && rawValue !== undefined;
-  }).length;
-
-  // Use active months for expected total (matches backend logic)
-  const expectedTotal = activeMonths * amountToBePaid;
-  const currentYearDue = Math.max(expectedTotal - totalPaymentsMade, 0);
-  
-  // For cumulative calculation, we need to get the previous year's due payment
-  // For now, we'll use the current year due as the backend will handle cumulative calculation
-  // The backend's processPaymentUpdate function handles the cumulative logic properly
-  const totalDue = currentYearDue;
-  
-  log(`HomePage.jsx: calculateDuePayment: Expected = ${expectedTotal}, Total Paid = ${totalPaymentsMade}, Current Year Due = ${currentYearDue}, Total Due = ${totalDue}, Active Months = ${activeMonths}`);
-  
-  return Math.round(totalDue * 100) / 100;
-};
-
+    const totalPaymentsMade = months.reduce((sum, month) => {
+      const rawValue = sanitizedData[month];
+      const payment = (rawValue === "" || rawValue === "0.00" || rawValue == null) ? 0 : parseFloat(rawValue);
+      if (isNaN(payment) || payment < 0) {
+        log(`HomePage.jsx: calculateDuePayment: Invalid payment for ${month}: ${rawValue}, treating as 0`);
+        return sum;
+      }
+      return sum + payment;
+    }, 0);
+    const activeMonths = months.filter((month) => {
+      const rawValue = sanitizedData[month];
+      return rawValue !== "" && rawValue !== null && rawValue !== undefined;
+    }).length;
+    const expectedTotal = activeMonths * amountToBePaid;
+    const currentYearDue = Math.max(expectedTotal - totalPaymentsMade, 0);
+    let totalDue = currentYearDue;
+    if (parseInt(currentYear) > 2025) {
+      totalDue = previousYearsDue + currentYearDue;
+    }
+    return Math.round(totalDue * 100) / 100;
+  };
 
   const getPaymentStatus = useCallback((row, month) => {
     const globalRowIndex = paymentsData.findIndex(
@@ -679,6 +696,16 @@ const validateRowData = (rowData, currentYear) => {
     [sessionToken, hasValidEmail, setLocalErrorMessage, currentYear]
   );
 
+  // Patch all due payment calculations to use previousYearDueMap
+  const getPreviousYearsDue = (row) => {
+    if (parseInt(currentYear) > 2025) {
+      const key = `${row.Client_Name}|||${row.Type}`;
+      return previousYearDueMap[key] || 0;
+    }
+    return 0;
+  };
+
+  // Patch debouncedUpdate
   const debouncedUpdate = useCallback(
     (rowIndex, month, value, year) => {
       if (!paymentsData.length) {
@@ -686,168 +713,111 @@ const validateRowData = (rowData, currentYear) => {
         setErrorMessage("Please wait for data to load before making updates.");
         return;
       }
-      
       if (!paymentsData[rowIndex]) {
         log("HomePage.jsx: Invalid rowIndex:", rowIndex);
         setErrorMessage("Invalid row index.");
         return;
       }
-
       const key = `${rowIndex}-${month}`;
-      
       if (debounceTimersRef.current[key]) {
         clearTimeout(debounceTimersRef.current[key]);
       }
-
       setPendingUpdates((prev) => ({
         ...prev,
         [key]: true,
       }));
-
       debounceTimersRef.current[key] = setTimeout(async () => {
         try {
           const originalRow = paymentsData[rowIndex];
           log(`HomePage.jsx: Saving payment for ${originalRow.Client_Name}, month: ${month}, value: ${value}, year: ${currentYear}`);
-          
-          // Ensure currentYear is valid
           if (!currentYear || currentYear === 'undefined' || currentYear === 'null') {
             log(`HomePage.jsx: Invalid currentYear: ${currentYear}, type: ${typeof currentYear}`);
             throw new Error(`Invalid year: ${currentYear}`);
           }
-          
-          log(`HomePage.jsx: Making API call with year: ${currentYear}`);
           const response = await paymentsAPI.savePayment({
             clientName: originalRow.Client_Name,
             type: originalRow.Type,
             month: month.toLowerCase(),
             value: value || ""
           }, currentYear);
-          
           if (response.data.updatedRow) {
             setPaymentsData((prev) =>
               prev.map((row, idx) => {
                 if (idx !== rowIndex) return row;
-                
-                // Preserve the real-time due payment calculation
-                // The backend response might have stale due payment data
                 const updatedRow = {
                   ...row,
                   ...response.data.updatedRow,
                   Email: row.Email || response.data.updatedRow.Email,
                 };
-                
-                // Recalculate due payment with current data to ensure accuracy
-                const recalculatedDue = calculateDuePayment(updatedRow, months, currentYear);
+                // Use previousYearsDue from map
+                const previousYearsDue = getPreviousYearsDue(updatedRow);
+                const recalculatedDue = calculateDuePayment(updatedRow, months, currentYear, previousYearsDue);
                 updatedRow.Due_Payment = recalculatedDue.toFixed(2);
-                
                 log(`HomePage.jsx: debouncedUpdate: Updated due payment for ${updatedRow.Client_Name || 'unknown'} to ${recalculatedDue}`);
-                
                 return updatedRow;
               })
             );
           }
-          
-          // Clear pending status
           setPendingUpdates((prev) => {
             const newPending = { ...prev };
             delete newPending[key];
             return newPending;
           });
-          
-          // Update last update time
           setLastUpdateTime(Date.now());
-          
           log("HomePage.jsx: Payment saved successfully");
-          
         } catch (error) {
           log(`HomePage.jsx: Error saving payment:`, error);
           log(`HomePage.jsx: Error details - status: ${error.response?.status}, data:`, error.response?.data);
-          
-          // Clear pending status on error
           setPendingUpdates((prev) => {
             const newPending = { ...prev };
             delete newPending[key];
             return newPending;
           });
-          
           setErrorMessage(`Failed to save payment: ${error.response?.data?.error || error.message}`);
         }
-        
         delete debounceTimersRef.current[key];
-      }, 1000); // Simple 1 second delay
+      }, 1000);
     },
-    [paymentsData, setErrorMessage, setPaymentsData, currentYear, months, calculateDuePayment]
+    [paymentsData, setErrorMessage, setPaymentsData, currentYear, months, calculateDuePayment, getPreviousYearsDue]
   );
-  
 
-const handleYearChangeDebounced = useCallback(
-  debounce(async (year) => {
-    log("HomePage.jsx: Year change requested to:", year);
-    
-    // Clear existing states to prevent stale data
-    setLocalInputValues({});
-    setPendingUpdates({});
-    if (batchTimerRef.current) {
-      clearTimeout(batchTimerRef.current);
-      batchTimerRef.current = null;
-    }
-
-    // Use the parent's handleYearChange function to properly update the parent's state
-    if (handleYearChange) {
-      await handleYearChange(year);
-    } else {
-      // Fallback: update currentYear and localStorage
-      localStorage.setItem("currentYear", year);
-      setCurrentYear(year);
-    }
-    
-    log("HomePage.jsx: Year change completed");
-  }, 1000), // Increased from 300ms to 1000ms
-  [setCurrentYear, handleYearChange, setLocalInputValues, setPendingUpdates]
-);
-
-const handleInputChange = useCallback(
-  (rowIndex, month, value) => {
-    const trimmedValue = value.trim();
-    const parsedValue = trimmedValue === "" || trimmedValue === "0.00" ? "0" : trimmedValue;
-
-    if (trimmedValue !== "" && trimmedValue !== "0.00" && (isNaN(parseFloat(parsedValue)) || parseFloat(parsedValue) < 0)) {
-      setErrorMessage("Please enter a valid non-negative number.");
-      return;
-    }
-
-    const key = `${rowIndex}-${month}`;
-    setLocalInputValues((prev) => ({
-      ...prev,
-      [key]: trimmedValue,
-    }));
-
-    // Create updated row with new value
-    const updatedRow = { ...paymentsData[rowIndex], [month]: parsedValue };
-    
-    // Recalculate Due_Payment using the same logic as backend
-    const recalculatedDue = calculateDuePayment(updatedRow, months, currentYear);
-
-    // Update the frontend view immediately with new due payment
-    setPaymentsData((prev) => {
-      const newData = [...prev];
-      newData[rowIndex] = {
-        ...newData[rowIndex],
-        [month]: trimmedValue, // Use trimmedValue for UI consistency
-        Due_Payment: recalculatedDue.toFixed(2),
-      };
-      log(`HomePage.jsx: handleInputChange: Real-time update for ${newData[rowIndex].Client_Name || 'unknown'}, ${month} = ${trimmedValue}, Due_Payment = ${recalculatedDue}`);
-      return newData;
-    });
-
-    // Queue backend update (debounced) - only if value actually changed
-    const currentValue = paymentsData[rowIndex]?.[month] || "";
-    if (trimmedValue !== currentValue) {
-      debouncedUpdate(rowIndex, month, parsedValue, currentYear);
-    }
-  },
-  [debouncedUpdate, paymentsData, currentYear, setPaymentsData, setErrorMessage, months, calculateDuePayment]
-);
+  // Patch handleInputChange
+  const handleInputChange = useCallback(
+    (rowIndex, month, value) => {
+      const trimmedValue = value.trim();
+      // If cleared, set to empty string
+      const parsedValue = trimmedValue === "" ? "" : (trimmedValue === "0.00" ? "0" : trimmedValue);
+      if (trimmedValue !== "" && trimmedValue !== "0.00" && (isNaN(parseFloat(parsedValue)) || parseFloat(parsedValue) < 0)) {
+        setErrorMessage("Please enter a valid non-negative number.");
+        return;
+      }
+      const key = `${rowIndex}-${month}`;
+      setLocalInputValues((prev) => ({
+        ...prev,
+        [key]: trimmedValue,
+      }));
+      // Create updated row with new value
+      const updatedRow = { ...paymentsData[rowIndex], [month]: parsedValue };
+      // Use previousYearsDue from map
+      const previousYearsDue = getPreviousYearsDue(updatedRow);
+      const recalculatedDue = calculateDuePayment(updatedRow, months, currentYear, previousYearsDue);
+      setPaymentsData((prev) => {
+        const newData = [...prev];
+        newData[rowIndex] = {
+          ...newData[rowIndex],
+          [month]: trimmedValue, // Use trimmedValue for UI consistency
+          Due_Payment: recalculatedDue.toFixed(2),
+        };
+        return newData;
+      });
+      // Queue backend update (debounced) - only if value actually changed
+      const currentValue = paymentsData[rowIndex]?.[month] || "";
+      if (trimmedValue !== currentValue) {
+        debouncedUpdate(rowIndex, month, parsedValue, currentYear);
+      }
+    },
+    [debouncedUpdate, paymentsData, currentYear, setPaymentsData, setErrorMessage, months, calculateDuePayment, getPreviousYearsDue]
+  );
 
 
 
