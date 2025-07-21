@@ -82,6 +82,8 @@ const HomePage = ({
   const pendingUpdatesRef = useRef({}); // Track in-flight updates by key
   const [showPerformanceDashboard, setShowPerformanceDashboard] = useState(false);
   const [previousYearDueMap, setPreviousYearDueMap] = useState({});
+  // Track latest request ID per cell
+  const latestRequestIdRef = useRef({});
 
   // Performance monitoring
   const performanceMonitor = usePerformanceMonitor('HomePage', {
@@ -754,6 +756,9 @@ const validateRowData = (rowData, currentYear) => {
         ...prev,
         [key]: true,
       }));
+      // Generate a unique request ID for this cell update
+      const requestId = Date.now() + Math.random();
+      latestRequestIdRef.current[key] = requestId;
       debounceTimersRef.current[key] = setTimeout(async () => {
         try {
           const originalRow = paymentsData[rowIndex];
@@ -768,8 +773,8 @@ const validateRowData = (rowData, currentYear) => {
             month: month.toLowerCase(),
             value: value || ""
           }, currentYear);
-          if (response.data.updatedRow) {
-            // After successful save, fetch latest payments data for the year
+          // Only update UI if this is the latest request for this cell
+          if (latestRequestIdRef.current[key] === requestId && response.data.updatedRow) {
             const refreshed = await paymentsAPI.getPaymentsByYear(currentYear);
             setPaymentsData(Array.isArray(refreshed.data) ? refreshed.data : []);
           }
@@ -789,7 +794,6 @@ const validateRowData = (rowData, currentYear) => {
             return newPending;
           });
           setErrorMessage(`Failed to save payment: ${error.response?.data?.error || error.message}`);
-          // Revert local state
           setPaymentsData(paymentsData);
         }
         delete debounceTimersRef.current[key];
