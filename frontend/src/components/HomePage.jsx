@@ -422,8 +422,6 @@ const validateRowData = (rowData, currentYear) => {
       // Recalculate all due payments for previous year
       let prevYearDueMapToSend = {};
       if (prevYearPayments.length > 0) {
-        // Use the latest previousYearDueMap for prevYear if available
-        // (If user is on prevYear, use frontend state, else recalc)
         const prevYearDueMap = buildPreviousYearDueMap(prevYearPayments);
         const recalculatedPrevYear = recalculateAllDuePayments(prevYearPayments, prevYearDueMap, months, prevYear);
         recalculatedPrevYear.forEach(row => {
@@ -434,16 +432,12 @@ const validateRowData = (rowData, currentYear) => {
       // Optionally, send this map to backend if API supports it (not shown here)
       const response = await yearsAPI.addNewYear({ year: newYear });
       log("HomePage.jsx: Add new year response:", response.data);
-      const yearsCacheKey = getCacheKey("/get-user-years", { sessionToken });
-      const paymentsCacheKey = getCacheKey("/get-payments-by-year", { year: newYear, sessionToken });
-      delete apiCacheRef.current[yearsCacheKey];
-      delete apiCacheRef.current[paymentsCacheKey];
-      await searchUserYears(controller.signal);
-      const clientsResponse = await clientsAPI.getClients();
-      const expectedClientCount = clientsResponse.data.length;
+      // Force-refresh years from backend, clear localStorage cache
+      localStorage.removeItem('availableYears');
+      await searchUserYears(controller.signal); // always fetch from backend
+      // Fetch new year's payments from backend
       const paymentsResponse = await paymentsAPI.getPaymentsByYear(newYear);
       let paymentsDataNewYear = paymentsResponse.data || [];
-      // Patch: set Due_Payment to previous year's due if available
       paymentsDataNewYear = paymentsDataNewYear.map(row => {
         const key = `${row.Client_Name}|||${row.Type}`;
         const prevDue = prevYearDueMapToSend[key] || 0;
@@ -452,28 +446,12 @@ const validateRowData = (rowData, currentYear) => {
       setPaymentsData(paymentsDataNewYear);
       setCurrentYear(newYear);
       localStorage.setItem("currentYear", newYear);
-      if (paymentsDataNewYear.length === 0 && expectedClientCount > 0) {
-        const errorMsg = `No clients found for ${newYear}. Please check the Clients sheet.`;
-        setLocalErrorMessage(errorMsg);
-        setErrorMessage(errorMsg);
-        showToast(errorMsg, 'error', 5000);
-      } else if (paymentsDataNewYear.length < expectedClientCount) {
-        const errorMsg = `Warning: Only ${paymentsDataNewYear.length} client(s) found for ${newYear}. Expected ${expectedClientCount} clients from the Clients sheet.`;
-        setLocalErrorMessage(errorMsg);
-        setErrorMessage(errorMsg);
-        showToast(errorMsg, 'warning', 5000);
-      } else {
-        setLocalErrorMessage("");
-        setErrorMessage("");
-        showToast(`Year ${newYear} added successfully with ${paymentsDataNewYear.length} clients.`, 'success', 3000);
-      }
+      setLocalErrorMessage("");
+      setErrorMessage("");
+      showToast(`Year ${newYear} added successfully with ${paymentsDataNewYear.length} clients.`, 'success', 3000);
     } catch (error) {
-      if (error.name === "AbortError") {
-        log("HomePage.jsx: Add new year request cancelled");
-        return;
-      }
       log("HomePage.jsx: Error adding new year:", error);
-      let errorMsg = error.response?.data?.error || "An unknown error occurred";
+      let errorMsg = error.response?.data?.error || error.message;
       let userMessage = `Failed to add new year: ${errorMsg}`;
       if (errorMsg.includes("already exists")) {
         userMessage = `Year ${newYear} already exists. Switching to ${newYear}...`;
