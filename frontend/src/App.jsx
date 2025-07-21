@@ -210,9 +210,10 @@ useEffect(() => {
     console.log("App.jsx: Setting currentYear:", yearToSet);
     setCurrentYear(yearToSet);
     
-    // Fetch data with debounce
+    // Always force refresh on initial load
     setTimeout(() => {
-      fetchClients(storedToken);
+      fetchClients(storedToken, true); // forceRefresh = true
+      fetchPayments(storedToken, yearToSet, true); // forceRefresh = true
     }, 200);
   } else {
     console.log("App.jsx: No stored user or token, setting page to signIn");
@@ -894,226 +895,229 @@ const updatePayment = async (
       <ToastManager>
         {(toastContext) => (
           <div className="min-h-screen bg-gray-50">
-            <nav className="bg-white shadow-sm w-full p-4 sm:hidden flex justify-between items-center border-b border-gray-200">
-              <div className="flex items-center">
-                <i className="fas fa-money-bill-wave text-2xl mr-2 text-gray-800"></i>
-                <h1 className="text-xl font-semibold text-gray-800">Payment Tracker</h1>
-              </div>
-              <button
-                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className="text-gray-800 focus:outline-none"
-              >
-                <i className="fas fa-bars text-2xl"></i>
-              </button>
-            </nav>
-            <div className="flex flex-col sm:flex-row">
-              <nav
-                className={`bg-white shadow-lg w-full sm:w-64 p-4 fixed top-0 left-0 h-auto sm:h-full border-r border-gray-200 z-50 ${isSidebarOpen ? "block" : "hidden sm:block"}`}
-              >
-                <div className="flex items-center mb-6 pb-4 border-b border-gray-200">
-                  <i className="fas fa-money-bill-wave text-2xl mr-2 text-gray-800"></i>
-                  <h1 className="text-xl font-semibold text-gray-800">Payment Tracker</h1>
-                </div>
-                <ul className="space-y-1">
-                  <li>
-                    <button
-                      onClick={() => {
-                        setPage("home");
-                        setIsSidebarOpen(false);
-                      }}
-                      className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
-                        page === "home"
-                          ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700"
-                          : "text-gray-700 hover:bg-gray-50"
-                      }`}
-                    >
-                      <i className="fas fa-tachometer-alt mr-3 w-4"></i> Dashboard
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      onClick={() => {
-                        setPage("clients");
-                        setIsSidebarOpen(false);
-                      }}
-                      className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
-                        page === "clients"
-                          ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700"
-                          : "text-gray-700 hover:bg-gray-50"
-                      }`}
-                    >
-                      <i className="fas fa-users mr-3 w-4"></i> Clients
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      onClick={() => {
-                        setPage("payments");
-                        setIsSidebarOpen(false);
-                      }}
-                      className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
-                        page === "payments"
-                          ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700"
-                          : "text-gray-700 hover:bg-gray-50"
-                      }`}
-                    >
-                      <i className="fas fa-money-bill-wave mr-3 w-4"></i> Payments
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      onClick={() => {
-                        setPage("reports");
-                        setIsSidebarOpen(false);
-                      }}
-                      className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
-                        page === "reports"
-                          ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700"
-                          : "text-gray-700 hover:bg-gray-50"
-                      }`}
-                    >
-                      <i className="fas fa-chart-line mr-3 w-4"></i> Reports
-                    </button>
-                  </li>
-                  <li>
-                    <button
-                      onClick={() => {
-                        logout();
-                        setIsSidebarOpen(false);
-                      }}
-                      className="w-full text-left p-3 rounded-lg flex items-center transition-colors text-red-600 hover:bg-red-50"
-                    >
-                      <i className="fas fa-sign-out-alt mr-3 w-4"></i> Logout
-                    </button>
-                  </li>
-                </ul>
-              </nav>
-              <main className="flex-1 p-6 overflow-y-auto sm:ml-64 mt-16 sm:mt-0 bg-gray-50">
-                {isImporting && (
-                  <div className="mb-4 p-4 bg-yellow-50 text-yellow-800 rounded-lg text-center border border-yellow-200">
-                    <i className="fas fa-spinner fa-spin mr-2"></i>
-                    Importing, please wait... Do not refresh the page.
+            {page === "signIn" ? (
+              <SignInPage
+                setSessionToken={setSessionToken}
+                setCurrentUser={setCurrentUser}
+                setPage={setPage}
+              />
+            ) : (
+              <>
+                <nav className="bg-white shadow-sm w-full p-4 sm:hidden flex justify-between items-center border-b border-gray-200">
+                  <div className="flex items-center">
+                    <i className="fas fa-money-bill-wave text-2xl mr-2 text-gray-800"></i>
+                    <h1 className="text-xl font-semibold text-gray-800">Payment Tracker</h1>
                   </div>
-                )}
-                {page === "signIn" && (
-                  <SignInPage
-                    setSessionToken={setSessionToken}
-                    setCurrentUser={setCurrentUser}
-                    setPage={setPage}
-                  />
-                )}
-                {page === "home" && (
-                  <HomePage
-                    paymentsData={paymentsData}
-                    setPaymentsData={setPaymentsData}
-                    searchQuery={searchQuery}
-                    setSearchQuery={setSearchQuery}
-                    monthFilter={monthFilter}
-                    setMonthFilter={setMonthFilter}
-                    statusFilter={statusFilter}
-                    setStatusFilter={setStatusFilter}
-                    updatePayment={updatePayment}
-                    handleContextMenu={handleContextMenu}
-                    contextMenu={contextMenu}
-                    hideContextMenu={hideContextMenu}
-                    deleteRow={deleteRow}
-                    setPage={setPage}
-                    importCsv={importCsv}
-                    isImporting={isImporting}
-                    sessionToken={sessionToken}
-                    currentYear={currentYear}
-                    setCurrentYear={setCurrentYear}
-                    handleYearChange={handleYearChange}
-                    setErrorMessage={setErrorMessage}
-                    apiCacheRef={apiCacheRef}
-                    currentUser={currentUser}
-                    onMount={() =>
-                      console.log(
-                        "App.jsx: HomePage mounted with sessionToken:",
-                        sessionToken?.substring(0, 10) + "..."
-                      )
-                    }
-                    fetchTypes={fetchTypes}
-                    csvFileInputRef={csvFileInputRef}
-                    refreshTrigger={refreshTrigger}
-                    fetchPayments={fetchPayments}
-                    saveTimeouts={saveTimeouts}
-                    showToast={toastContext.showToast}
-                  />
-                )}
-                {page === "addClient" && (
-                  <AddClientPage
-                    setPage={setPage}
-                    fetchClients={fetchClients}
-                    fetchPayments={fetchPayments}
-                    sessionToken={sessionToken}
-                    currentUser={currentUser}
-                    editClient={editClient}
-                    setEditClient={setEditClient}
-                    types={types}
-                    apiCacheRef={apiCacheRef}
-                    fetchTypes={fetchTypes}
-                    setRefreshTrigger={setRefreshTrigger}
-                  />
-                )}
-                {page === "clients" && (
-                  <ClientsPage
-                    clientsData={clientsData}
-                    setClientsData={setClientsData}
-                    setPage={setPage}
-                    setEditClient={setEditClient}
-                    fetchClients={fetchClients}
-                    fetchPayments={fetchPayments}
-                    sessionToken={sessionToken}
-                    currentYear={currentYear}
-                    isImporting={isImporting}
-                    importCsv={importCsv}
-                  />
-                )}
-                {page === "payments" && (
-                  <PaymentsPage
-                    paymentsData={paymentsData}
-                    setPaymentsData={setPaymentsData}
-                    fetchClients={fetchClients}
-                    fetchPayments={fetchPayments}
-                    sessionToken={sessionToken}
-                    isImporting={isImporting}
-                    currentYear={currentYear}
-                    setCurrentYear={setCurrentYear}
-                    handleYearChange={handleYearChange}
-                  />
-                )}
-                {page === "reports" && (
-                  <HomePage
-                    paymentsData={paymentsData}
-                    setPaymentsData={setPaymentsData}
-                    searchQuery={searchQuery}
-                    setSearchQuery={setSearchQuery}
-                    monthFilter={monthFilter}
-                    setMonthFilter={setMonthFilter}
-                    statusFilter={statusFilter}
-                    setStatusFilter={setStatusFilter}
-                    updatePayment={updatePayment}
-                    handleContextMenu={handleContextMenu}
-                    contextMenu={contextMenu}
-                    hideContextMenu={hideContextMenu}
-                    deleteRow={deleteRow}
-                    setPage={setPage}
-                    importCsv={importCsv}
-                    isReportsPage={true}
-                    isImporting={isImporting}
-                    sessionToken={sessionToken}
-                    currentYear={currentYear}
-                    setCurrentYear={setCurrentYear}
-                    handleYearChange={handleYearChange}
-                    setErrorMessage={setErrorMessage}
-                    apiCacheRef={apiCacheRef}
-                    saveTimeouts={saveTimeouts}
-                    showToast={toastContext.showToast}
-                  />
-                )}
-              </main>
-            </div>
+                  <button
+                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                    className="text-gray-800 focus:outline-none"
+                  >
+                    <i className="fas fa-bars text-2xl"></i>
+                  </button>
+                </nav>
+                <div className="flex flex-col sm:flex-row">
+                  <nav
+                    className={`bg-white shadow-lg w-full sm:w-64 p-4 fixed top-0 left-0 h-auto sm:h-full border-r border-gray-200 z-50 ${isSidebarOpen ? "block" : "hidden sm:block"}`}
+                  >
+                    <div className="flex items-center mb-6 pb-4 border-b border-gray-200">
+                      <i className="fas fa-money-bill-wave text-2xl mr-2 text-gray-800"></i>
+                      <h1 className="text-xl font-semibold text-gray-800">Payment Tracker</h1>
+                    </div>
+                    <ul className="space-y-1">
+                      <li>
+                        <button
+                          onClick={() => {
+                            setPage("home");
+                            setIsSidebarOpen(false);
+                          }}
+                          className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
+                            page === "home"
+                              ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700"
+                              : "text-gray-700 hover:bg-gray-50"
+                          }`}
+                        >
+                          <i className="fas fa-tachometer-alt mr-3 w-4"></i> Dashboard
+                        </button>
+                      </li>
+                      <li>
+                        <button
+                          onClick={() => {
+                            setPage("clients");
+                            setIsSidebarOpen(false);
+                          }}
+                          className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
+                            page === "clients"
+                              ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700"
+                              : "text-gray-700 hover:bg-gray-50"
+                          }`}
+                        >
+                          <i className="fas fa-users mr-3 w-4"></i> Clients
+                        </button>
+                      </li>
+                      <li>
+                        <button
+                          onClick={() => {
+                            setPage("payments");
+                            setIsSidebarOpen(false);
+                          }}
+                          className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
+                            page === "payments"
+                              ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700"
+                              : "text-gray-700 hover:bg-gray-50"
+                          }`}
+                        >
+                          <i className="fas fa-money-bill-wave mr-3 w-4"></i> Payments
+                        </button>
+                      </li>
+                      <li>
+                        <button
+                          onClick={() => {
+                            setPage("reports");
+                            setIsSidebarOpen(false);
+                          }}
+                          className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
+                            page === "reports"
+                              ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700"
+                              : "text-gray-700 hover:bg-gray-50"
+                          }`}
+                        >
+                          <i className="fas fa-chart-line mr-3 w-4"></i> Reports
+                        </button>
+                      </li>
+                      <li>
+                        <button
+                          onClick={() => {
+                            logout();
+                            setIsSidebarOpen(false);
+                          }}
+                          className="w-full text-left p-3 rounded-lg flex items-center transition-colors text-red-600 hover:bg-red-50"
+                        >
+                          <i className="fas fa-sign-out-alt mr-3 w-4"></i> Logout
+                        </button>
+                      </li>
+                    </ul>
+                  </nav>
+                  <main className="flex-1 p-6 overflow-y-auto sm:ml-64 mt-16 sm:mt-0 bg-gray-50">
+                    {isImporting && (
+                      <div className="mb-4 p-4 bg-yellow-50 text-yellow-800 rounded-lg text-center border border-yellow-200">
+                        <i className="fas fa-spinner fa-spin mr-2"></i>
+                        Importing, please wait... Do not refresh the page.
+                      </div>
+                    )}
+                    {page === "home" && (
+                      <HomePage
+                        paymentsData={paymentsData}
+                        setPaymentsData={setPaymentsData}
+                        searchQuery={searchQuery}
+                        setSearchQuery={setSearchQuery}
+                        monthFilter={monthFilter}
+                        setMonthFilter={setMonthFilter}
+                        statusFilter={statusFilter}
+                        setStatusFilter={setStatusFilter}
+                        updatePayment={updatePayment}
+                        handleContextMenu={handleContextMenu}
+                        contextMenu={contextMenu}
+                        hideContextMenu={hideContextMenu}
+                        deleteRow={deleteRow}
+                        setPage={setPage}
+                        importCsv={importCsv}
+                        isImporting={isImporting}
+                        sessionToken={sessionToken}
+                        currentYear={currentYear}
+                        setCurrentYear={setCurrentYear}
+                        handleYearChange={handleYearChange}
+                        setErrorMessage={setErrorMessage}
+                        apiCacheRef={apiCacheRef}
+                        currentUser={currentUser}
+                        onMount={() =>
+                          console.log(
+                            "App.jsx: HomePage mounted with sessionToken:",
+                            sessionToken?.substring(0, 10) + "..."
+                          )
+                        }
+                        fetchTypes={fetchTypes}
+                        csvFileInputRef={csvFileInputRef}
+                        refreshTrigger={refreshTrigger}
+                        fetchPayments={fetchPayments}
+                        saveTimeouts={saveTimeouts}
+                        showToast={toastContext.showToast}
+                      />
+                    )}
+                    {page === "addClient" && (
+                      <AddClientPage
+                        setPage={setPage}
+                        fetchClients={fetchClients}
+                        fetchPayments={fetchPayments}
+                        sessionToken={sessionToken}
+                        currentUser={currentUser}
+                        editClient={editClient}
+                        setEditClient={setEditClient}
+                        types={types}
+                        apiCacheRef={apiCacheRef}
+                        fetchTypes={fetchTypes}
+                        setRefreshTrigger={setRefreshTrigger}
+                      />
+                    )}
+                    {page === "clients" && (
+                      <ClientsPage
+                        clientsData={clientsData}
+                        setClientsData={setClientsData}
+                        setPage={setPage}
+                        setEditClient={setEditClient}
+                        fetchClients={fetchClients}
+                        fetchPayments={fetchPayments}
+                        sessionToken={sessionToken}
+                        currentYear={currentYear}
+                        isImporting={isImporting}
+                        importCsv={importCsv}
+                      />
+                    )}
+                    {page === "payments" && (
+                      <PaymentsPage
+                        paymentsData={paymentsData}
+                        setPaymentsData={setPaymentsData}
+                        fetchClients={fetchClients}
+                        fetchPayments={fetchPayments}
+                        sessionToken={sessionToken}
+                        isImporting={isImporting}
+                        currentYear={currentYear}
+                        setCurrentYear={setCurrentYear}
+                        handleYearChange={handleYearChange}
+                      />
+                    )}
+                    {page === "reports" && (
+                      <HomePage
+                        paymentsData={paymentsData}
+                        setPaymentsData={setPaymentsData}
+                        searchQuery={searchQuery}
+                        setSearchQuery={setSearchQuery}
+                        monthFilter={monthFilter}
+                        setMonthFilter={setMonthFilter}
+                        statusFilter={statusFilter}
+                        setStatusFilter={setStatusFilter}
+                        updatePayment={updatePayment}
+                        handleContextMenu={handleContextMenu}
+                        contextMenu={contextMenu}
+                        hideContextMenu={hideContextMenu}
+                        deleteRow={deleteRow}
+                        setPage={setPage}
+                        importCsv={importCsv}
+                        isReportsPage={true}
+                        isImporting={isImporting}
+                        sessionToken={sessionToken}
+                        currentYear={currentYear}
+                        setCurrentYear={setCurrentYear}
+                        handleYearChange={handleYearChange}
+                        setErrorMessage={setErrorMessage}
+                        apiCacheRef={apiCacheRef}
+                        saveTimeouts={saveTimeouts}
+                        showToast={toastContext.showToast}
+                      />
+                    )}
+                  </main>
+                </div>
+              </>
+            )}
           </div>
         )}
       </ToastManager>

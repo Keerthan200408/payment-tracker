@@ -769,22 +769,9 @@ const validateRowData = (rowData, currentYear) => {
             value: value || ""
           }, currentYear);
           if (response.data.updatedRow) {
-            setPaymentsData((prev) =>
-              prev.map((row, idx) => {
-                if (idx !== rowIndex) return row;
-                const updatedRow = {
-                  ...row,
-                  ...response.data.updatedRow,
-                  Email: row.Email || response.data.updatedRow.Email,
-                };
-                // Use previousYearsDue from map
-                const previousYearsDue = getPreviousYearsDue(updatedRow);
-                const recalculatedDue = calculateDuePayment(updatedRow, months, currentYear, previousYearsDue);
-                updatedRow.Due_Payment = recalculatedDue.toFixed(2);
-                log(`HomePage.jsx: debouncedUpdate: Updated due payment for ${updatedRow.Client_Name || 'unknown'} to ${recalculatedDue}`);
-                return updatedRow;
-              })
-            );
+            // After successful save, fetch latest payments data for the year
+            const refreshed = await paymentsAPI.getPaymentsByYear(currentYear);
+            setPaymentsData(Array.isArray(refreshed.data) ? refreshed.data : []);
           }
           setPendingUpdates((prev) => {
             const newPending = { ...prev };
@@ -802,6 +789,8 @@ const validateRowData = (rowData, currentYear) => {
             return newPending;
           });
           setErrorMessage(`Failed to save payment: ${error.response?.data?.error || error.message}`);
+          // Revert local state
+          setPaymentsData(paymentsData);
         }
         delete debounceTimersRef.current[key];
       }, 1000);

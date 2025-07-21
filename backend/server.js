@@ -276,18 +276,28 @@ app.post("/api/save-payment", authenticateToken, paymentLimiter, asyncHandler(as
   try {
     const db = await database.getDb();
     const paymentsCollection = database.getPaymentsCollection(username);
-    const payment = await paymentsCollection.findOne({ 
+    const paymentRecord = await paymentsCollection.findOne({ 
       Client_Name: clientName, 
       Type: type, 
       Year: parseInt(year) 
     });
     
-    if (!payment) {
-      throw new Error("Payment record not found");
+    if (!paymentRecord) {
+      // Create payment record if it does not exist
+      const createdAt = new Date().toISOString();
+      const newPaymentDoc = createPaymentDocument(clientName, type, 0, parseInt(year), createdAt);
+      await paymentsCollection.insertOne(newPaymentDoc);
+      logger.payment("Created missing payment record for first payment", username, { clientName, type, year });
     }
+    // Fetch (now guaranteed to exist)
+    const paymentRecord = await paymentsCollection.findOne({ 
+      Client_Name: clientName, 
+      Type: type, 
+      Year: parseInt(year) 
+    });
 
     const updatedPayments = { 
-      ...payment.Payments, 
+      ...paymentRecord.Payments, 
       [monthKey]: numericValue === 0 ? "" : numericValue.toString() 
     };
 
@@ -302,7 +312,7 @@ app.post("/api/save-payment", authenticateToken, paymentLimiter, asyncHandler(as
     }
 
     // Use centralized payment update utility
-    const updatedPayment = processPaymentUpdate(payment, updatedPayments, parseInt(year), prevYearPayment);
+    const updatedPayment = processPaymentUpdate(paymentRecord, updatedPayments, parseInt(year), prevYearPayment);
 
     await paymentsCollection.updateOne(
       { Client_Name: clientName, Type: type, Year: parseInt(year) },
@@ -310,9 +320,9 @@ app.post("/api/save-payment", authenticateToken, paymentLimiter, asyncHandler(as
     );
 
     const updatedRow = {
-      Client_Name: payment.Client_Name,
-      Type: payment.Type,
-      Amount_To_Be_Paid: parseFloat(payment.Amount_To_Be_Paid) || 0,
+      Client_Name: paymentRecord.Client_Name,
+      Type: paymentRecord.Type,
+      Amount_To_Be_Paid: parseFloat(paymentRecord.Amount_To_Be_Paid) || 0,
       january: updatedPayments.January || "",
       february: updatedPayments.February || "",
       march: updatedPayments.March || "",
