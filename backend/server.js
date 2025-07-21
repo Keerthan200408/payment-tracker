@@ -276,7 +276,7 @@ app.post("/api/save-payment", authenticateToken, paymentLimiter, asyncHandler(as
   try {
     const db = await database.getDb();
     const paymentsCollection = database.getPaymentsCollection(username);
-    const paymentRecord = await paymentsCollection.findOne({ 
+    let paymentRecord = await paymentsCollection.findOne({ 
       Client_Name: clientName, 
       Type: type, 
       Year: parseInt(year) 
@@ -288,13 +288,13 @@ app.post("/api/save-payment", authenticateToken, paymentLimiter, asyncHandler(as
       const newPaymentDoc = createPaymentDocument(clientName, type, 0, parseInt(year), createdAt);
       await paymentsCollection.insertOne(newPaymentDoc);
       logger.payment("Created missing payment record for first payment", username, { clientName, type, year });
+      // Fetch the newly created record
+      paymentRecord = await paymentsCollection.findOne({ 
+        Client_Name: clientName, 
+        Type: type, 
+        Year: parseInt(year) 
+      });
     }
-    // Fetch (now guaranteed to exist)
-    const paymentRecord = await paymentsCollection.findOne({ 
-      Client_Name: clientName, 
-      Type: type, 
-      Year: parseInt(year) 
-    });
 
     const updatedPayments = { 
       ...paymentRecord.Payments, 
