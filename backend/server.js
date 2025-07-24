@@ -6,6 +6,20 @@ const axios = require("axios");
 
 // Import modular components
 const config = require("./config");
+
+// Startup check for required notification environment variables
+const requiredEnv = [
+  'EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_USER', 'EMAIL_PASS', 'EMAIL_FROM',
+  'ULTRAMSG_TOKEN', 'ULTRAMSG_INSTANCE_ID'
+];
+const missingEnv = requiredEnv.filter((key) => !config[key]);
+if (missingEnv.length > 0) {
+  console.error("\n[ERROR] Missing required environment variables for notifications:", missingEnv.join(", "));
+  console.error("Notifications (email/WhatsApp) will NOT work until you set these in your .env file.\n");
+  // Optionally, exit the process if you want to force correct setup:
+  // process.exit(1);
+}
+
 const database = require("./db/mongo");
 const { authenticateToken, setTokenCookie, clearTokenCookie } = require("./middleware/auth");
 const { errorHandler, asyncHandler, notFoundHandler } = require("./middleware/errorHandler");
@@ -349,12 +363,15 @@ app.post("/api/save-payment", authenticateToken, paymentLimiter, asyncHandler(as
 // Send Email
 app.post("/api/send-email", authenticateToken, asyncHandler(async (req, res) => {
   const { to, subject, html } = req.body;
+  console.log(`[EMAIL] Attempting to send email to: ${to}, subject: ${subject}`);
   
   if (!to || !subject || !html) {
+    console.error("[EMAIL] Missing required fields", { to, subject, html });
     throw new Error("Recipient email, subject, and HTML content are required");
   }
   
   if (!validateInput.email(to)) {
+    console.error("[EMAIL] Invalid recipient email address", { to });
     throw new Error("Invalid recipient email address");
   }
 
@@ -364,6 +381,7 @@ app.post("/api/send-email", authenticateToken, asyncHandler(async (req, res) => 
     res.json({ message: "Email sent successfully", messageId: result.messageId });
   } catch (error) {
     logger.error("Send email error", error, { to, subject });
+    console.error("[EMAIL] Error sending email:", error.message);
     throw error;
   }
 }));
@@ -371,12 +389,15 @@ app.post("/api/send-email", authenticateToken, asyncHandler(async (req, res) => 
 // Send WhatsApp
 app.post("/api/send-whatsapp", authenticateToken, whatsappLimiter, asyncHandler(async (req, res) => {
   const { to, message } = req.body;
+  console.log(`[WHATSAPP] Attempting to send WhatsApp to: ${to}`);
   
   if (!to || !message) {
+    console.error("[WHATSAPP] Missing required fields", { to, message });
     throw new Error("Recipient phone number and message are required");
   }
   
   if (!validateInput.phone(to)) {
+    console.error("[WHATSAPP] Invalid recipient phone number", { to });
     throw new Error("Invalid recipient phone number");
   }
   
@@ -418,10 +439,12 @@ app.post("/api/send-whatsapp", authenticateToken, whatsappLimiter, asyncHandler(
       });
       return res.json({ message: "WhatsApp message sent successfully", messageId: response.data.messageId || "N/A" });
     } else {
+      console.error("[WHATSAPP] Unexpected response from WhatsApp API:", response.data);
       throw new Error(`Unexpected response from WhatsApp API: ${JSON.stringify(response.data)}`);
     }
   } catch (error) {
     logger.error("Send WhatsApp error", error, { to, user: req.user.username });
+    console.error("[WHATSAPP] Error sending WhatsApp:", error.message);
     throw error;
   }
 }));
