@@ -816,7 +816,13 @@ const validateRowData = (rowData, currentYear) => {
     [paymentsData, setErrorMessage, setPaymentsData, currentYear, months, calculateDuePayment, getPreviousYearsDue, getPaymentStatus, handleNotifications]
 );
 
-
+const handleInputChange = (rowIndex, month, value) => {
+  setLocalInputValues((prev) => ({
+    ...prev,
+    [`${rowIndex}-${month}`]: value,
+  }));
+  debouncedUpdate(rowIndex, month, value, currentYear);
+};
 
 
   useEffect(() => {
