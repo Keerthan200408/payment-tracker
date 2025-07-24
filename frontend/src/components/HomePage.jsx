@@ -767,7 +767,30 @@ const validateRowData = (rowData, currentYear) => {
           // Only update UI if this is the latest request for this cell
           if (latestRequestIdRef.current[key] === requestId && response.data.updatedRow) {
             const refreshed = await paymentsAPI.getPaymentsByYear(currentYear);
-            setPaymentsData(Array.isArray(refreshed.data) ? refreshed.data : []);
+            const refreshedData = Array.isArray(refreshed.data) ? refreshed.data : [];
+            setPaymentsData(refreshedData);
+            // Find the updated row
+            const updatedRow = refreshedData[rowIndex];
+            if (updatedRow) {
+              // Prepare notifyStatuses for all months (or just the updated month)
+              const notifyStatuses = [
+                {
+                  month,
+                  status: getPaymentStatus(updatedRow, month),
+                  paidAmount: parseFloat(updatedRow[month]) || 0,
+                  expectedAmount: parseFloat(updatedRow.Amount_To_Be_Paid) || 0,
+                },
+              ];
+              handleNotifications(
+                updatedRow.Client_Name,
+                updatedRow.Email,
+                updatedRow.Phone_Number,
+                updatedRow.Type,
+                currentYear,
+                notifyStatuses,
+                updatedRow.Due_Payment
+              );
+            }
           }
           setPendingUpdates((prev) => {
             const newPending = { ...prev };
@@ -790,45 +813,7 @@ const validateRowData = (rowData, currentYear) => {
         delete debounceTimersRef.current[key];
       }, 1000);
     },
-    [paymentsData, setErrorMessage, setPaymentsData, currentYear, months, calculateDuePayment, getPreviousYearsDue]
-  );
-
-  // Patch handleInputChange
-const handleInputChange = useCallback(
-  (rowIndex, month, value) => {
-    const trimmedValue = value.trim();
-      // If cleared, set to empty string
-      const parsedValue = trimmedValue === "" ? "" : (trimmedValue === "0.00" ? "0" : trimmedValue);
-    if (trimmedValue !== "" && trimmedValue !== "0.00" && (isNaN(parseFloat(parsedValue)) || parseFloat(parsedValue) < 0)) {
-      setErrorMessage("Please enter a valid non-negative number.");
-      return;
-    }
-    const key = `${rowIndex}-${month}`;
-    setLocalInputValues((prev) => ({
-      ...prev,
-      [key]: trimmedValue,
-    }));
-    // Create updated row with new value
-    const updatedRow = { ...paymentsData[rowIndex], [month]: parsedValue };
-      // Use previousYearsDue from map
-      const previousYearsDue = getPreviousYearsDue(updatedRow);
-      const recalculatedDue = calculateDuePayment(updatedRow, months, currentYear, previousYearsDue);
-    setPaymentsData((prev) => {
-      const newData = [...prev];
-      newData[rowIndex] = {
-        ...newData[rowIndex],
-        [month]: trimmedValue, // Use trimmedValue for UI consistency
-        Due_Payment: recalculatedDue.toFixed(2),
-      };
-      return newData;
-    });
-    // Queue backend update (debounced) - only if value actually changed
-    const currentValue = paymentsData[rowIndex]?.[month] || "";
-    if (trimmedValue !== currentValue) {
-      debouncedUpdate(rowIndex, month, parsedValue, currentYear);
-    }
-  },
-    [debouncedUpdate, paymentsData, currentYear, setPaymentsData, setErrorMessage, months, calculateDuePayment, getPreviousYearsDue]
+    [paymentsData, setErrorMessage, setPaymentsData, currentYear, months, calculateDuePayment, getPreviousYearsDue, getPaymentStatus, handleNotifications]
 );
 
 
