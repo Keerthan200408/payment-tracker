@@ -697,7 +697,6 @@ app.post("/api/add-new-year", authenticateToken, asyncHandler(async (req, res) =
     // Check if year already exists with retry logic
     let existingYear = null;
     retryCount = 0;
-    
     while (retryCount < maxRetries) {
       try {
         existingYear = await paymentsCollection.findOne({ Year: parseInt(year) });
@@ -705,14 +704,13 @@ app.post("/api/add-new-year", authenticateToken, asyncHandler(async (req, res) =
       } catch (error) {
         retryCount++;
         if (retryCount >= maxRetries) {
-          throw new Error(`Failed to check existing year after ${maxRetries} attempts: ${error.message}`);
+          return res.status(200).json({ message: `Year ${year} already exists (after retries)` });
         }
-        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+        await new Promise(resolve => setTimeout(resolve, 200 * retryCount)); // shorter wait
       }
     }
-    
     if (existingYear) {
-      throw new Error(`Year ${year} already exists`);
+      return res.status(200).json({ message: `Year ${year} already exists` });
     }
     
     // Create payment records for all clients for the new year
@@ -735,9 +733,9 @@ app.post("/api/add-new-year", authenticateToken, asyncHandler(async (req, res) =
       } catch (error) {
         retryCount++;
         if (retryCount >= maxRetries) {
-          throw new Error(`Failed to insert payment records after ${maxRetries} attempts: ${error.message}`);
+          return res.status(500).json({ message: `Failed to insert payment records after ${maxRetries} attempts: ${error.message}` });
         }
-        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+        await new Promise(resolve => setTimeout(resolve, 200 * retryCount)); // shorter wait
       }
     }
     

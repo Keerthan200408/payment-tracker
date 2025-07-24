@@ -141,27 +141,27 @@ const HomePage = ({
   // Updated calculateDuePayment to accept previousYearsDue
   const calculateDuePayment = (rowData, months, currentYear, previousYearsDue = 0) => {
     log(`HomePage.jsx: calculateDuePayment for ${rowData.Client_Name || 'unknown'}, Year = ${currentYear}`);
-    const sanitizedData = validateRowData(rowData, currentYear);
-    const amountToBePaid = parseFloat(sanitizedData.Amount_To_Be_Paid) || 0;
-    if (amountToBePaid <= 0) {
-      log(`HomePage.jsx: calculateDuePayment: Returning 0 due to invalid Amount_To_Be_Paid: ${amountToBePaid}`);
-      return 0;
+  const sanitizedData = validateRowData(rowData, currentYear);
+  const amountToBePaid = parseFloat(sanitizedData.Amount_To_Be_Paid) || 0;
+  if (amountToBePaid <= 0) {
+    log(`HomePage.jsx: calculateDuePayment: Returning 0 due to invalid Amount_To_Be_Paid: ${amountToBePaid}`);
+    return 0;
+  }
+  const totalPaymentsMade = months.reduce((sum, month) => {
+    const rawValue = sanitizedData[month];
+    const payment = (rawValue === "" || rawValue === "0.00" || rawValue == null) ? 0 : parseFloat(rawValue);
+    if (isNaN(payment) || payment < 0) {
+      log(`HomePage.jsx: calculateDuePayment: Invalid payment for ${month}: ${rawValue}, treating as 0`);
+      return sum;
     }
-    const totalPaymentsMade = months.reduce((sum, month) => {
-      const rawValue = sanitizedData[month];
-      const payment = (rawValue === "" || rawValue === "0.00" || rawValue == null) ? 0 : parseFloat(rawValue);
-      if (isNaN(payment) || payment < 0) {
-        log(`HomePage.jsx: calculateDuePayment: Invalid payment for ${month}: ${rawValue}, treating as 0`);
-        return sum;
-      }
-      return sum + payment;
-    }, 0);
-    const activeMonths = months.filter((month) => {
-      const rawValue = sanitizedData[month];
-      return rawValue !== "" && rawValue !== null && rawValue !== undefined;
-    }).length;
+    return sum + payment;
+  }, 0);
+  const activeMonths = months.filter((month) => {
+    const rawValue = sanitizedData[month];
+    return rawValue !== "" && rawValue !== null && rawValue !== undefined;
+  }).length;
     let totalDue;
-    if (parseInt(currentYear) > 2025) {
+  if (parseInt(currentYear) > 2025) {
       // Correct formula: previousYearsDue + (activeMonths * amountToBePaid - totalPaymentsMade)
       totalDue = previousYearsDue + (activeMonths * amountToBePaid - totalPaymentsMade);
     } else {
@@ -446,31 +446,30 @@ const validateRowData = (rowData, currentYear) => {
       setPaymentsData(paymentsDataNewYear);
       setCurrentYear(newYear);
       localStorage.setItem("currentYear", newYear);
-      setLocalErrorMessage("");
-      setErrorMessage("");
+        setLocalErrorMessage("");
+        setErrorMessage("");
       showToast(`Year ${newYear} added successfully with ${paymentsDataNewYear.length} clients.`, 'success', 3000);
     } catch (error) {
       log("HomePage.jsx: Error adding new year:", error);
       let errorMsg = error.response?.data?.error || error.message;
       let userMessage = `Failed to add new year: ${errorMsg}`;
-      if (errorMsg.includes("already exists")) {
-        userMessage = `Year ${newYear} already exists. Switching to ${newYear}...`;
+      // Always re-fetch years and payments after an error
+      localStorage.removeItem('availableYears');
+      await searchUserYears(controller.signal);
+      const paymentsResponse = await paymentsAPI.getPaymentsByYear(newYear);
+      let paymentsDataNewYear = paymentsResponse.data || [];
+      if (paymentsDataNewYear.length > 0) {
+        setPaymentsData(paymentsDataNewYear);
         setCurrentYear(newYear);
         localStorage.setItem("currentYear", newYear);
+        showToast(`Year ${newYear} was added (possibly after a retry).`, 'info', 4000);
         setLocalErrorMessage("");
         setErrorMessage("");
-        showToast(userMessage, 'info', 3000);
-        return;
-      } else if (errorMsg.includes("No clients found")) {
-        userMessage = "No clients found. Please add clients before creating a new year.";
-      } else if (errorMsg.includes("Database connection failed") || errorMsg.includes("Database collections not accessible")) {
-        userMessage = "Database connection issue. Please try again in a few seconds.";
-      } else if (errorMsg.includes("Failed to fetch clients") || errorMsg.includes("Failed to insert payment records")) {
-        userMessage = "Database operation failed. Please try again.";
-      }
+      } else {
       setLocalErrorMessage(userMessage);
       setErrorMessage(userMessage);
       showToast(userMessage, 'error', 5000);
+      }
     } finally {
       if (mountedRef.current) {
         setIsLoadingYears(false);
@@ -541,6 +540,7 @@ const validateRowData = (rowData, currentYear) => {
       });
 
       let notificationSent = false;
+      let notificationMedium = null;
 
       if (hasValidPhone) {
         let isValidWhatsApp = true;
@@ -594,6 +594,7 @@ const validateRowData = (rowData, currentYear) => {
               messageId: response.data.messageId || "N/A",
             });
             notificationSent = true;
+            notificationMedium = 'whatsapp';
           } catch (whatsappError) {
             log(`HomePage.jsx: WhatsApp attempt failed for ${clientPhone} (${clientName})`, {
               message: whatsappError.message,
@@ -674,6 +675,7 @@ const validateRowData = (rowData, currentYear) => {
             messageId: response.data.messageId || "N/A",
           });
           notificationSent = true;
+          notificationMedium = 'gmail';
           setLocalErrorMessage(`Email notification sent successfully to ${clientName}`);
         } catch (emailError) {
           log(`HomePage.jsx: Email failed for ${clientEmail} (${clientName})`, {
@@ -692,16 +694,27 @@ const validateRowData = (rowData, currentYear) => {
         setLocalErrorMessage(
           `No notification sent for ${clientName}: No valid phone or email provided.`
         );
+        notificationMedium = 'none';
       } else if (!notificationSent) {
         log(`HomePage.jsx: Email not attempted for ${clientName} due to invalid email`);
         setLocalErrorMessage(
           `No notification sent for ${clientName}: Email address invalid or missing.`
         );
+        notificationMedium = 'none';
+      }
+
+      // Show toast for 5 seconds indicating the medium used
+      if (notificationMedium === 'whatsapp') {
+        showToast('Notification sent via WhatsApp', 'success', 5000);
+      } else if (notificationMedium === 'gmail') {
+        showToast('Notification sent via Gmail', 'success', 5000);
+      } else {
+        showToast('No valid contact for notification', 'error', 5000);
       }
 
       return notificationSent;
     },
-    [sessionToken, hasValidEmail, setLocalErrorMessage, currentYear]
+    [sessionToken, hasValidEmail, setLocalErrorMessage, currentYear, showToast]
   );
 
   // Patch all due payment calculations to use previousYearDueMap
@@ -781,42 +794,42 @@ const validateRowData = (rowData, currentYear) => {
   );
 
   // Patch handleInputChange
-  const handleInputChange = useCallback(
-    (rowIndex, month, value) => {
-      const trimmedValue = value.trim();
+const handleInputChange = useCallback(
+  (rowIndex, month, value) => {
+    const trimmedValue = value.trim();
       // If cleared, set to empty string
       const parsedValue = trimmedValue === "" ? "" : (trimmedValue === "0.00" ? "0" : trimmedValue);
-      if (trimmedValue !== "" && trimmedValue !== "0.00" && (isNaN(parseFloat(parsedValue)) || parseFloat(parsedValue) < 0)) {
-        setErrorMessage("Please enter a valid non-negative number.");
-        return;
-      }
-      const key = `${rowIndex}-${month}`;
-      setLocalInputValues((prev) => ({
-        ...prev,
-        [key]: trimmedValue,
-      }));
-      // Create updated row with new value
-      const updatedRow = { ...paymentsData[rowIndex], [month]: parsedValue };
+    if (trimmedValue !== "" && trimmedValue !== "0.00" && (isNaN(parseFloat(parsedValue)) || parseFloat(parsedValue) < 0)) {
+      setErrorMessage("Please enter a valid non-negative number.");
+      return;
+    }
+    const key = `${rowIndex}-${month}`;
+    setLocalInputValues((prev) => ({
+      ...prev,
+      [key]: trimmedValue,
+    }));
+    // Create updated row with new value
+    const updatedRow = { ...paymentsData[rowIndex], [month]: parsedValue };
       // Use previousYearsDue from map
       const previousYearsDue = getPreviousYearsDue(updatedRow);
       const recalculatedDue = calculateDuePayment(updatedRow, months, currentYear, previousYearsDue);
-      setPaymentsData((prev) => {
-        const newData = [...prev];
-        newData[rowIndex] = {
-          ...newData[rowIndex],
-          [month]: trimmedValue, // Use trimmedValue for UI consistency
-          Due_Payment: recalculatedDue.toFixed(2),
-        };
-        return newData;
-      });
-      // Queue backend update (debounced) - only if value actually changed
-      const currentValue = paymentsData[rowIndex]?.[month] || "";
-      if (trimmedValue !== currentValue) {
-        debouncedUpdate(rowIndex, month, parsedValue, currentYear);
-      }
-    },
+    setPaymentsData((prev) => {
+      const newData = [...prev];
+      newData[rowIndex] = {
+        ...newData[rowIndex],
+        [month]: trimmedValue, // Use trimmedValue for UI consistency
+        Due_Payment: recalculatedDue.toFixed(2),
+      };
+      return newData;
+    });
+    // Queue backend update (debounced) - only if value actually changed
+    const currentValue = paymentsData[rowIndex]?.[month] || "";
+    if (trimmedValue !== currentValue) {
+      debouncedUpdate(rowIndex, month, parsedValue, currentYear);
+    }
+  },
     [debouncedUpdate, paymentsData, currentYear, setPaymentsData, setErrorMessage, months, calculateDuePayment, getPreviousYearsDue]
-  );
+);
 
 
 
