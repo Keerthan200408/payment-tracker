@@ -530,7 +530,7 @@ const validateRowData = (rowData, currentYear) => {
         notifyStatuses,
       });
 
-      const hasValidPhone = clientPhone && /^\+?[\d\s-]{10,15}$/.test(clientPhone.trim());
+      const hasValidPhone = clientPhone && /^(\+91|91)?[6-9]\d{9}$/.test(clientPhone.trim().replace(/[\s-]/g, ''));
       const hasValidEmailAddress = hasValidEmail({ Email: clientEmail, email: clientEmail });
 
       log(`HomePage.jsx: Notification checks`, {
@@ -553,9 +553,7 @@ const validateRowData = (rowData, currentYear) => {
 
           if (!verifyResponse.data.isValidWhatsApp) {
             log(`HomePage.jsx: ${clientPhone} is not registered with WhatsApp`);
-            setLocalErrorMessage(
-              `Cannot send WhatsApp message to ${clientName}: Phone number is not registered with WhatsApp.`
-            );
+            showToast(`Cannot send WhatsApp message to ${clientName}: Phone number is not registered with WhatsApp.`, 'error', 5000);
             isValidWhatsApp = false;
           }
         } catch (verifyError) {
@@ -564,11 +562,9 @@ const validateRowData = (rowData, currentYear) => {
             status: verifyError.response?.status,
             data: verifyError.response?.data,
           });
-          setLocalErrorMessage(
-            `Failed to verify WhatsApp status for ${clientName}: ${
+          showToast(`Failed to verify WhatsApp status for ${clientName}: ${
               verifyError.response?.data?.error || verifyError.message
-            }`
-          );
+            }`, 'error', 5000);
           isValidWhatsApp = false;
         }
 
@@ -601,11 +597,9 @@ const validateRowData = (rowData, currentYear) => {
               status: whatsappError.response?.status,
               data: whatsappError.response?.data,
             });
-            setLocalErrorMessage(
-              `Failed to send WhatsApp message to ${clientName}: ${
+            showToast(`Failed to send WhatsApp message to ${clientName}: ${
                 whatsappError.response?.data?.error || whatsappError.message
-              }. Attempting email.`
-            );
+              }. Attempting email.`, 'error', 5000);
           }
         }
       } else {
@@ -676,30 +670,24 @@ const validateRowData = (rowData, currentYear) => {
           });
           notificationSent = true;
           notificationMedium = 'gmail';
-          setLocalErrorMessage(`Email notification sent successfully to ${clientName}`);
+          showToast(`Email notification sent successfully to ${clientName}`, 'success', 5000);
         } catch (emailError) {
           log(`HomePage.jsx: Email failed for ${clientEmail} (${clientName})`, {
             message: emailError.message,
             status: emailError.response?.status,
             data: emailError.response?.data,
           });
-          setLocalErrorMessage(
-            `Failed to send email notification to ${clientName}: ${
+          showToast(`Failed to send email notification to ${clientName}: ${
               emailError.response?.data?.error || emailError.message
-            }`
-          );
+            }`, 'error', 5000);
         }
       } else if (!hasValidPhone && !hasValidEmailAddress) {
         log(`HomePage.jsx: No valid contact for ${clientName}`);
-        setLocalErrorMessage(
-          `No notification sent for ${clientName}: No valid phone or email provided.`
-        );
+        showToast(`No notification sent for ${clientName}: No valid phone or email provided.`, 'error', 5000);
         notificationMedium = 'none';
       } else if (!notificationSent) {
         log(`HomePage.jsx: Email not attempted for ${clientName} due to invalid email`);
-        setLocalErrorMessage(
-          `No notification sent for ${clientName}: Email address invalid or missing.`
-        );
+        showToast(`No notification sent for ${clientName}: Email address invalid or missing.`, 'error', 5000);
         notificationMedium = 'none';
       }
 
@@ -714,7 +702,7 @@ const validateRowData = (rowData, currentYear) => {
 
       return notificationSent;
     },
-    [sessionToken, hasValidEmail, setLocalErrorMessage, currentYear, showToast]
+    [sessionToken, hasValidEmail, showToast]
   );
 
   // Patch all due payment calculations to use previousYearDueMap
@@ -731,12 +719,12 @@ const validateRowData = (rowData, currentYear) => {
     (rowIndex, month, value, year) => {
       if (!paymentsData.length) {
         log("HomePage.jsx: Cannot queue update, paymentsData is empty");
-        setErrorMessage("Please wait for data to load before making updates.");
+        showToast("Please wait for data to load before making updates.", 'error', 5000);
         return;
       }
       if (!paymentsData[rowIndex]) {
         log("HomePage.jsx: Invalid rowIndex:", rowIndex);
-        setErrorMessage("Invalid row index.");
+        showToast("Invalid row index.", 'error', 5000);
         return;
       }
       const key = `${rowIndex}-${month}`;
@@ -807,13 +795,13 @@ const validateRowData = (rowData, currentYear) => {
             delete newPending[key];
             return newPending;
           });
-          setErrorMessage(`Failed to save payment: ${error.response?.data?.error || error.message}`);
+          showToast(`Failed to save payment: ${error.response?.data?.error || error.message}`, 'error', 5000);
           setPaymentsData(paymentsData);
         }
         delete debounceTimersRef.current[key];
       }, 1000);
     },
-    [paymentsData, setErrorMessage, setPaymentsData, currentYear, months, calculateDuePayment, getPreviousYearsDue, getPaymentStatus, handleNotifications]
+    [paymentsData, setPaymentsData, currentYear, months, calculateDuePayment, getPreviousYearsDue, getPaymentStatus, handleNotifications]
 );
 
 const handleInputChange = (rowIndex, month, value) => {
@@ -878,8 +866,10 @@ const handleInputChange = (rowIndex, month, value) => {
       }
     } catch (error) {
       log('HomePage.jsx: Error fetching payments:', error);
-      setLocalErrorMessage(
-        error.response?.data?.error || 'Failed to load payments data.'
+      showToast(
+        error.response?.data?.error || 'Failed to load payments data.',
+        'error',
+        5000
       );
       
       // Try to get cached data as fallback
@@ -994,11 +984,11 @@ const handleInputChange = (rowIndex, month, value) => {
   const handleAddType = async () => {
     log(`HomePage.jsx: type: ${newType}, user: ${currentUser}`);
     if (!newType.trim()) {
-      setLocalErrorMessage("Type name cannot be empty.");
+      showToast("Type name cannot be empty.", 'error', 5000);
       return;
     }
     if (newType.trim().length > 50) {
-      setLocalErrorMessage("Type name too long.");
+      showToast("Type name too long.", 'error', 5000);
       return;
     }
     const capitalizedType = newType.trim().toUpperCase();
@@ -1016,7 +1006,7 @@ const handleInputChange = (rowIndex, month, value) => {
       const cacheKey = `types_${currentUser}_${sessionToken}`;
       delete apiCacheRef.current[cacheKey];
       await fetchTypes(sessionToken);
-      alert(`Type ${capitalizedType} added successfully.`);
+      showToast(`Type ${capitalizedType} added successfully.`, 'success', 3000);
     } catch (error) {
       log(`HomePage.jsx: Error adding type for ${currentUser}:`, error);
       const errorMsg = error.response?.data?.error || error.message;
@@ -1026,7 +1016,7 @@ const handleInputChange = (rowIndex, month, value) => {
       } else if (error.message.includes("timeout")) {
         userMessage = "Request timed out. Please check your connection and try again.";
       }
-      setLocalErrorMessage(userMessage);
+      showToast(userMessage, 'error', 5000);
       if (error.response?.status === 401 || errorMsg.includes("Invalid token")) {
         setPage("signIn");
       }

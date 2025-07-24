@@ -48,7 +48,7 @@ const config = {
     CLIENT_NAME_MAX_LENGTH: 100,
     TYPE_MAX_LENGTH: 50,
     MAX_PAYMENT_AMOUNT: 1e6,
-    PHONE_REGEX: /^\+?[\d\s-]{10,15}$/,
+    PHONE_REGEX: /^(\+91|91)?[6-9]\d{9}$/,
     EMAIL_REGEX: /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/,
   },
   SANITIZE_OPTIONS: {
