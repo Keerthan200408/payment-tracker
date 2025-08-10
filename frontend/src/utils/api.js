@@ -17,6 +17,12 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Reset logout timer on API activity (if callback is available)
+    if (window.resetLogoutTimer) {
+      window.resetLogoutTimer();
+    }
+    
     return config;
   },
   (error) => {
