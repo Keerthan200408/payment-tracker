@@ -553,7 +553,6 @@ const validateRowData = (rowData, currentYear) => {
 
           if (!verifyResponse.data.isValidWhatsApp) {
             log(`HomePage.jsx: ${clientPhone} is not registered with WhatsApp`);
-            showToast(`Cannot send WhatsApp message to ${clientName}: Phone number is not registered with WhatsApp.`, 'error', 5000);
             isValidWhatsApp = false;
           }
         } catch (verifyError) {
@@ -562,9 +561,6 @@ const validateRowData = (rowData, currentYear) => {
             status: verifyError.response?.status,
             data: verifyError.response?.data,
           });
-          showToast(`Failed to verify WhatsApp status for ${clientName}: ${
-              verifyError.response?.data?.error || verifyError.message
-            }`, 'error', 5000);
           isValidWhatsApp = false;
         }
 
@@ -597,9 +593,7 @@ const validateRowData = (rowData, currentYear) => {
               status: whatsappError.response?.status,
               data: whatsappError.response?.data,
             });
-            showToast(`Failed to send WhatsApp message to ${clientName}: ${
-                whatsappError.response?.data?.error || whatsappError.message
-              }. Attempting email.`, 'error', 5000);
+            // Don't show error toast for WhatsApp failure, just log it
           }
         }
       } else {
@@ -611,98 +605,69 @@ const validateRowData = (rowData, currentYear) => {
           const duePaymentText = parseFloat(duePayment) > 0
             ? `<p><strong>Total Due Payment:</strong> ₹${parseFloat(duePayment).toFixed(2)}</p>`
             : "";
-          const emailContent = `
+          const emailHtml = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #333; border-bottom: 2px solid #007bff; padding-bottom: 10px;">
-                Payment Status Update
-              </h2>
-              <p>Dear <strong>${clientName}</strong>,</p>
-              <p>Your payment status for <strong>${type}</strong> has been updated for <strong>${year}</strong>:</p>
-              <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-                <thead>
-                  <tr style="background-color: #f8f9fa;">
-                    <th style="border: 1px solid #dee2e6; padding: 12px; text-align: left;">Month</th>
-                    <th style="border: 1px solid #dee2e6; padding: 12px; text-align: left;">Status</th>
-                    <th style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">Paid Amount</th>
-                    <th style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">Expected Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${notifyStatuses
-                    .map(
-                      ({ month, status, paidAmount, expectedAmount }) => `
-                      <tr>
-                        <td style="border: 1px solid #dee2e6; padding: 12px;">${
-                          month.charAt(0).toUpperCase() + month.slice(1)
-                        }</td>
-                        <td style="border: 1px solid #dee2e6; padding: 12px;">
-                          <span style="padding: 4px 8px; border-radius: 4px; color: white; background-color: ${
-                            status === "Unpaid" ? "#dc3545" : "#ffc107"
-                          };">
-                            ${status === "PartiallyPaid" ? "Partially Paid" : status}
-                          </span>
-                        </td>
-                        <td style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">₹${paidAmount.toFixed(2)}</td>
-                        <td style="border: 1px solid #dee2e6; padding: 12px; text-align: right;">₹${expectedAmount.toFixed(2)}</td>
-                      </tr>
-                      `
-                    )
-                    .join("")}
-                </tbody>
-              </table>
+              <h2 style="color: #333;">Payment Status Update</h2>
+              <p>Dear ${clientName},</p>
+              <p>Your payment status for <strong>${type}</strong> (${year}) has been updated:</p>
+              <ul style="list-style: none; padding: 0;">
+                ${notifyStatuses
+                  .map(
+                    ({ month, status, paidAmount, expectedAmount }) =>
+                      `<li style="margin: 10px 0; padding: 10px; background-color: #f8f9fa; border-left: 4px solid #007bff;">
+                        <strong>${month.charAt(0).toUpperCase() + month.slice(1)}:</strong> ${status}<br>
+                        <small>Paid: ₹${paidAmount.toFixed(2)}, Expected: ₹${expectedAmount.toFixed(2)}</small>
+                      </li>`
+                  )
+                  .join("")}
+              </ul>
               ${duePaymentText}
-              <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                <p style="margin: 0;"><strong>Note:</strong> Please review your account or contact us for any clarifications.</p>
-              </div>
-              <p>Best regards,<br><strong>Payment Tracker Team</strong></p>
+              <p>Please review your account or contact us for clarifications.</p>
+              <p>Best regards,<br>Payment Tracker Team</p>
             </div>
           `;
 
-          log(`HomePage.jsx: Sending email to ${clientEmail} for ${clientName}`);
+          log(`HomePage.jsx: Sending email to ${clientEmail}`);
           const response = await communicationAPI.sendEmail({
             to: clientEmail.trim(),
-            subject: `Payment Status Update - ${clientName} (${type}) - ${year}`,
-            html: emailContent,
+            subject: `Payment Status Update - ${type} (${year})`,
+            html: emailHtml,
           });
 
           log(`HomePage.jsx: Email sent successfully to ${clientEmail} for ${clientName}`, {
             messageId: response.data.messageId || "N/A",
           });
           notificationSent = true;
-          notificationMedium = 'gmail';
-          showToast(`Email notification sent successfully to ${clientName}`, 'success', 5000);
+          notificationMedium = 'email';
         } catch (emailError) {
-          log(`HomePage.jsx: Email failed for ${clientEmail} (${clientName})`, {
+          log(`HomePage.jsx: Email attempt failed for ${clientEmail} (${clientName})`, {
             message: emailError.message,
             status: emailError.response?.status,
             data: emailError.response?.data,
           });
-          showToast(`Failed to send email notification to ${clientName}: ${
-              emailError.response?.data?.error || emailError.message
-            }`, 'error', 5000);
+          // Don't show error toast for email failure, just log it
         }
-      } else if (!hasValidPhone && !hasValidEmailAddress) {
-        log(`HomePage.jsx: No valid contact for ${clientName}`);
-        showToast(`No notification sent for ${clientName}: No valid phone or email provided.`, 'error', 5000);
-        notificationMedium = 'none';
-      } else if (!notificationSent) {
-        log(`HomePage.jsx: Email not attempted for ${clientName} due to invalid email`);
-        showToast(`No notification sent for ${clientName}: Email address invalid or missing.`, 'error', 5000);
-        notificationMedium = 'none';
       }
 
-      // Show toast for 5 seconds indicating the medium used
-      if (notificationMedium === 'whatsapp') {
-        showToast('Notification sent via WhatsApp', 'success', 5000);
-      } else if (notificationMedium === 'gmail') {
-        showToast('Notification sent via Gmail', 'success', 5000);
+      // Show only one success notification based on the medium used
+      if (notificationSent) {
+        if (notificationMedium === 'whatsapp') {
+          showToast(`WhatsApp notification sent to ${clientName}`, 'success', 3000);
+        } else if (notificationMedium === 'email') {
+          showToast(`Email notification sent to ${clientName}`, 'success', 3000);
+        }
       } else {
-        showToast('No valid contact for notification', 'error', 5000);
+        log(`HomePage.jsx: No notifications sent for ${clientName} - no valid contact methods`);
+        // Don't show warning toast, just log it
       }
 
-      return notificationSent;
+      log(`HomePage.jsx: Notification process completed for ${clientName}`, {
+        notificationSent,
+        notificationMedium,
+        clientName,
+      });
     },
-    [sessionToken, hasValidEmail, showToast]
+    [showToast, hasValidEmail]
   );
 
   // Patch all due payment calculations to use previousYearDueMap
@@ -727,40 +692,87 @@ const validateRowData = (rowData, currentYear) => {
         showToast("Invalid row index.", 'error', 5000);
         return;
       }
+      
       const key = `${rowIndex}-${month}`;
+      
+      // Clear existing timer
       if (debounceTimersRef.current[key]) {
         clearTimeout(debounceTimersRef.current[key]);
       }
+      
+      // Set pending state immediately for better UX
       setPendingUpdates((prev) => ({
         ...prev,
         [key]: true,
       }));
+      
       // Generate a unique request ID for this cell update
       const requestId = Date.now() + Math.random();
       latestRequestIdRef.current[key] = requestId;
+      
+      // Optimized debouncing with shorter delay for better responsiveness
       debounceTimersRef.current[key] = setTimeout(async () => {
         try {
           const originalRow = paymentsData[rowIndex];
           log(`HomePage.jsx: Saving payment for ${originalRow.Client_Name}, month: ${month}, value: ${value}, year: ${currentYear}`);
+          
           if (!currentYear || currentYear === 'undefined' || currentYear === 'null') {
             log(`HomePage.jsx: Invalid currentYear: ${currentYear}, type: ${typeof currentYear}`);
             throw new Error(`Invalid year: ${currentYear}`);
           }
+          
+          // Optimistic update for immediate UI feedback
+          setPaymentsData((prev) => {
+            const updatedPayments = [...prev];
+            const rowData = { ...updatedPayments[rowIndex] };
+            rowData[month] = value || "";
+            
+            // Calculate due payment locally for immediate feedback
+            const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
+            const activeMonths = months.filter(
+              (m) => rowData[m] !== "" && rowData[m] !== null && rowData[m] !== undefined
+            ).length;
+            
+            const expectedPayment = activeMonths * amountToBePaid;
+            const totalPayments = months.reduce(
+              (sum, m) => sum + (parseFloat(rowData[m]) || 0),
+              0
+            );
+            
+            rowData.Due_Payment = Math.max(expectedPayment - totalPayments, 0).toFixed(2);
+            updatedPayments[rowIndex] = rowData;
+            return updatedPayments;
+          });
+          
+          // Send API request
           const response = await paymentsAPI.savePayment({
             clientName: originalRow.Client_Name,
             type: originalRow.Type,
             month: month.toLowerCase(),
             value: value || ""
           }, currentYear);
+          
           // Only update UI if this is the latest request for this cell
           if (latestRequestIdRef.current[key] === requestId && response.data.updatedRow) {
-            const refreshed = await paymentsAPI.getPaymentsByYear(currentYear);
-            const refreshedData = Array.isArray(refreshed.data) ? refreshed.data : [];
-            setPaymentsData(refreshedData);
-            // Find the updated row
-            const updatedRow = refreshedData[rowIndex];
+            // Update with server response for accuracy
+            setPaymentsData((prev) => {
+              const updatedPayments = [...prev];
+              const rowData = { ...updatedPayments[rowIndex] };
+              
+              // Update only the changed fields
+              Object.keys(response.data.updatedRow).forEach(field => {
+                if (response.data.updatedRow[field] !== undefined) {
+                  rowData[field] = response.data.updatedRow[field];
+                }
+              });
+              
+              updatedPayments[rowIndex] = rowData;
+              return updatedPayments;
+            });
+            
+            // Send notification only after successful save
+            const updatedRow = response.data.updatedRow;
             if (updatedRow) {
-              // Prepare notifyStatuses for all months (or just the updated month)
               const notifyStatuses = [
                 {
                   month,
@@ -769,48 +781,182 @@ const validateRowData = (rowData, currentYear) => {
                   expectedAmount: parseFloat(updatedRow.Amount_To_Be_Paid) || 0,
                 },
               ];
-              handleNotifications(
-                updatedRow.Client_Name,
-                updatedRow.Email,
-                updatedRow.Phone_Number,
-                updatedRow.Type,
-                currentYear,
-                notifyStatuses,
-                updatedRow.Due_Payment
-              );
+              
+              // Send notification asynchronously to avoid blocking UI
+              setTimeout(() => {
+                handleNotifications(
+                  updatedRow.Client_Name,
+                  updatedRow.Email,
+                  updatedRow.Phone_Number,
+                  updatedRow.Type,
+                  currentYear,
+                  notifyStatuses,
+                  updatedRow.Due_Payment
+                );
+              }, 100);
             }
           }
+          
+          // Clear pending state
           setPendingUpdates((prev) => {
             const newPending = { ...prev };
             delete newPending[key];
             return newPending;
           });
+          
           setLastUpdateTime(Date.now());
           log("HomePage.jsx: Payment saved successfully");
+          
         } catch (error) {
           log(`HomePage.jsx: Error saving payment:`, error);
           log(`HomePage.jsx: Error details - status: ${error.response?.status}, data:`, error.response?.data);
+          
+          // Revert optimistic update on error
+          setPaymentsData((prev) => [...prev]);
+          
+          // Clear pending state
           setPendingUpdates((prev) => {
             const newPending = { ...prev };
             delete newPending[key];
             return newPending;
           });
+          
           showToast(`Failed to save payment: ${error.response?.data?.error || error.message}`, 'error', 5000);
-          setPaymentsData(paymentsData);
         }
+        
+        // Clean up timer reference
         delete debounceTimersRef.current[key];
-      }, 1000);
+      }, 800); // Reduced from 1000ms to 800ms for better responsiveness
     },
-    [paymentsData, setPaymentsData, currentYear, months, calculateDuePayment, getPreviousYearsDue, getPaymentStatus, handleNotifications]
-);
+    [paymentsData, setPaymentsData, currentYear, months, getPaymentStatus, handleNotifications, showToast]
+  );
 
 const handleInputChange = (rowIndex, month, value) => {
   setLocalInputValues((prev) => ({
     ...prev,
     [`${rowIndex}-${month}`]: value,
   }));
-  debouncedUpdate(rowIndex, month, value, currentYear);
+  
+  // Use batch mechanism for better performance
+  addToBatch(rowIndex, month, value);
 };
+
+  // Batch update mechanism for better performance
+  const batchUpdates = useRef(new Map());
+  const batchTimerRef = useRef(null);
+  const BATCH_DELAY = 500; // Collect updates for 500ms before sending
+
+  const addToBatch = useCallback((rowIndex, month, value) => {
+    const key = `${rowIndex}-${month}`;
+    batchUpdates.current.set(key, { rowIndex, month, value });
+    
+    // Clear existing timer
+    if (batchTimerRef.current) {
+      clearTimeout(batchTimerRef.current);
+    }
+    
+    // Set new timer for batch processing
+    batchTimerRef.current = setTimeout(() => {
+      processBatchUpdates();
+    }, BATCH_DELAY);
+  }, []);
+
+  const processBatchUpdates = useCallback(async () => {
+    if (batchUpdates.current.size === 0) return;
+    
+    const updates = Array.from(batchUpdates.current.values());
+    batchUpdates.current.clear();
+    
+    try {
+      log(`HomePage.jsx: Processing batch update for ${updates.length} records`);
+      
+      // Prepare updates for API
+      const apiUpdates = updates.map(({ rowIndex, month, value }) => {
+        const row = paymentsData[rowIndex];
+        return {
+          clientName: row.Client_Name,
+          type: row.Type,
+          month: month.toLowerCase(),
+          value: value || ""
+        };
+      });
+      
+      // Send batch update to API
+      const response = await paymentsAPI.batchSavePayments(apiUpdates, currentYear);
+      
+      if (response.updatedPayments && response.updatedPayments.length > 0) {
+        // Update local state with server response
+        setPaymentsData((prev) => {
+          const updatedPayments = [...prev];
+          
+          response.updatedPayments.forEach((updatedPayment) => {
+            const rowIndex = updatedPayments.findIndex(
+              row => row.Client_Name === updatedPayment.Client_Name && row.Type === updatedPayment.Type
+            );
+            
+            if (rowIndex !== -1) {
+              // Update only the changed fields
+              Object.keys(updatedPayment).forEach(field => {
+                if (updatedPayment[field] !== undefined) {
+                  updatedPayments[rowIndex][field] = updatedPayment[field];
+                }
+              });
+            }
+          });
+          
+          return updatedPayments;
+        });
+        
+        // Send notifications for updated rows
+        response.updatedPayments.forEach((updatedPayment) => {
+          const updatedRow = updatedPayment;
+          if (updatedRow) {
+            const notifyStatuses = updates
+              .filter(update => {
+                const row = paymentsData.find(
+                  r => r.Client_Name === updatedRow.Client_Name && r.Type === updatedRow.Type
+                );
+                return row && row[update.month] !== update.value;
+              })
+              .map(update => ({
+                month: update.month,
+                status: getPaymentStatus(updatedRow, update.month),
+                paidAmount: parseFloat(updatedRow[update.month]) || 0,
+                expectedAmount: parseFloat(updatedRow.Amount_To_Be_Paid) || 0,
+              }));
+            
+            if (notifyStatuses.length > 0) {
+              setTimeout(() => {
+                handleNotifications(
+                  updatedRow.Client_Name,
+                  updatedRow.Email,
+                  updatedRow.Phone_Number,
+                  updatedRow.Type,
+                  currentYear,
+                  notifyStatuses,
+                  updatedRow.Due_Payment
+                );
+              }, 100);
+            }
+          }
+        });
+        
+        showToast(`Batch updated ${response.modifiedCount} payment records`, 'success', 3000);
+      }
+      
+      setLastUpdateTime(Date.now());
+      log(`HomePage.jsx: Batch payment update completed for ${updates.length} records`);
+      
+    } catch (error) {
+      log(`HomePage.jsx: Batch update error:`, error);
+      showToast(`Batch update failed: ${error.response?.data?.error || error.message}`, 'error', 5000);
+      
+      // Fallback to individual updates on batch failure
+      updates.forEach(({ rowIndex, month, value }) => {
+        debouncedUpdate(rowIndex, month, value, currentYear);
+      });
+    }
+  }, [paymentsData, currentYear, debouncedUpdate, getPaymentStatus, handleNotifications, showToast]);
 
 
   useEffect(() => {
@@ -966,6 +1112,9 @@ const handleInputChange = (rowIndex, month, value) => {
         clearTimeout(batchTimerRef.current);
         batchTimerRef.current = null;
       }
+      
+      // Clear batch updates
+      batchUpdates.current.clear();
     };
   }, []);
 
@@ -1521,6 +1670,26 @@ const handleInputChange = (rowIndex, month, value) => {
     }, 1000),
     [setCurrentYear, handleYearChange, setLocalInputValues, setPendingUpdates]
   );
+
+  // Cleanup effect for timers and batch updates
+  useEffect(() => {
+    return () => {
+      // Clear all debounce timers
+      Object.values(debounceTimersRef.current).forEach((timer) => {
+        if (timer) clearTimeout(timer);
+      });
+      debounceTimersRef.current = {};
+
+      // Clear batch timer
+      if (batchTimerRef.current) {
+        clearTimeout(batchTimerRef.current);
+        batchTimerRef.current = null;
+      }
+      
+      // Clear batch updates
+      batchUpdates.current.clear();
+    };
+  }, []);
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">

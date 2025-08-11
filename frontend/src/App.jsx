@@ -13,7 +13,8 @@ import {
   paymentsAPI, 
   typesAPI, 
   importAPI,
-  handleAPIError 
+  handleAPIError,
+  getClients
 } from './utils/api';
 
 const AUTO_LOGOUT_MS = 4 * 60 * 60 * 1000; // 4 hours
@@ -97,6 +98,68 @@ const sortDataByCreatedAt = (data, sortOrder = 'desc') => {
     } else {
       return dateA - dateB; // Oldest first
     }
+  });
+};
+
+// Enhanced sorting that maintains client order
+const sortClientsByCreatedAt = (clients, sortOrder = 'desc') => {
+  if (!Array.isArray(clients)) return [];
+  
+  // First, sort by createdAt
+  const sortedClients = [...clients].sort((a, b) => {
+    const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+    const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
+    
+    if (sortOrder === 'desc') {
+      return dateB - dateA; // Newest first
+    } else {
+      return dateA - dateB; // Oldest first
+    }
+  });
+  
+  // Create a map to maintain order for clients without createdAt
+  const orderMap = new Map();
+  sortedClients.forEach((client, index) => {
+    const key = `${client.Client_Name}_${client.Type}`;
+    orderMap.set(key, index);
+  });
+  
+  return sortedClients;
+};
+
+// Enhanced sorting for payments that maintains client order
+const sortPaymentsByClientOrder = (payments, clients, sortOrder = 'desc') => {
+  if (!Array.isArray(payments) || !Array.isArray(clients)) return [];
+  
+  // Create client order map from clients array
+  const clientOrderMap = new Map();
+  clients.forEach((client, index) => {
+    const key = `${client.Client_Name}_${client.Type}`;
+    clientOrderMap.set(key, index);
+  });
+  
+  // Sort payments by client order first, then by createdAt
+  return [...payments].sort((a, b) => {
+    const keyA = `${a.Client_Name}_${a.Type}`;
+    const keyB = `${b.Client_Name}_${b.Type}`;
+    
+    const orderA = clientOrderMap.get(keyA) ?? Number.MAX_SAFE_INTEGER;
+    const orderB = clientOrderMap.get(keyB) ?? Number.MAX_SAFE_INTEGER;
+    
+    // If both clients have the same order, sort by createdAt
+    if (orderA === orderB) {
+      const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
+      const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
+      
+      if (sortOrder === 'desc') {
+        return dateB - dateA;
+      } else {
+        return dateA - dateB;
+      }
+    }
+    
+    // Maintain client order
+    return orderA - orderB;
   });
 };
 
@@ -341,13 +404,13 @@ const fetchClients = async (token, forceRefresh = false) => {
   const requestPromise = (async () => {
     try {
       console.log("Fetching clients with token:", token?.substring(0, 10) + "...");
-      const response = await clientsAPI.getClients();
+      const response = await getClients(selectedYear);
       
-      console.log("Clients fetched:", response.data);
-      const clientsData = Array.isArray(response.data) ? response.data : [];
+      console.log("Clients fetched:", response);
+      const clientsData = Array.isArray(response) ? response : [];
       
       // Sort clients by createdAt (newest first)
-      const sortedClientsData = sortDataByCreatedAt(clientsData, 'desc');
+      const sortedClientsData = sortClientsByCreatedAt(clientsData, 'desc');
       console.log("Clients sorted by createdAt (newest first)");
       
       setClientsData(sortedClientsData);
@@ -414,8 +477,8 @@ const fetchPayments = async (token, year, forceRefresh = false) => {
       console.log(`Fetched payments for ${year}:`, data);
 
       // Sort payments by createdAt (newest first)
-      const sortedPaymentsData = sortDataByCreatedAt(data, 'desc');
-      console.log("Payments sorted by createdAt (newest first)");
+      const sortedPaymentsData = sortPaymentsByClientOrder(data, clientsData, 'desc');
+      console.log("Payments sorted by client order and createdAt (newest first)");
 
       setPaymentsData(sortedPaymentsData);
 
