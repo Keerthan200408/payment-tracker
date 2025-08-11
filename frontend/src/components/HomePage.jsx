@@ -21,7 +21,7 @@ import DataTable from './DataTable.jsx';
 import usePerformanceMonitor from '../hooks/usePerformanceMonitor';
 import apiCacheManager from '../utils/apiCache';
 import PerformanceDashboard from './PerformanceDashboard.jsx';
-const BATCH_DELAY = 3000; // Increased from 1000 to 3000ms
+const BATCH_DELAY = 500; // Collect updates for 500ms before sending
 const BATCH_SIZE = 3; // Reduced from 5 to 3
 const CACHE_DURATION = 5 * 60 * 1000;
 
@@ -843,8 +843,6 @@ const handleInputChange = (rowIndex, month, value) => {
 
   // Batch update mechanism for better performance
   const batchUpdates = useRef(new Map());
-  const batchTimerRef = useRef(null);
-  const BATCH_DELAY = 500; // Collect updates for 500ms before sending
 
   const addToBatch = useCallback((rowIndex, month, value) => {
     const key = `${rowIndex}-${month}`;
