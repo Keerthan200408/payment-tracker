@@ -6,7 +6,6 @@ import ClientsPage from "./components/ClientsPage.jsx";
 import PaymentsPage from "./components/PaymentsPage.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import ToastManager from "./components/ToastManager.jsx";
-import SessionTimer from "./components/SessionTimer.jsx";
 import { 
   authAPI, 
   clientsAPI, 
@@ -48,12 +47,6 @@ const App = () => {
 
   const logout = () => {
   console.log("Logging out user:", currentUser);
-  
-  // Clear logout timer
-  if (logoutTimerRef.current) {
-    clearTimeout(logoutTimerRef.current);
-    logoutTimerRef.current = null;
-  }
   
   // Clear all pending requests
   Object.keys(apiCacheRef.current).forEach(key => {
@@ -103,11 +96,6 @@ const sortDataByCreatedAt = (data, sortOrder = 'desc') => {
   const handleSessionError = (error) => {
   if (error.response && (error.response.status === 401 || error.response.status === 403)) {
     console.log("Session invalid, logging out");
-    // Clear any existing logout timers since we're logging out now
-    if (logoutTimerRef.current) {
-      clearTimeout(logoutTimerRef.current);
-      logoutTimerRef.current = null;
-    }
     logout();
   } else if (error.response?.status === 429) {
     console.log("Rate limit hit, backing off");
@@ -200,72 +188,40 @@ const fetchTypes = async (token) => {
 }, []);
 
   // Initialize session
-  useEffect(() => {
-    if (isInitialized) return; // Prevent re-initialization
-    
-    const storedUser = localStorage.getItem("currentUser");
-    const storedToken = localStorage.getItem("sessionToken");
-    const storedPage = localStorage.getItem("currentPage");
-    const storedYear = localStorage.getItem("currentYear");
-    const sessionState = localStorage.getItem("sessionState");
+useEffect(() => {
+  if (isInitialized) return; // Prevent re-initialization
+  
+  const storedUser = localStorage.getItem("currentUser");
+  const storedToken = localStorage.getItem("sessionToken");
+  const storedPage = localStorage.getItem("currentPage");
+  const storedYear = localStorage.getItem("currentYear");
 
-    console.log("App.jsx: Stored sessionToken on load:", storedToken);
+  console.log("App.jsx: Stored sessionToken on load:", storedToken);
+  
+  if (storedUser && storedToken) {
+    console.log("Restoring session for user:", storedUser);
+    setCurrentUser(storedUser);
+    setSessionToken(storedToken);
     
-    if (storedUser && storedToken) {
-      // Check if session is still valid
-      let shouldRestoreSession = true;
-      
-      if (sessionState) {
-        try {
-          const parsedState = JSON.parse(sessionState);
-          const timeSinceLastActivity = Date.now() - parsedState.timestamp;
-          
-          if (timeSinceLastActivity > AUTO_LOGOUT_MS) {
-            console.log('Session expired, clearing stored data');
-            localStorage.removeItem("currentUser");
-            localStorage.removeItem("sessionToken");
-            localStorage.removeItem("currentPage");
-            localStorage.removeItem("currentYear");
-            localStorage.removeItem("sessionState");
-            localStorage.removeItem("lastActivity");
-            shouldRestoreSession = false;
-          }
-        } catch (error) {
-          console.error('Error parsing session state:', error);
-          // If we can't parse the session state, clear everything
-          localStorage.clear();
-          shouldRestoreSession = false;
-        }
-      }
-      
-      if (shouldRestoreSession) {
-        console.log("Restoring session for user:", storedUser);
-        setCurrentUser(storedUser);
-        setSessionToken(storedToken);
-        
-        const validPages = ["home", "clients", "payments", "reports", "addClient"];
-        setPage(validPages.includes(storedPage) ? storedPage : "home");
-        
-        const yearToSet = storedYear && parseInt(storedYear) >= 2025 ? storedYear : "2025";
-        console.log("App.jsx: Setting currentYear:", yearToSet);
-        setCurrentYear(yearToSet);
-        
-        // Always force refresh on initial load
-        setTimeout(() => {
-          fetchClients(storedToken, true); // forceRefresh = true
-          fetchPayments(storedToken, yearToSet, true); // forceRefresh = true
-        }, 200);
-      } else {
-        console.log("App.jsx: Session expired, setting page to signIn");
-        setPage("signIn");
-      }
-    } else {
-      console.log("App.jsx: No stored user or token, setting page to signIn");
-      setPage("signIn");
-    }
+    const validPages = ["home", "clients", "payments", "reports", "addClient"];
+    setPage(validPages.includes(storedPage) ? storedPage : "home");
     
-    setIsInitialized(true);
-  }, []); // Remove dependencies to prevent re-runs
+    const yearToSet = storedYear && parseInt(storedYear) >= 2025 ? storedYear : "2025";
+    console.log("App.jsx: Setting currentYear:", yearToSet);
+    setCurrentYear(yearToSet);
+    
+    // Always force refresh on initial load
+    setTimeout(() => {
+      fetchClients(storedToken, true); // forceRefresh = true
+      fetchPayments(storedToken, yearToSet, true); // forceRefresh = true
+    }, 200);
+  } else {
+    console.log("App.jsx: No stored user or token, setting page to signIn");
+    setPage("signIn");
+  }
+  
+  setIsInitialized(true);
+}, []); // Remove dependencies to prevent re-runs
 
 
   // Save current page to localStorage
@@ -906,393 +862,39 @@ const updatePayment = async (
     if (logoutTimerRef.current) {
       clearTimeout(logoutTimerRef.current);
     }
-    
-    // Clear any existing warning timer
-    if (window.warningTimer) {
-      clearTimeout(window.warningTimer);
-      window.warningTimer = null;
-    }
-    
-    if (sessionToken && currentUser) {
-      // Set warning at 30 minutes before logout
-      const warningTime = AUTO_LOGOUT_MS - (30 * 60 * 1000); // 30 minutes before
-      
-      // Warning timer - store reference globally to prevent memory leaks
-      window.warningTimer = setTimeout(() => {
-        if (sessionToken && currentUser) {
-          // Create a more user-friendly warning
-          const warningDiv = document.createElement('div');
-          warningDiv.id = 'session-warning-modal';
-          warningDiv.innerHTML = `
-            <div style="
-              position: fixed;
-              top: 50%;
-              left: 50%;
-              transform: translate(-50%, -50%);
-              background: white;
-              padding: 20px;
-              border-radius: 8px;
-              box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-              z-index: 10000;
-              max-width: 400px;
-              text-align: center;
-              border: 2px solid #f59e0b;
-            ">
-              <h3 style="color: #d97706; margin-bottom: 15px;">⚠️ Session Expiring Soon</h3>
-              <p style="margin-bottom: 20px; color: #374151;">
-                Your session will expire in 30 minutes due to inactivity.
-              </p>
-              <div style="display: flex; gap: 10px; justify-content: center;">
-                <button id="extendSession" style="
-                  background: #10b981;
-                  color: white;
-                  border: none;
-                  padding: 10px 20px;
-                  border-radius: 6px;
-                  cursor: pointer;
-                  font-weight: 500;
-                ">Extend Session</button>
-                <button id="continueSession" style="
-                  background: #6b7280;
-                  color: white;
-                  border: none;
-                  padding: 10px 20px;
-                  border-radius: 6px;
-                  cursor: pointer;
-                  font-weight: 500;
-                ">Continue</button>
-              </div>
-            </div>
-          `;
-          
-          // Remove any existing warning modal
-          const existingWarning = document.getElementById('session-warning-modal');
-          if (existingWarning) {
-            existingWarning.remove();
-          }
-          
-          document.body.appendChild(warningDiv);
-          
-          // Add event listeners
-          document.getElementById('extendSession').addEventListener('click', () => {
-            document.body.removeChild(warningDiv);
-            resetLogoutTimer(); // Reset timer if user wants to extend
-          });
-          
-          document.getElementById('continueSession').addEventListener('click', () => {
-            document.body.removeChild(warningDiv);
-          });
-          
-          // Auto-remove after 2 minutes if user doesn't respond
-          setTimeout(() => {
-            if (document.body.contains(warningDiv)) {
-              document.body.removeChild(warningDiv);
-            }
-          }, 2 * 60 * 1000);
-        }
-      }, warningTime);
-      
-      // Main logout timer
-      logoutTimerRef.current = setTimeout(() => {
-        console.log('Auto-logout due to inactivity after 4 hours');
-        logout();
-        // Show a message to the user
-        alert('You have been logged out due to inactivity. Please sign in again.');
-      }, AUTO_LOGOUT_MS);
-    }
-  }, [sessionToken, currentUser]);
+    logoutTimerRef.current = setTimeout(() => {
+      logout();
+      // Optionally, show a message to the user
+      alert('You have been logged out due to inactivity.');
+    }, AUTO_LOGOUT_MS);
+  }, []);
 
-  // Make resetLogoutTimer available globally for API interceptors
   useEffect(() => {
-    if (sessionToken && currentUser) {
-      window.resetLogoutTimer = resetLogoutTimer;
-    } else {
-      delete window.resetLogoutTimer;
-    }
-    
-    return () => {
-      delete window.resetLogoutTimer;
-    };
-  }, [sessionToken, currentUser, resetLogoutTimer]);
-
-  // Reset timer on user activity
-  useEffect(() => {
-    if (!sessionToken || !currentUser) return;
-
-    // Debounce function to prevent excessive timer resets
-    let activityTimeout = null;
-    const debouncedActivity = () => {
-      if (activityTimeout) {
-        clearTimeout(activityTimeout);
-      }
-      activityTimeout = setTimeout(() => {
-        resetLogoutTimer();
-        activityTimeout = null;
-      }, 1000); // Only reset timer after 1 second of no activity
-    };
-
-    const handleActivity = (event) => {
-      // Ignore certain types of events that might be noise
-      if (event.type === 'mousemove') {
-        // Only count mouse movement if it's significant (more than 10px)
-        if (event.movementX > 10 || event.movementY > 10) {
-          debouncedActivity();
-        }
-      } else if (event.type === 'scroll') {
-        // Only count scroll if it's user-initiated (not programmatic)
-        if (event.isTrusted) {
-          debouncedActivity();
-        }
-      } else {
-        // For other events, always count as activity
-        debouncedActivity();
-      }
-    };
-
-    // Add event listeners with passive option for better performance
-    const activityEvents = ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll', 'click'];
+    // Reset timer on any user activity
+    const activityEvents = ['mousemove', 'keydown', 'mousedown', 'touchstart'];
     activityEvents.forEach(event => {
-      window.addEventListener(event, handleActivity, { passive: true });
+      window.addEventListener(event, resetLogoutTimer);
     });
-
-    // Handle page visibility changes (when user switches tabs)
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        resetLogoutTimer();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    // Handle window focus/blur (when user switches between applications)
-    const handleWindowFocus = () => {
-      resetLogoutTimer();
-    };
-    window.addEventListener('focus', handleWindowFocus);
-
-    // Handle when user leaves the page for a long time
-    let pageLeaveTimer = null;
-    const handlePageLeave = () => {
-      pageLeaveTimer = setTimeout(() => {
-        // If user has been away for more than 4 hours, force logout
-        if (sessionToken && currentUser) {
-          console.log('User has been away from page for too long, logging out');
-          logout();
-        }
-      }, AUTO_LOGOUT_MS);
-    };
-
-    const handlePageReturn = () => {
-      if (pageLeaveTimer) {
-        clearTimeout(pageLeaveTimer);
-        pageLeaveTimer = null;
-      }
-      resetLogoutTimer();
-    };
-
-    document.addEventListener('mouseleave', handlePageLeave);
-    document.addEventListener('mouseenter', handlePageReturn);
-
-    // Reset timer initially
+    // Reset timer on mount
     resetLogoutTimer();
-
     return () => {
-      // Clean up event listeners
       activityEvents.forEach(event => {
-        window.removeEventListener(event, handleActivity);
+        window.removeEventListener(event, resetLogoutTimer);
       });
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleWindowFocus);
-      document.removeEventListener('mouseleave', handlePageLeave);
-      document.removeEventListener('mouseenter', handlePageReturn);
-      
-      // Clear timers
       if (logoutTimerRef.current) {
         clearTimeout(logoutTimerRef.current);
       }
-      if (pageLeaveTimer) {
-        clearTimeout(pageLeaveTimer);
-      }
-      if (activityTimeout) {
-        clearTimeout(activityTimeout);
-      }
-      if (window.warningTimer) {
-        clearTimeout(window.warningTimer);
-        window.warningTimer = null;
-      }
-      
-      // Remove any existing warning modal
-      const existingWarning = document.getElementById('session-warning-modal');
-      if (existingWarning) {
-        existingWarning.remove();
-      }
     };
-  }, [sessionToken, currentUser, resetLogoutTimer]);
-
-  // Reset timer when user logs in
-  useEffect(() => {
-    if (sessionToken && currentUser) {
-      resetLogoutTimer();
-    }
-  }, [sessionToken, currentUser, resetLogoutTimer]);
-
-  // Handle page unload (when user closes tab/browser)
-  useEffect(() => {
-    if (!sessionToken || !currentUser) return;
-
-    const handleBeforeUnload = (e) => {
-      // Clear the logout timer when user is leaving the page
-      if (logoutTimerRef.current) {
-        clearTimeout(logoutTimerRef.current);
-        logoutTimerRef.current = null;
-      }
-      
-      // Optional: Show a warning if user has unsaved changes
-      // You can customize this based on your needs
-      // e.preventDefault();
-      // e.returnValue = '';
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [sessionToken, currentUser]);
-
-  // Handle page refresh and navigation
-  useEffect(() => {
-    if (!sessionToken || !currentUser) return;
-
-    // Store the current timestamp when the component mounts
-    const currentTime = Date.now();
-    const lastActivity = localStorage.getItem('lastActivity');
-    
-    if (lastActivity) {
-      const timeSinceLastActivity = currentTime - parseInt(lastActivity);
-      // If more than 4 hours have passed since last activity, logout
-      if (timeSinceLastActivity > AUTO_LOGOUT_MS) {
-        console.log('Session expired due to time since last activity, logging out');
-        logout();
-        return;
-      }
-    }
-
-    // Update last activity timestamp
-    localStorage.setItem('lastActivity', currentTime.toString());
-    
-    // Save session state for recovery
-    const sessionState = {
-      timestamp: currentTime,
-      user: currentUser,
-      page: page,
-      year: currentYear
-    };
-    localStorage.setItem('sessionState', JSON.stringify(sessionState));
-
-    return () => {
-      // Update last activity when component unmounts
-      localStorage.setItem('lastActivity', Date.now().toString());
-    };
-  }, [sessionToken, currentUser, page, currentYear]);
-
-  // Handle device sleep/wake and other device events
-  useEffect(() => {
-    if (!sessionToken || !currentUser) return;
-
-    // Handle when device wakes up from sleep
-    const handleWakeUp = () => {
-      console.log('Device woke up, resetting logout timer');
-      resetLogoutTimer();
-    };
-
-    // Handle when device goes to sleep
-    const handleSleep = () => {
-      console.log('Device going to sleep');
-      // You could optionally show a notification here
-    };
-
-    // Handle online/offline status
-    const handleOnline = () => {
-      console.log('Device came back online, resetting logout timer');
-      resetLogoutTimer();
-    };
-
-    const handleOffline = () => {
-      console.log('Device went offline');
-      // You could optionally show a notification here
-    };
-
-    // Add event listeners for device events
-    window.addEventListener('focus', handleWakeUp);
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) {
-        handleWakeUp();
-      }
-    });
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('focus', handleWakeUp);
-      document.removeEventListener('visibilitychange', handleWakeUp);
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, [sessionToken, currentUser, resetLogoutTimer]);
+  }, [resetLogoutTimer]);
 
   // Optionally, reset timer on API calls (if you want to treat API activity as activity)
   // You can wrap your API calls to call resetLogoutTimer()
-
-  // Session health check - verify session is still valid
-  useEffect(() => {
-    if (!sessionToken || !currentUser) return;
-
-    const healthCheckInterval = setInterval(async () => {
-      try {
-        // Make a lightweight API call to verify session
-        const response = await fetch('https://payment-tracker-aswa.onrender.com/api/health', {
-          method: 'GET',
-          headers: { Authorization: `Bearer ${sessionToken}` },
-          signal: AbortSignal.timeout(5000) // 5 second timeout
-        });
-        
-        if (!response.ok) {
-          console.log('Session health check failed, logging out');
-          logout();
-        } else {
-          // Update last activity on successful health check
-          localStorage.setItem('lastActivity', Date.now().toString());
-        }
-      } catch (error) {
-        // Only logout on network errors, not on timeout
-        if (error.name === 'AbortError') {
-          console.log('Health check timeout, continuing session');
-        } else {
-          console.log('Session health check error:', error.message);
-          // Don't logout immediately on network errors, just log
-        }
-      }
-    }, 5 * 60 * 1000); // Check every 5 minutes
-
-    return () => {
-      clearInterval(healthCheckInterval);
-    };
-  }, [sessionToken, currentUser]);
-
-
 
   return (
     <ErrorBoundary>
       <ToastManager>
         {(toastContext) => (
           <div className="min-h-screen bg-gray-50">
-            {/* Session Timer - shows countdown to auto-logout */}
-            <SessionTimer 
-              sessionToken={sessionToken}
-              currentUser={currentUser}
-              resetLogoutTimer={resetLogoutTimer}
-            />
-            
             {page === "signIn" ? (
               <SignInPage
                 setSessionToken={setSessionToken}

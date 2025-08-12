@@ -93,27 +93,6 @@ app.get("/", (req, res) => {
   res.json({ message: "Payment Tracker Backend is running!" });
 });
 
-// Session health check endpoint
-app.get("/api/health", authenticateToken, asyncHandler(async (req, res) => {
-  try {
-    // Verify database connection
-    const db = await database.getDb();
-    await db.admin().ping();
-    
-    res.json({ 
-      status: "healthy", 
-      timestamp: new Date().toISOString(),
-      user: req.user.username 
-    });
-  } catch (error) {
-    logger.error("Health check failed", error.message);
-    res.status(500).json({ 
-      status: "unhealthy", 
-      error: "Database connection failed" 
-    });
-  }
-}));
-
 // Import route modules
 const authRoutes = require("./routes/auth");
 
