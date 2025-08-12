@@ -74,7 +74,8 @@ app.use(express.json());
 app.get("/", (req, res) => {
   res.json({ 
     message: "Payment Tracker Backend is running!",
-    googleClientId: config.GOOGLE_CLIENT_ID ? "Configured" : "Not configured"
+    googleClientId: config.GOOGLE_CLIENT_ID ? "Configured" : "Not configured",
+    googleClientIdValue: config.GOOGLE_CLIENT_ID ? config.GOOGLE_CLIENT_ID.substring(0, 20) + "..." : "Not configured"
   });
 });
 

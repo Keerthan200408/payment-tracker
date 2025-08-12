@@ -25,6 +25,9 @@ const googleClient = new OAuth2Client(config.GOOGLE_CLIENT_ID);
 // Google Sign-In
 router.post("/google-signin", asyncHandler(async (req, res) => {
   console.log("Received /api/google-signin request");
+  console.log("Request headers:", req.headers);
+  console.log("Request body:", req.body);
+  
   const { googleToken } = req.body;
   
   if (!googleToken) {
@@ -33,6 +36,7 @@ router.post("/google-signin", asyncHandler(async (req, res) => {
   }
   
   console.log("Google Client ID:", config.GOOGLE_CLIENT_ID);
+  console.log("Token length:", googleToken.length);
   
   try {
     console.log("Verifying Google token...");
@@ -63,6 +67,7 @@ router.post("/google-signin", asyncHandler(async (req, res) => {
   } catch (error) {
     console.error("Google sign-in error:", error.message);
     console.error("Full error:", error);
+    console.error("Error stack:", error.stack);
     throw new AuthError("Invalid Google token");
   }
 }));

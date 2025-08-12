@@ -451,7 +451,7 @@ const validateRowData = (rowData, currentYear) => {
         setIsLoadingYears(false);
       }
     }
-  }, [currentYear, sessionToken, getCacheKey, searchUserYears, setPaymentsData, setCurrentYear, setErrorMessage]);
+  }, [currentYear, sessionToken, getCacheKey, searchUserYears, setCurrentYear, setErrorMessage]);
 
   const hasValidEmail = useCallback((clientData) => {
     const email = clientData?.Email || '';
@@ -774,7 +774,7 @@ const validateRowData = (rowData, currentYear) => {
         delete debounceTimersRef.current[key];
       }, 1000); // Simple 1 second delay
     },
-    [paymentsData, setErrorMessage, setPaymentsData, currentYear]
+    [paymentsData, setErrorMessage, currentYear]
   );
   
 
@@ -842,7 +842,7 @@ const handleInputChange = useCallback(
       debouncedUpdate(rowIndex, month, parsedValue, currentYear);
     }
   },
-  [debouncedUpdate, paymentsData, currentYear, setErrorMessage, setPaymentsData, months, calculateDuePayment]
+  [debouncedUpdate, paymentsData, currentYear, setErrorMessage, months, calculateDuePayment]
 );
 
 
@@ -922,7 +922,7 @@ const handleInputChange = useCallback(
   }, 100);
 
   return () => clearTimeout(timeoutId);
-}, [sessionToken, currentYear, fetchPayments, setPaymentsData, refreshTrigger, lastRefreshTrigger, setLocalErrorMessage, currentUser, performanceMonitor, isLoadingPayments]);
+}, [sessionToken, currentYear, fetchPayments, refreshTrigger, lastRefreshTrigger, setLocalErrorMessage, currentUser, performanceMonitor, isLoadingPayments]);
 
   useEffect(() => {
     onMount();

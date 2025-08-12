@@ -176,12 +176,20 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
             return;
           }
           
+          // Cancel any existing initialization
+          try {
+            window.google.accounts.id.cancel();
+          } catch (e) {
+            // Ignore cleanup errors
+          }
+          
           window.google.accounts.id.initialize({
             client_id: clientId,
             callback: handleGoogleSignIn,
             auto_select: false,
             cancel_on_tap_outside: true,
             context: "signin",
+            ux_mode: "popup", // Explicitly set popup mode
           });
           window.google.accounts.id.renderButton(buttonRef.current, {
             theme: "outline",
@@ -208,7 +216,8 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
       };
       document.head.appendChild(script);
     } else {
-      initializeGoogleSignIn();
+      // Add a small delay to ensure proper initialization
+      setTimeout(initializeGoogleSignIn, 100);
     }
 
     return () => {
