@@ -112,36 +112,17 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
       console.error('Google Sign-in error:', error);
       if (error.response?.status === 401) {
         setError('Google Sign-in failed. Please try signing in again.');
-        // Reset Google Sign-in state and force re-initialization
+        // Reset Google Sign-in state
         if (window.google) {
           window.google.accounts.id.cancel();
-          // Clear any existing Google Sign-in state
-          window.google.accounts.id.disableAutoSelect();
         }
-        // Force re-initialization on next render
-        setTimeout(() => {
-          if (window.google && buttonRef.current) {
-            window.google.accounts.id.initialize({
-              client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
-              callback: handleGoogleSignIn,
-              auto_select: false,
-              cancel_on_tap_outside: true,
-              context: "signin",
-            });
-            window.google.accounts.id.renderButton(buttonRef.current, {
-              theme: "outline",
-              size: "large",
-              width: 300,
-            });
-          }
-        }, 100);
       } else {
         handleAPIError(error, setError);
       }
     } finally {
       setIsLoading(false);
     }
-  }, [setCurrentUser, setSessionToken, setPage, fetchClients, fetchPayments, setGoogleEmail, setChosenUsername, setShowUsernameModal, setError, setIsLoading]);
+  }, []); // Remove all dependencies to keep the function stable
 
   const handleUsernameSubmit = async () => {
     if (!chosenUsername.trim()) {
@@ -185,14 +166,6 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
   useEffect(() => {
     const initializeGoogleSignIn = () => {
       if (window.google && buttonRef.current) {
-        // Clear any existing Google Sign-in state first
-        try {
-          window.google.accounts.id.cancel();
-          window.google.accounts.id.disableAutoSelect();
-        } catch (e) {
-          // Ignore errors if Google Sign-in is not initialized yet
-        }
-        
         window.google.accounts.id.initialize({
           client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
           callback: handleGoogleSignIn,
