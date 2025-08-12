@@ -74,6 +74,7 @@ function createPaymentDocument(clientName, type, amountToBePaid, year, createdAt
     Amount_To_Be_Paid: amountToBePaid,
     Year: year,
     Payments: Object.fromEntries(config.months.map(month => [month, ""])),
+    Remarks: Object.fromEntries(config.months.map(month => [month, "N/A"])),
     Due_Payment: 0,
     createdAt: createdAt,
   };

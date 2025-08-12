@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import axios from "axios";
 import { debounce } from "lodash";
+import RemarkPopup from "./RemarkPopup";
 
 const BASE_URL = "https://payment-tracker-aswa.onrender.com/api";
 const BATCH_DELAY = 1000;
@@ -66,6 +67,13 @@ const HomePage = ({
   const mountedRef = useRef(true);
   const [isLoadingPayments, setIsLoadingPayments] = useState(false);
   const [lastRefreshTrigger, setLastRefreshTrigger] = useState(0);
+  const [remarkPopup, setRemarkPopup] = useState({
+    isOpen: false,
+    clientName: '',
+    type: '',
+    month: '',
+    currentRemark: 'N/A'
+  });
 
   const MONTHS = [
     "january",
@@ -1516,35 +1524,63 @@ const handleInputChange = useCallback(
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm sm:text-base text-gray-900">
                           ₹{(parseFloat(row?.Amount_To_Be_Paid) || 0).toLocaleString()}.00
                         </td>
-                        {months.map((month, colIndex) => (
-                          <td
-                            key={colIndex}
-                            className="px-6 py-4 whitespace-nowrap text-center"
-                          >
-                            <input
-                              type="text"
-                              value={
-                                localInputValues[`${globalRowIndex}-${month}`] !== undefined
-                                  ? localInputValues[`${globalRowIndex}-${month}`]
-                                  : row?.[month] || ""
-                              }
-                              onChange={(e) =>
-                                handleInputChange(globalRowIndex, month, e.target.value)
-                              }
-                              className={`w-20 p-1 border border-gray-300 rounded text-right focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base ${getInputBackgroundColor(
-                                row,
-                                month,
-                                globalRowIndex
-                              )}`}
-                              placeholder="0.00"
-                              title={
-                                pendingUpdates[`${globalRowIndex}-${month}`]
-                                  ? "Saving..."
-                                  : ""
-                              }
-                            />
-                          </td>
-                        ))}
+                        {months.map((month, colIndex) => {
+                          const monthKey = month.charAt(0).toUpperCase() + month.slice(1);
+                          const currentRemark = row?.Remarks?.[monthKey] || "N/A";
+                          const hasRemark = currentRemark !== "N/A";
+                          
+                          return (
+                            <td
+                              key={colIndex}
+                              className="px-6 py-4 whitespace-nowrap text-center relative group"
+                            >
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  value={
+                                    localInputValues[`${globalRowIndex}-${month}`] !== undefined
+                                      ? localInputValues[`${globalRowIndex}-${month}`]
+                                      : row?.[month] || ""
+                                  }
+                                  onChange={(e) =>
+                                    handleInputChange(globalRowIndex, month, e.target.value)
+                                  }
+                                  className={`w-20 p-1 border border-gray-300 rounded text-right focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base ${getInputBackgroundColor(
+                                    row,
+                                    month,
+                                    globalRowIndex
+                                  )}`}
+                                  placeholder="0.00"
+                                  title={
+                                    pendingUpdates[`${globalRowIndex}-${month}`]
+                                      ? "Saving..."
+                                      : ""
+                                  }
+                                />
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setRemarkPopup({
+                                      isOpen: true,
+                                      clientName: row?.Client_Name || '',
+                                      type: row?.Type || '',
+                                      month: month,
+                                      currentRemark: currentRemark
+                                    });
+                                  }}
+                                  className={`absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-xs transition-all duration-200 ${
+                                    hasRemark 
+                                      ? 'bg-blue-500 text-white hover:bg-blue-600' 
+                                      : 'bg-gray-300 text-gray-600 hover:bg-gray-400 opacity-0 group-hover:opacity-100'
+                                  }`}
+                                  title={hasRemark ? `Remark: ${currentRemark}` : 'Add remark'}
+                                >
+                                  <i className={`fas ${hasRemark ? 'fa-comment' : 'fa-plus'}`}></i>
+                                </button>
+                              </div>
+                            </td>
+                          );
+                        })}
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm sm:text-base text-gray-900">
                           ₹{(parseFloat(row?.Due_Payment) || 0).toLocaleString()}.00
                         </td>
@@ -1556,6 +1592,35 @@ const handleInputChange = useCallback(
             </table>
           </div>
         </div>
+
+        <RemarkPopup
+          isOpen={remarkPopup.isOpen}
+          onClose={() => setRemarkPopup({ ...remarkPopup, isOpen: false })}
+          clientName={remarkPopup.clientName}
+          type={remarkPopup.type}
+          month={remarkPopup.month}
+          currentRemark={remarkPopup.currentRemark}
+          year={currentYear}
+          sessionToken={sessionToken}
+          onRemarkSaved={(newRemark) => {
+            // Update the local state to reflect the new remark
+            setPaymentsData((prev) => 
+              prev.map((row) => {
+                if (row.Client_Name === remarkPopup.clientName && row.Type === remarkPopup.type) {
+                  const monthKey = remarkPopup.month.charAt(0).toUpperCase() + remarkPopup.month.slice(1);
+                  return {
+                    ...row,
+                    Remarks: {
+                      ...row.Remarks,
+                      [monthKey]: newRemark
+                    }
+                  };
+                }
+                return row;
+              })
+            );
+          }}
+        />
 
         {paginatedData.length > 0 && (
           <div className="flex flex-col sm:flex-row justify-between items-center mt-6 space-y-3 sm:space-y-0">

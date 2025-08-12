@@ -96,6 +96,10 @@ router.post("/add-client", authenticateToken, asyncHandler(async (req, res) => {
         January: "", February: "", March: "", April: "", May: "", June: "",
         July: "", August: "", September: "", October: "", November: "", December: "",
       },
+      Remarks: {
+        January: "N/A", February: "N/A", March: "N/A", April: "N/A", May: "N/A", June: "N/A",
+        July: "N/A", August: "N/A", September: "N/A", October: "N/A", November: "N/A", December: "N/A",
+      },
       Due_Payment: 0,
       createdAt: createdAt,
     }));

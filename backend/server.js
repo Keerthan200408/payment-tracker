@@ -475,6 +475,10 @@ app.post("/api/add-client", authenticateToken, async (req, res) => {
         January: "", February: "", March: "", April: "", May: "", June: "",
         July: "", August: "", September: "", October: "", November: "", December: "",
       },
+      Remarks: {
+        January: "N/A", February: "N/A", March: "N/A", April: "N/A", May: "N/A", June: "N/A",
+        July: "N/A", August: "N/A", September: "N/A", October: "N/A", November: "N/A", December: "N/A",
+      },
       Due_Payment: 0, // Start with 0 - will be calculated when payments are made
       createdAt: createdAt,
     }));
@@ -676,6 +680,7 @@ app.get("/api/get-payments-by-year", authenticateToken, async (req, res) => {
         Due_Payment: Math.round(totalDuePayment * 100) / 100,
         Email: clientEmailMap.get(`${payment.Client_Name}_${payment.Type}`) || "",
         Phone_Number: clientPhoneMap.get(`${payment.Client_Name}_${payment.Type}`) || "",
+        Remarks: payment.Remarks || {},
         createdAt: payment.createdAt || new Date(0).toISOString(),
       };
     });
@@ -788,6 +793,7 @@ app.post("/api/save-payment", authenticateToken, paymentLimiter, async (req, res
       november: updatedPayments.November || "",
       december: updatedPayments.December || "",
       Due_Payment: finalDuePayment,
+      Remarks: payment.Remarks || {},
     };
 
     console.log("Payment updated successfully for:", clientName, monthKey, numericValue, { finalDuePayment });
@@ -803,6 +809,65 @@ app.post("/api/save-payment", authenticateToken, paymentLimiter, async (req, res
       user: username,
     });
     res.status(500).json({ error: `Failed to save payment: ${error.message}` });
+  }
+});
+
+// Save Remark
+app.post("/api/save-remark", authenticateToken, async (req, res) => {
+  const { clientName, type, month, remark } = req.body;
+  const year = req.query.year || new Date().getFullYear().toString();
+  const username = req.user.username;
+  
+  console.log("Save remark request:", { clientName, type, month, remark, year, user: username });
+
+  if (!clientName || !type || !month) {
+    console.error("Missing required fields:", { clientName, type, month });
+    return res.status(400).json({ error: "Client name, type, and month are required" });
+  }
+
+  const monthMap = {
+    january: "January", february: "February", march: "March", april: "April", may: "May",
+    june: "June", july: "July", august: "August", september: "September", october: "October",
+    november: "November", december: "December",
+  };
+
+  const monthKey = monthMap[month.toLowerCase()];
+  if (!monthKey) {
+    console.error("Invalid month:", month);
+    return res.status(400).json({ error: "Invalid month" });
+  }
+
+  try {
+    const db = await connectMongo();
+    const paymentsCollection = db.collection(`payments_${username}`);
+    const payment = await paymentsCollection.findOne({ Client_Name: clientName, Type: type, Year: parseInt(year) });
+    
+    if (!payment) {
+      console.error("Payment record not found:", { user: username, clientName, type, year });
+      return res.status(404).json({ error: "Payment record not found" });
+    }
+
+    // Initialize Remarks object if it doesn't exist
+    const updatedRemarks = { ...payment.Remarks, [monthKey]: remark || "N/A" };
+
+    await paymentsCollection.updateOne(
+      { Client_Name: clientName, Type: type, Year: parseInt(year) },
+      { $set: { Remarks: updatedRemarks, Last_Updated: new Date() } }
+    );
+
+    console.log("Remark saved successfully for:", clientName, monthKey, remark);
+    res.json({ message: "Remark saved successfully", remark });
+  } catch (error) {
+    console.error("Save remark error:", {
+      message: error.message,
+      stack: error.stack,
+      clientName,
+      type,
+      month,
+      year,
+      user: username,
+    });
+    res.status(500).json({ error: `Failed to save remark: ${error.message}` });
   }
 });
 
@@ -985,6 +1050,7 @@ app.post("/api/batch-save-payments", authenticateToken, paymentLimiter, async (r
       Due_Payment: finalDuePayment,
       Email: paymentData.Email || "",
       Phone_Number: paymentData.Phone_Number || "",
+      Remarks: paymentData.Remarks || {},
     };
 
     console.log("Batch payment updated successfully for:", clientName, `${processedUpdates.length} updates`, {
@@ -1309,6 +1375,10 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
         Payments: {
           January: 0, February: 0, March: 0, April: 0, May: 0, June: 0,
           July: 0, August: 0, September: 0, October: 0, November: 0, December: 0,
+        },
+        Remarks: {
+          January: "N/A", February: "N/A", March: "N/A", April: "N/A", May: "N/A", June: "N/A",
+          July: "N/A", August: "N/A", September: "N/A", October: "N/A", November: "N/A", December: "N/A",
         },
         Due_Payment: amount,
         createdAt: createdAt,
