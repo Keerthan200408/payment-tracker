@@ -48,13 +48,13 @@ const config = {
     CLIENT_NAME_MAX_LENGTH: 100,
     TYPE_MAX_LENGTH: 50,
     MAX_PAYMENT_AMOUNT: 1e6,
-    PHONE_REGEX: /^\+?[\d\s-]{10,15}$/,
+    PHONE_REGEX: /^(\+91|91)?[6-9]\d{9}$/,
     EMAIL_REGEX: /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/,
   },
   SANITIZE_OPTIONS: {
     allowedTags: [
       "div", "h1", "h2", "p", "table", "thead", "tbody", "tr", "th", "td",
-      "strong", "em", "ul", "ol", "li", "a", "span", "br", "style",
+      "strong", "em", "ul", "ol", "li", "a", "span", "br"
     ],
     allowedAttributes: { "*": ["style", "class", "href", "target"] },
     allowedStyles: {

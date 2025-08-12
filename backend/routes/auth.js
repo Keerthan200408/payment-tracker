@@ -30,6 +30,9 @@ router.post("/google-signin", asyncHandler(async (req, res) => {
   if (!googleToken) {
     throw new ValidationError("Google token is required");
   }
+  if (typeof googleToken !== 'string') {
+    throw new ValidationError("Google token must be a string");
+  }
   
   try {
     const ticket = await googleClient.verifyIdToken({

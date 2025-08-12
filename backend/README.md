@@ -1,5 +1,7 @@
 # Payment Tracker Backend - Optimized Version
 
+**IMPORTANT: To enable email and WhatsApp notifications, you MUST create a `.env` file in the backend directory. See `.env.example` for all required variables.**
+
 This is the optimized version of the Payment Tracker backend with improved architecture, better error handling, and modular structure while maintaining all existing functionality.
 
 ## 🏗️ Project Structure
@@ -92,8 +94,12 @@ ULTRAMSG_INSTANCE_ID=your_ultramsg_instance_id
    ```
 
 2. **Configure Environment**
-   - Copy the environment variables above to `.env`
-   - Update with your actual values
+   - Copy `.env.example` to `.env` in the backend directory:
+     ```bash
+     cp .env.example .env
+     ```
+   - Fill in all required values in `.env` (see comments in the file for guidance).
+   - **Notifications will NOT work unless all required variables are set.**
 
 3. **Start the Server**
    ```bash
