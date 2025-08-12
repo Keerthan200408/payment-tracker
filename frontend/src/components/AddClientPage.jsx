@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import { clientsAPI, handleAPIError } from '../utils/api';
 
-const BASE_URL = 'https://payment-tracker-aswa.onrender.com/api';
+const PINNED_KEY = 'pinned_clients_manual'; // localStorage key for manual-added clients
 
 const AddClientPage = ({
   setPage,
@@ -27,11 +27,8 @@ const AddClientPage = ({
 
   useEffect(() => {
     if (sessionToken && currentUser) {
-      console.log(`AddClientPage.jsx: Checking types for ${currentUser}`);
       const cacheKey = `types_${currentUser}_${sessionToken}`;
-      // Only fetch if types are not already loaded
       if (!types.length) {
-        console.log(`AddClientPage.jsx: Fetching types for ${currentUser}`);
         fetchTypes(sessionToken);
       }
     }
@@ -39,7 +36,6 @@ const AddClientPage = ({
 
   useEffect(() => {
     if (editClient) {
-      console.log('Populating edit client data:', editClient);
       setClientName(editClient.Client_Name || '');
       setEmail(editClient.Email || '');
       setPhoneNumber(editClient.Phone_Number || '');
@@ -48,35 +44,47 @@ const AddClientPage = ({
     }
   }, [editClient]);
 
+  const pinClient = (clientNameVal, typeVal) => {
+    try {
+      const id = `${clientNameVal.trim()}|${typeVal.trim()}`;
+      const raw = localStorage.getItem(PINNED_KEY);
+      let arr = [];
+      if (raw) {
+        try {
+          arr = JSON.parse(raw);
+          if (!Array.isArray(arr)) arr = [];
+        } catch {
+          arr = [];
+        }
+      }
+      // Avoid duplicates; put newest at front
+      arr = arr.filter((x) => x !== id);
+      arr.unshift(id);
+      // keep a reasonable cap
+      if (arr.length > 100) arr = arr.slice(0, 100);
+      localStorage.setItem(PINNED_KEY, JSON.stringify(arr));
+    } catch (err) {
+      console.warn('Pin client failed', err);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Prevent double submission
+
     if (isSubmitting) return;
     setIsSubmitting(true);
-    
+
     setError('');
     setSuccess('');
 
-    // Force a small delay to ensure all state updates are complete
-    await new Promise(resolve => setTimeout(resolve, 200));
-    
-    // Get the actual current value from the input field directly
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    // Try to read the actual input value if any formatting libs change it
     const monthlyPaymentInput = document.querySelector('input[inputMode="decimal"]');
     const actualMonthlyPayment = monthlyPaymentInput ? monthlyPaymentInput.value : monthlyPayment;
-    
-    // Also check the React state value
     const finalMonthlyPayment = actualMonthlyPayment || monthlyPayment;
-    
-    console.log('Form submission values:', {
-      stateValue: monthlyPayment,
-      inputValue: actualMonthlyPayment,
-      finalValue: finalMonthlyPayment,
-      clientName,
-      type
-    });
 
-    // Validate required fields
+    // Validate
     if (!clientName || !type || !finalMonthlyPayment) {
       setError('Client name, type, and monthly payment are required.');
       setIsSubmitting(false);
@@ -88,14 +96,12 @@ const AddClientPage = ({
       return;
     }
     if (!types.includes(type)) {
-      setError(`Type must be one of: ${types.join(", ")}`);
+      setError(`Type must be one of: ${types.join(', ')}`);
       setIsSubmitting(false);
       return;
     }
-    
+
     const paymentValue = parseFloat(finalMonthlyPayment);
-    console.log('Parsed payment value:', paymentValue, 'from input:', finalMonthlyPayment);
-    
     if (isNaN(paymentValue) || paymentValue <= 0) {
       setError('Monthly payment must be a positive number.');
       setIsSubmitting(false);
@@ -119,23 +125,20 @@ const AddClientPage = ({
 
     try {
       if (editClient) {
+        // Update existing client
         const payload = {
-          oldClient: { Client_Name: editClient.Client_Name, Type: editClient.Type },
-          newClient: {
-            Client_Name: clientName,
-            Type: type,
-            Amount_To_Be_Paid: paymentValue,
-            Email: email || '',
-            Phone_Number: phoneNumber || '',
-          },
+          oldClientName: editClient.Client_Name,
+          oldType: editClient.Type,
+          clientName,
+          type,
+          monthlyPayment: paymentValue,
+          email: email || '',
+          phoneNumber: phoneNumber || '',
         };
-        console.log('Update client payload:', payload);
-        await axios.put(`${BASE_URL}/update-client`, payload, {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-          timeout: 10000,
-        });
+        await clientsAPI.updateClient(payload);
         setSuccess('Client updated successfully! Redirecting to clients page...');
       } else {
+        // Add new client (manual add) — pin this client so it remains at top
         const payload = {
           clientName,
           email: email || '',
@@ -143,61 +146,45 @@ const AddClientPage = ({
           monthlyPayment: paymentValue,
           phoneNumber: phoneNumber || '',
         };
-        console.log('Add client payload:', payload);
-        
-        await axios.post(`${BASE_URL}/add-client`, payload, {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-          timeout: 10000,
-        });
+        await clientsAPI.addClient(payload);
+
+        // Pin only for manual adds (not for CSV import)
+        pinClient(clientName, type);
+
         setSuccess('Client added successfully! Redirecting to clients page...');
       }
 
-      // Clear cache for clients and payments
-      const clientsCacheKey = `get-clients_${sessionToken}`;
-      const paymentsCacheKey = `get-payments-by-year_${new Date().getFullYear()}_${sessionToken}`;
-      delete apiCacheRef.current[clientsCacheKey];
-      delete apiCacheRef.current[paymentsCacheKey];
-      
+      // Clear cache for clients and payments (use the project's cache key patterns)
+      const clientsCacheKey = `clients_${currentUser}_${localStorage.getItem('sessionToken')}`;
+      const paymentsCacheKey = `payments_${new Date().getFullYear()}_${localStorage.getItem('sessionToken')}`;
+      if (apiCacheRef && apiCacheRef.current) {
+        delete apiCacheRef.current[clientsCacheKey];
+        delete apiCacheRef.current[paymentsCacheKey];
+      }
+
+      // Refresh clients + payments, force refresh so parent updates state
       await Promise.all([
-        fetchClients(sessionToken, true),
-        fetchPayments(sessionToken, new Date().getFullYear().toString(), true)
+        fetchClients(localStorage.getItem('sessionToken'), true),
+        fetchPayments(localStorage.getItem('sessionToken'), new Date().getFullYear().toString(), true),
       ]);
 
-      // Trigger refresh for HomePage
+      // Trigger anything listening for refresh
       setRefreshTrigger(Date.now());
 
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // Short wait so UI shows success briefly
+      await new Promise((resolve) => setTimeout(resolve, 350));
 
       setEditClient(null);
       setPage('clients');
     } catch (err) {
-      console.error('Add/Edit client error:', {
-        status: err.response?.status,
-        data: err.response?.data,
-        message: err.message,
-        fullError: err,
-      });
-      const errorMsg = err.response?.data?.error || err.message || 'Failed to save client.';
-      let userMessage = errorMsg;
-      if (errorMsg.includes('Client already exists')) {
-        userMessage = 'This client name and type combination already exists.';
-      } else if (errorMsg.includes('Sheet not found')) {
-        userMessage = 'Client data sheet not found. Please try again or contact support.';
-      } else if (errorMsg.includes('Quota exceeded')) {
-        userMessage = 'Server is busy. Please try again later.';
-      }
-      setError(userMessage);
+      handleAPIError(err, setError);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Handle input change with proper validation
   const handleMonthlyPaymentChange = (e) => {
     const value = e.target.value;
-    console.log('Monthly payment input changed to:', value);
-    
-    // Only update if it's a valid number or empty string
     if (value === '' || (!isNaN(value) && parseFloat(value) >= 0)) {
       setMonthlyPayment(value);
     }
@@ -269,8 +256,6 @@ const AddClientPage = ({
               value={monthlyPayment}
               onChange={handleMonthlyPaymentChange}
               onBlur={(e) => {
-                console.log('Monthly payment field blurred with value:', e.target.value);
-                // Ensure the state is synced on blur
                 if (e.target.value !== monthlyPayment) {
                   setMonthlyPayment(e.target.value);
                 }
@@ -286,12 +271,12 @@ const AddClientPage = ({
               type="submit"
               disabled={isSubmitting}
               className={`${
-                isSubmitting 
-                  ? 'bg-gray-400 cursor-not-allowed' 
+                isSubmitting
+                  ? 'bg-gray-400 cursor-not-allowed'
                   : 'bg-gray-800 hover:bg-gray-700'
               } text-white px-4 py-2 rounded-md transition duration-200 flex items-center justify-center w-full sm:w-auto`}
             >
-              <i className={`fas ${isSubmitting ? 'fa-spinner fa-spin' : 'fa-save'} mr-2`}></i> 
+              <i className={`fas ${isSubmitting ? 'fa-spinner fa-spin' : 'fa-save'} mr-2`}></i>
               {isSubmitting ? 'Saving...' : (editClient ? 'Update' : 'Save')}
             </button>
             <button

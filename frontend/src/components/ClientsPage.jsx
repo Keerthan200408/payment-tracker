@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import axios from "axios";
-
-const BASE_URL = "https://payment-tracker-aswa.onrender.com/api";
+import { clientsAPI, handleAPIError } from '../utils/api';
 
 const ClientsPage = ({
   clientsData,
@@ -34,7 +32,6 @@ const ClientsPage = ({
       setIsLoading(true);
       setError(null);
       try {
-        console.log("Fetching clients data...");
         await fetchClients(sessionToken);
         hasFetched.current = true;
       } catch (err) {
@@ -50,36 +47,32 @@ const ClientsPage = ({
   }, [sessionToken, fetchClients]);
 
   useEffect(() => {
-  console.log('ClientsPage.jsx: importCsv prop:', importCsv);
-  if (!importCsv) {
-    console.error('ClientsPage.jsx: importCsv prop is undefined on mount');
-    setErrorMessage('Bulk import functionality is unavailable.');
-  }
-}, [importCsv, setErrorMessage]);
+    if (!importCsv) {
+      setErrorMessage('Bulk import functionality is unavailable.');
+    }
+  }, [importCsv, setErrorMessage]);
 
-  // Modified importCsv to handle UI feedback
   const handleImportCsv = async (e) => {
-  if (!importCsv) {
-    console.error('ClientsPage.jsx: importCsv prop is undefined');
-    setErrorMessage('Bulk import functionality is unavailable.');
-    return;
-  }
-  try {
-    await importCsv(e);
-    setSuccessMessage("CSV imported successfully!");
-    setErrorMessage("");
-    if (clientsCsvFileInputRef.current) {
-      clientsCsvFileInputRef.current.value = null;
+    if (!importCsv) {
+      setErrorMessage('Bulk import functionality is unavailable.');
+      return;
     }
-  } catch (err) {
-    console.error("ClientsPage.jsx: CSV import error:", err);
-    setErrorMessage(err.message || "Failed to import CSV.");
-    setSuccessMessage("");
-    if (clientsCsvFileInputRef.current) {
-      clientsCsvFileInputRef.current.value = null;
+    try {
+      await importCsv(e);
+      setSuccessMessage("CSV imported successfully!");
+      setErrorMessage("");
+      if (clientsCsvFileInputRef.current) {
+        clientsCsvFileInputRef.current.value = null;
+      }
+    } catch (err) {
+      console.error("ClientsPage.jsx: CSV import error:", err);
+      setErrorMessage(err.message || "Failed to import CSV.");
+      setSuccessMessage("");
+      if (clientsCsvFileInputRef.current) {
+        clientsCsvFileInputRef.current.value = null;
+      }
     }
-  }
-};
+  };
 
   const filteredClients =
     clientsData?.filter(
@@ -93,50 +86,38 @@ const ClientsPage = ({
     currentPage * entriesPerPage
   );
 
- const handleDelete = async (client) => {
-  if (!confirm(`Are you sure you want to delete ${client.Client_Name}?`)) {
-    return;
-  }
-
-  setDeleteInProgress(true);
-  try {
-    console.log("Deleting client:", client.Client_Name);
-    await axios.post(`${BASE_URL}/delete-client`, {
-      Client_Name: client.Client_Name,
-      Type: client.Type,
-    }, {
-      headers: {
-      Authorization: `Bearer ${sessionToken}`,
-      "Content-Type": "application/json",
-    }
-});
-
-    // Fetch updated clients with cache refresh
-    const updatedClients = await fetchClients(sessionToken, true); // forceRefresh: true
-
-    // Adjust current page
-    const newTotalPages = Math.ceil((updatedClients?.length || 0) / entriesPerPage);
-    if (currentPage > newTotalPages && newTotalPages > 0) {
-      setCurrentPage(newTotalPages);
+  const handleDelete = async (client) => {
+    if (!confirm(`Are you sure you want to delete ${client.Client_Name}?`)) {
+      return;
     }
 
-    // Fetch payments for the current year with cache refresh
-    await fetchPayments(sessionToken, currentYear, true); // forceRefresh: true
+    setDeleteInProgress(true);
+    try {
+      await clientsAPI.deleteClient({
+        clientName: client.Client_Name,
+        type: client.Type,
+      });
 
-    setSearchQuery(""); // Clear search query to avoid stale filtered results
-  } catch (error) {
-    console.error(
-      "Delete client error:",
-      error.response?.data?.error || error.message
-    );
-    setErrorMessage(
-      `Failed to delete client: ${error.response?.data?.error || error.message}`
-    );
-    await fetchClients(sessionToken, true); // Refresh even on error
-  } finally {
-    setDeleteInProgress(false);
-  }
-};
+      // Fetch updated clients with cache refresh
+      const updatedClients = await fetchClients(sessionToken, true); // forceRefresh: true
+
+      // Adjust current page
+      const newTotalPages = Math.ceil((updatedClients?.length || 0) / entriesPerPage);
+      if (currentPage > newTotalPages && newTotalPages > 0) {
+        setCurrentPage(newTotalPages);
+      }
+
+      // Fetch payments for the current year with cache refresh
+      await fetchPayments(sessionToken, currentYear, true); // forceRefresh: true
+
+      setSearchQuery(""); // Clear search query to avoid stale filtered results
+    } catch (error) {
+      handleAPIError(error, setErrorMessage);
+      await fetchClients(sessionToken, true); // Refresh even on error
+    } finally {
+      setDeleteInProgress(false);
+    }
+  };
 
   if (isLoading && (!clientsData || clientsData.length === 0)) {
     return (
