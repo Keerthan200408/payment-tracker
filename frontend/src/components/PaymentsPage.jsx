@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
-import { yearsAPI, handleAPIError } from '../utils/api';
+import axios from 'axios';
+
+const BASE_URL = 'https://payment-tracker-aswa.onrender.com/api';
 
 // PaymentsPage component displays payment data in a paginated table with a year dropdown
 const PaymentsPage = ({
@@ -74,7 +76,10 @@ const PaymentsPage = ({
     setIsLoading(true);
     console.log('PaymentsPage.jsx: Fetching years from API');
     try {
-      const response = await yearsAPI.getUserYears();
+      const response = await axios.get(`${BASE_URL}/get-user-years`, {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+        timeout: 10000,
+      });
       const fetchedYears = (response.data || [])
         .map(String) // Convert to strings to prevent duplicates
         .filter(year => parseInt(year) >= 2025)

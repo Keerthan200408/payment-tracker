@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
+import axios from 'axios';
 import Papa from 'papaparse';
-import { importAPI, handleAPIError } from '../utils/api';
+
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000' || "https://payment-tracker-aswa.onrender.com/api";
 
 const ImportCSV = () => {
   const [file, setFile] = useState(null);
@@ -28,7 +30,9 @@ const ImportCSV = () => {
               Type: row.Type,
               Amount_To_Be_Paid: parseFloat(row.Amount_To_Be_Paid),
             }));
-          await importAPI.importCSV({ records: csvData });
+          await axios.post(`${BASE_URL}/api/import-csv`, csvData, {
+            withCredentials: true,
+          });
           setFile(null);
           alert('CSV imported successfully!');
         },
@@ -37,7 +41,7 @@ const ImportCSV = () => {
       });
     } catch (error) {
       console.error('Import CSV error:', error);
-      handleAPIError(error, setError);
+      setError(error.response?.data?.error || 'Error importing CSV. Please try again.');
     } finally {
       setIsLoading(false);
     }
