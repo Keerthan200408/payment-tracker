@@ -17,12 +17,6 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    
-    // Reset logout timer on API activity (if callback is available)
-    if (window.resetLogoutTimer) {
-      window.resetLogoutTimer();
-    }
-    
     return config;
   },
   (error) => {
@@ -73,39 +67,17 @@ export const authAPI = {
   googleSignUp: (userData) => api.post("/google-signup", userData),
 };
 
-// Get clients
-export const getClients = async (year) => {
-  try {
-    const response = await api.get(`/clients?year=${year}`);
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching clients:', error);
-    throw error;
-  }
-};
-
-// Client API functions
 export const clientsAPI = {
+  getClients: () => api.get("/get-clients"),
   addClient: (clientData) => api.post("/add-client", clientData),
   updateClient: (clientData) => api.put("/update-client", clientData),
   deleteClient: (clientData) => api.delete("/delete-client", { data: clientData }),
 };
 
-// Batch save payments
-export const batchSavePayments = async (updates, year) => {
-  try {
-    const response = await api.post(`/batch-save-payments?year=${year}`, { updates });
-    return response.data;
-  } catch (error) {
-    console.error('Error batch saving payments:', error);
-    throw error;
-  }
-};
-
 export const paymentsAPI = {
   getPaymentsByYear: (year) => api.get(`/get-payments-by-year?year=${year}`),
   savePayment: (paymentData, year) => api.post(`/save-payment?year=${year}`, paymentData),
-  batchSavePayments: (updates, year) => batchSavePayments(updates, year),
+  batchSavePayments: (paymentsData) => api.post("/batch-save-payments", paymentsData),
 };
 
 export const typesAPI = {

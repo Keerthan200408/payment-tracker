@@ -6,20 +6,6 @@ const axios = require("axios");
 
 // Import modular components
 const config = require("./config");
-
-// Startup check for required notification environment variables
-const requiredEnv = [
-  'EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_USER', 'EMAIL_PASS', 'EMAIL_FROM',
-  'ULTRAMSG_TOKEN', 'ULTRAMSG_INSTANCE_ID'
-];
-const missingEnv = requiredEnv.filter((key) => !config[key]);
-if (missingEnv.length > 0) {
-  console.error("\n[ERROR] Missing required environment variables for notifications:", missingEnv.join(", "));
-  console.error("Notifications (email/WhatsApp) will NOT work until you set these in your .env file.\n");
-  // Optionally, exit the process if you want to force correct setup:
-  // process.exit(1);
-}
-
 const database = require("./db/mongo");
 const { authenticateToken, setTokenCookie, clearTokenCookie } = require("./middleware/auth");
 const { errorHandler, asyncHandler, notFoundHandler } = require("./middleware/errorHandler");
@@ -92,27 +78,6 @@ app.use(express.json());
 app.get("/", (req, res) => {
   res.json({ message: "Payment Tracker Backend is running!" });
 });
-
-// Session health check endpoint
-app.get("/api/health", authenticateToken, asyncHandler(async (req, res) => {
-  try {
-    // Verify database connection
-    const db = await database.getDb();
-    await db.admin().ping();
-    
-    res.json({ 
-      status: "healthy", 
-      timestamp: new Date().toISOString(),
-      user: req.user.username 
-    });
-  } catch (error) {
-    logger.error("Health check failed", error.message);
-    res.status(500).json({ 
-      status: "unhealthy", 
-      error: "Database connection failed" 
-    });
-  }
-}));
 
 // Import route modules
 const authRoutes = require("./routes/auth");
@@ -289,9 +254,9 @@ app.get("/api/get-payments-by-year", authenticateToken, asyncHandler(async (req,
 // Save Payment
 app.post("/api/save-payment", authenticateToken, paymentLimiter, asyncHandler(async (req, res) => {
   const { clientName, type, month, value } = req.body;
-  const { year } = req.query;
+  const year = req.query.year || new Date().getFullYear().toString();
   const username = req.user.username;
-
+  
   logger.payment("Save payment request", username, { clientName, type, month, value, year });
 
   if (!clientName || !type || !month) {
@@ -311,90 +276,22 @@ app.post("/api/save-payment", authenticateToken, paymentLimiter, asyncHandler(as
   try {
     const db = await database.getDb();
     const paymentsCollection = database.getPaymentsCollection(username);
+    const payment = await paymentsCollection.findOne({ 
+      Client_Name: clientName, 
+      Type: type, 
+      Year: parseInt(year) 
+    });
     
-    // Use findOneAndUpdate for atomic operation and better performance
-    const result = await paymentsCollection.findOneAndUpdate(
-      { 
-        Client_Name: clientName, 
-        Type: type, 
-        Year: parseInt(year) 
-      },
-      { 
-        $set: { 
-          [`Payments.${monthKey}`]: numericValue === 0 ? "" : numericValue.toString(),
-          Last_Updated: new Date()
-        }
-      },
-      { 
-        returnDocument: 'after',
-        upsert: false // Don't create if doesn't exist
-      }
-    );
-    
-    if (!result.value) {
-      // Create payment record if it does not exist
-      const createdAt = new Date().toISOString();
-      const newPaymentDoc = createPaymentDocument(clientName, type, 0, parseInt(year), createdAt);
-      await paymentsCollection.insertOne(newPaymentDoc);
-      
-      // Fetch the newly created document
-      const newPayment = await paymentsCollection.findOne({ 
-        Client_Name: clientName, 
-        Type: type, 
-        Year: parseInt(year) 
-      });
-      
-      if (!newPayment) {
-        throw new Error("Failed to create payment record");
-      }
-      
-      // Update with the new value
-      await paymentsCollection.updateOne(
-        { _id: newPayment._id },
-        { 
-          $set: { 
-            [`Payments.${monthKey}`]: numericValue === 0 ? "" : numericValue.toString(),
-            Last_Updated: new Date()
-          }
-        }
-      );
-      
-      // Fetch updated document
-      const updatedPayment = await paymentsCollection.findOne({ _id: newPayment._id });
-      
-      // Calculate due payment
-      const updatedPaymentWithDue = processPaymentUpdate(updatedPayment, updatedPayment.Payments, parseInt(year), null);
-      
-      const updatedRow = {
-        Client_Name: updatedPaymentWithDue.Client_Name,
-        Type: updatedPaymentWithDue.Type,
-        Amount_To_Be_Paid: parseFloat(updatedPaymentWithDue.Amount_To_Be_Paid) || 0,
-        january: updatedPaymentWithDue.Payments.January || "",
-        february: updatedPaymentWithDue.Payments.February || "",
-        march: updatedPaymentWithDue.Payments.March || "",
-        april: updatedPaymentWithDue.Payments.April || "",
-        may: updatedPaymentWithDue.Payments.May || "",
-        june: updatedPaymentWithDue.Payments.June || "",
-        july: updatedPaymentWithDue.Payments.July || "",
-        august: updatedPaymentWithDue.Payments.August || "",
-        september: updatedPaymentWithDue.Payments.September || "",
-        october: updatedPaymentWithDue.Payments.October || "",
-        november: updatedPaymentWithDue.Payments.November || "",
-        december: updatedPaymentWithDue.Payments.December || "",
-        Due_Payment: updatedPaymentWithDue.Due_Payment,
-      };
-
-      logger.payment("Payment created and updated successfully", username, { clientName, monthKey, numericValue, finalDuePayment: updatedPaymentWithDue.Due_Payment });
-      res.json({ message: "Payment created and updated successfully", updatedRow });
-      return;
+    if (!payment) {
+      throw new Error("Payment record not found");
     }
-    
-    // Payment record exists, update it
-    const paymentRecord = result.value;
-    const updatedPayments = { ...paymentRecord.Payments };
-    updatedPayments[monthKey] = numericValue === 0 ? "" : numericValue.toString();
 
-    // Get previous year payment for due calculation (only if needed)
+    const updatedPayments = { 
+      ...payment.Payments, 
+      [monthKey]: numericValue === 0 ? "" : numericValue.toString() 
+    };
+
+    // Get previous year payment for due calculation
     let prevYearPayment = null;
     if (parseInt(year) > 2025) {
       prevYearPayment = await paymentsCollection.findOne({
@@ -405,24 +302,17 @@ app.post("/api/save-payment", authenticateToken, paymentLimiter, asyncHandler(as
     }
 
     // Use centralized payment update utility
-    const updatedPayment = processPaymentUpdate(paymentRecord, updatedPayments, parseInt(year), prevYearPayment);
+    const updatedPayment = processPaymentUpdate(payment, updatedPayments, parseInt(year), prevYearPayment);
 
-    // Update the document with new due payment
     await paymentsCollection.updateOne(
-      { _id: paymentRecord._id },
-      { 
-        $set: { 
-          Payments: updatedPayments, 
-          Due_Payment: updatedPayment.Due_Payment, 
-          Last_Updated: new Date() 
-        } 
-      }
+      { Client_Name: clientName, Type: type, Year: parseInt(year) },
+      { $set: { Payments: updatedPayments, Due_Payment: updatedPayment.Due_Payment, Last_Updated: new Date() } }
     );
 
     const updatedRow = {
-      Client_Name: paymentRecord.Client_Name,
-      Type: paymentRecord.Type,
-      Amount_To_Be_Paid: parseFloat(paymentRecord.Amount_To_Be_Paid) || 0,
+      Client_Name: payment.Client_Name,
+      Type: payment.Type,
+      Amount_To_Be_Paid: parseFloat(payment.Amount_To_Be_Paid) || 0,
       january: updatedPayments.January || "",
       february: updatedPayments.February || "",
       march: updatedPayments.March || "",
@@ -449,15 +339,12 @@ app.post("/api/save-payment", authenticateToken, paymentLimiter, asyncHandler(as
 // Send Email
 app.post("/api/send-email", authenticateToken, asyncHandler(async (req, res) => {
   const { to, subject, html } = req.body;
-  console.log(`[EMAIL] Attempting to send email to: ${to}, subject: ${subject}`);
   
   if (!to || !subject || !html) {
-    console.error("[EMAIL] Missing required fields", { to, subject, html });
     throw new Error("Recipient email, subject, and HTML content are required");
   }
   
   if (!validateInput.email(to)) {
-    console.error("[EMAIL] Invalid recipient email address", { to });
     throw new Error("Invalid recipient email address");
   }
 
@@ -467,7 +354,6 @@ app.post("/api/send-email", authenticateToken, asyncHandler(async (req, res) => 
     res.json({ message: "Email sent successfully", messageId: result.messageId });
   } catch (error) {
     logger.error("Send email error", error, { to, subject });
-    console.error("[EMAIL] Error sending email:", error.message);
     throw error;
   }
 }));
@@ -475,15 +361,12 @@ app.post("/api/send-email", authenticateToken, asyncHandler(async (req, res) => 
 // Send WhatsApp
 app.post("/api/send-whatsapp", authenticateToken, whatsappLimiter, asyncHandler(async (req, res) => {
   const { to, message } = req.body;
-  console.log(`[WHATSAPP] Attempting to send WhatsApp to: ${to}`);
   
   if (!to || !message) {
-    console.error("[WHATSAPP] Missing required fields", { to, message });
     throw new Error("Recipient phone number and message are required");
   }
   
   if (!validateInput.phone(to)) {
-    console.error("[WHATSAPP] Invalid recipient phone number", { to });
     throw new Error("Invalid recipient phone number");
   }
   
@@ -499,19 +382,12 @@ app.post("/api/send-whatsapp", authenticateToken, whatsappLimiter, asyncHandler(
       body: message,
     };
     
-    // Fixed UltraMsg API endpoint
-    const apiUrl = `${config.API.ULTRA_MSG_BASE_URL}/${config.ULTRAMSG_INSTANCE_ID}/messages/chat`;
-    console.log(`[WHATSAPP] Sending to UltraMsg API: ${apiUrl}`);
-    
     const response = await retryUltraMsg(() =>
       axios.post(
-        apiUrl,
+        `${config.API.ULTRA_MSG_BASE_URL}/${config.ULTRAMSG_INSTANCE_ID}/messages/chat`,
         new URLSearchParams(payload).toString(),
         {
-          headers: { 
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Accept": "application/json"
-          },
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
           timeout: config.API.TIMEOUT,
         }
       )
@@ -532,40 +408,10 @@ app.post("/api/send-whatsapp", authenticateToken, whatsappLimiter, asyncHandler(
       });
       return res.json({ message: "WhatsApp message sent successfully", messageId: response.data.messageId || "N/A" });
     } else {
-      console.error("[WHATSAPP] Unexpected response from WhatsApp API:", response.data);
-      
-      // Handle specific error cases
-      let errorMessage = "Failed to send WhatsApp message";
-      
-      if (response.data.error) {
-        errorMessage = response.data.error;
-      } else if (response.data.message) {
-        errorMessage = response.data.message;
-      } else if (response.data.status === "error") {
-        errorMessage = "WhatsApp API returned error status";
-      } else if (response.data.sent === "false") {
-        errorMessage = "WhatsApp message was not sent - phone number may not be registered with WhatsApp";
-      }
-      
-      throw new Error(errorMessage);
+      throw new Error(`Unexpected response from WhatsApp API: ${JSON.stringify(response.data)}`);
     }
   } catch (error) {
     logger.error("Send WhatsApp error", error, { to, user: req.user.username });
-    console.error("[WHATSAPP] Error sending WhatsApp:", error.message);
-    
-    // Provide more specific error messages
-    if (error.response?.status === 404) {
-      throw new Error("WhatsApp API endpoint not found. Please check UltraMsg configuration.");
-    } else if (error.response?.status === 401) {
-      throw new Error("WhatsApp API authentication failed. Please check UltraMsg token.");
-    } else if (error.response?.status === 403) {
-      throw new Error("WhatsApp API access denied. Please check UltraMsg instance ID.");
-    } else if (error.code === 'ECONNREFUSED') {
-      throw new Error("WhatsApp API connection refused. Please check UltraMsg service status.");
-    } else if (error.code === 'ENOTFOUND') {
-      throw new Error("WhatsApp API host not found. Please check UltraMsg API URL.");
-    }
-    
     throw error;
   }
 }));
@@ -841,6 +687,7 @@ app.post("/api/add-new-year", authenticateToken, asyncHandler(async (req, res) =
     // Check if year already exists with retry logic
     let existingYear = null;
     retryCount = 0;
+    
     while (retryCount < maxRetries) {
       try {
         existingYear = await paymentsCollection.findOne({ Year: parseInt(year) });
@@ -848,13 +695,14 @@ app.post("/api/add-new-year", authenticateToken, asyncHandler(async (req, res) =
       } catch (error) {
         retryCount++;
         if (retryCount >= maxRetries) {
-          return res.status(200).json({ message: `Year ${year} already exists (after retries)` });
+          throw new Error(`Failed to check existing year after ${maxRetries} attempts: ${error.message}`);
         }
-        await new Promise(resolve => setTimeout(resolve, 200 * retryCount)); // shorter wait
+        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
       }
     }
+    
     if (existingYear) {
-      return res.status(200).json({ message: `Year ${year} already exists` });
+      throw new Error(`Year ${year} already exists`);
     }
     
     // Create payment records for all clients for the new year
@@ -877,9 +725,9 @@ app.post("/api/add-new-year", authenticateToken, asyncHandler(async (req, res) =
       } catch (error) {
         retryCount++;
         if (retryCount >= maxRetries) {
-          return res.status(500).json({ message: `Failed to insert payment records after ${maxRetries} attempts: ${error.message}` });
+          throw new Error(`Failed to insert payment records after ${maxRetries} attempts: ${error.message}`);
         }
-        await new Promise(resolve => setTimeout(resolve, 200 * retryCount)); // shorter wait
+        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
       }
     }
     
@@ -896,176 +744,112 @@ app.post("/api/add-new-year", authenticateToken, asyncHandler(async (req, res) =
 
 // Batch Save Payments
 app.post("/api/batch-save-payments", authenticateToken, paymentLimiter, asyncHandler(async (req, res) => {
-  const { updates } = req.body;
-  const { year } = req.query;
+  const { payments, year } = req.body;
   const username = req.user.username;
-
-  logger.payment("Batch save payments request", username, { count: updates?.length, year });
-
-  if (!Array.isArray(updates) || updates.length === 0) {
-    throw new Error("Updates array is required and must not be empty");
+  
+  if (!Array.isArray(payments) || payments.length === 0) {
+    throw new Error("Payments array is required");
   }
-
-  if (!year) {
-    throw new Error("Year is required");
+  
+  if (!year || isNaN(year)) {
+    throw new Error("Valid year is required");
   }
-
+  
   try {
     const db = await database.getDb();
     const paymentsCollection = database.getPaymentsCollection(username);
     
-    const results = [];
-    const modifiedCount = 0;
-
-    // Process updates in batches for better performance
-    const batchSize = 10;
-    for (let i = 0; i < updates.length; i += batchSize) {
-      const batch = updates.slice(i, i + batchSize);
+    const updateOperations = [];
+    
+    for (const payment of payments) {
+      const { clientName, type, month, value } = payment;
       
-      const batchPromises = batch.map(async (update) => {
-        const { clientName, type, month, value } = update;
-        
-        if (!clientName || !type || !month) {
-          throw new Error("Client name, type, and month are required");
-        }
-
-        const numericValue = value !== "" && value !== null && value !== undefined ? parseFloat(value) : 0;
-        if (!isValidPaymentAmount(numericValue)) {
-          throw new Error("Invalid payment value");
-        }
-
-        const monthKey = getMonthKey(month);
-        if (!monthKey) {
-          throw new Error("Invalid month");
-        }
-
-        // Use findOneAndUpdate for atomic operation
-        const result = await paymentsCollection.findOneAndUpdate(
-          { 
-            Client_Name: clientName, 
-            Type: type, 
-            Year: parseInt(year) 
-          },
-          { 
+      if (!clientName || !type || !month) {
+        continue; // Skip invalid entries
+      }
+      
+      const numericValue = value !== "" && value !== null && value !== undefined ? parseFloat(value) : 0;
+      if (!isValidPaymentAmount(numericValue)) {
+        continue; // Skip invalid amounts
+      }
+      
+      const monthKey = getMonthKey(month);
+      if (!monthKey) {
+        continue; // Skip invalid months
+      }
+      
+      updateOperations.push({
+        updateOne: {
+          filter: { Client_Name: clientName, Type: type, Year: parseInt(year) },
+          update: { 
             $set: { 
               [`Payments.${monthKey}`]: numericValue === 0 ? "" : numericValue.toString(),
               Last_Updated: new Date()
             }
-          },
-          { 
-            returnDocument: 'after',
-            upsert: false
           }
-        );
-
-        if (!result.value) {
-          // Create payment record if it does not exist
-          const createdAt = new Date().toISOString();
-          const newPaymentDoc = createPaymentDocument(clientName, type, 0, parseInt(year), createdAt);
-          await paymentsCollection.insertOne(newPaymentDoc);
-          
-          // Fetch and update the newly created document
-          const newPayment = await paymentsCollection.findOne({ 
-            Client_Name: clientName, 
-            Type: type, 
-            Year: parseInt(year) 
-          });
-          
-          if (newPayment) {
-            await paymentsCollection.updateOne(
-              { _id: newPayment._id },
-              { 
-                $set: { 
-                  [`Payments.${monthKey}`]: numericValue === 0 ? "" : numericValue.toString(),
-                  Last_Updated: new Date()
-                }
-              }
-            );
-            
-            // Fetch updated document and calculate due payment
-            const updatedPayment = await paymentsCollection.findOne({ _id: newPayment._id });
-            const updatedPaymentWithDue = processPaymentUpdate(updatedPayment, updatedPayment.Payments, parseInt(year), null);
-            
-            return {
-              Client_Name: updatedPaymentWithDue.Client_Name,
-              Type: updatedPaymentWithDue.Type,
-              Amount_To_Be_Paid: parseFloat(updatedPaymentWithDue.Amount_To_Be_Paid) || 0,
-              january: updatedPaymentWithDue.Payments.January || "",
-              february: updatedPaymentWithDue.Payments.February || "",
-              march: updatedPaymentWithDue.Payments.March || "",
-              april: updatedPaymentWithDue.Payments.April || "",
-              may: updatedPaymentWithDue.Payments.May || "",
-              june: updatedPaymentWithDue.Payments.June || "",
-              july: updatedPaymentWithDue.Payments.July || "",
-              august: updatedPaymentWithDue.Payments.August || "",
-              september: updatedPaymentWithDue.Payments.September || "",
-              october: updatedPaymentWithDue.Payments.October || "",
-              november: updatedPaymentWithDue.Payments.November || "",
-              december: updatedPaymentWithDue.Payments.December || "",
-              Due_Payment: updatedPaymentWithDue.Due_Payment,
-            };
-          }
-        } else {
-          // Payment record exists, update it
-          const paymentRecord = result.value;
-          const updatedPayments = { ...paymentRecord.Payments };
-          updatedPayments[monthKey] = numericValue === 0 ? "" : numericValue.toString();
-
-          // Get previous year payment for due calculation (only if needed)
-          let prevYearPayment = null;
-          if (parseInt(year) > 2025) {
-            prevYearPayment = await paymentsCollection.findOne({
-              Client_Name: clientName,
-              Type: type,
-              Year: parseInt(year) - 1,
-            });
-          }
-
-          // Use centralized payment update utility
-          const updatedPayment = processPaymentUpdate(paymentRecord, updatedPayments, parseInt(year), prevYearPayment);
-
-          // Update the document with new due payment
-          await paymentsCollection.updateOne(
-            { _id: paymentRecord._id },
-            { 
-              $set: { 
-                Payments: updatedPayments, 
-                Due_Payment: updatedPayment.Due_Payment, 
-                Last_Updated: new Date() 
-              } 
-            }
-          );
-
-          return {
-            Client_Name: paymentRecord.Client_Name,
-            Type: paymentRecord.Type,
-            Amount_To_Be_Paid: parseFloat(paymentRecord.Amount_To_Be_Paid) || 0,
-            january: updatedPayments.January || "",
-            february: updatedPayments.February || "",
-            march: updatedPayments.March || "",
-            april: updatedPayments.April || "",
-            may: updatedPayments.May || "",
-            june: updatedPayments.June || "",
-            july: updatedPayments.July || "",
-            august: updatedPayments.August || "",
-            september: updatedPayments.September || "",
-            october: updatedPayments.October || "",
-            november: updatedPayments.November || "",
-            december: updatedPayments.December || "",
-            Due_Payment: updatedPayment.Due_Payment,
-          };
         }
       });
-
-      const batchResults = await Promise.all(batchPromises);
-      results.push(...batchResults);
     }
-
-    logger.payment("Batch payments updated successfully", username, { count: results.length, year });
+    
+    if (updateOperations.length === 0) {
+      throw new Error("No valid payment updates found");
+    }
+    
+    const result = await paymentsCollection.bulkWrite(updateOperations);
+    
+    logger.payment(`Batch updated ${result.modifiedCount} payment records`, username, { 
+      totalOperations: updateOperations.length,
+      modifiedCount: result.modifiedCount,
+      year 
+    });
+    
+    // Get the updated payment data to return with recalculated due payment
+    const updatedPayments = [];
+    for (const payment of payments) {
+      const { clientName, type } = payment;
+      
+      const updatedPayment = await paymentsCollection.findOne({ 
+        Client_Name: clientName, 
+        Type: type, 
+        Year: parseInt(year) 
+      });
+      
+      if (updatedPayment) {
+        // Recalculate due payment
+        const duePayment = calculateDuePayment(updatedPayment);
+        
+        // Format the response to match frontend expectations
+        const formattedPayment = {
+          Client_Name: updatedPayment.Client_Name,
+          Type: updatedPayment.Type,
+          Amount_To_Be_Paid: updatedPayment.Amount_To_Be_Paid,
+          Email: updatedPayment.Email,
+          Phone_Number: updatedPayment.Phone_Number,
+          Due_Payment: duePayment.toFixed(2),
+          Year: updatedPayment.Year,
+          // Add individual month fields
+          January: updatedPayment.Payments?.January || "",
+          February: updatedPayment.Payments?.February || "",
+          March: updatedPayment.Payments?.March || "",
+          April: updatedPayment.Payments?.April || "",
+          May: updatedPayment.Payments?.May || "",
+          June: updatedPayment.Payments?.June || "",
+          July: updatedPayment.Payments?.July || "",
+          August: updatedPayment.Payments?.August || "",
+          September: updatedPayment.Payments?.September || "",
+          October: updatedPayment.Payments?.October || "",
+          November: updatedPayment.Payments?.November || "",
+          December: updatedPayment.Payments?.December || "",
+        };
+        
+        updatedPayments.push(formattedPayment);
+      }
+    }
+    
     res.json({ 
-      message: "Batch payments updated successfully", 
-      updatedPayments: results,
-      modifiedCount: results.length
+      message: "Batch payments updated successfully",
+      modifiedCount: result.modifiedCount,
+      updatedPayments: updatedPayments
     });
   } catch (error) {
     logger.error("Batch save payments error", error, { username, year });
@@ -1186,65 +970,16 @@ app.post("/api/verify-whatsapp-contact", authenticateToken, asyncHandler(async (
     throw new Error("Phone number is required");
   }
   
-  if (!validateInput.phone(phoneNumber)) {
+  // Basic phone number validation
+  const cleanPhone = phoneNumber.replace(/\D/g, "");
+  if (cleanPhone.length < 10) {
     throw new Error("Invalid phone number format");
   }
   
-  try {
-    // Format phone number
-    let formattedPhone = phoneNumber.trim().replace(/[\s-]/g, "");
-    if (!formattedPhone.startsWith("+")) {
-      formattedPhone = `+91${formattedPhone.replace(/\D/g, "")}`;
-    }
-    
-    console.log(`[WHATSAPP_VERIFY] Checking WhatsApp registration for: ${formattedPhone}`);
-    
-    // Try to send a test message to UltraMsg API to verify the number
-    const verifyPayload = {
-      token: config.ULTRAMSG_TOKEN,
-      to: formattedPhone,
-      body: "WhatsApp verification test", // This won't actually be sent, just used for verification
-    };
-    
-    try {
-      // Use UltraMsg's contact verification endpoint if available
-      // For now, we'll use a simple approach - attempt to validate format and assume valid
-      const phoneRegex = /^\+[1-9]\d{1,14}$/;
-      if (!phoneRegex.test(formattedPhone)) {
-        throw new Error("Invalid international phone number format");
-      }
-      
-      // Additional validation: Indian numbers should be +91 followed by 10 digits
-      if (formattedPhone.startsWith("+91")) {
-        const indianNumber = formattedPhone.substring(3);
-        if (!/^[6-9]\d{9}$/.test(indianNumber)) {
-          throw new Error("Invalid Indian mobile number format");
-        }
-      }
-      
-      console.log(`[WHATSAPP_VERIFY] Phone number ${formattedPhone} passed format validation`);
-      
-      res.json({ 
-        message: "Phone number format is valid",
-        formattedNumber: formattedPhone,
-        isValidWhatsApp: true // Note: This is format validation, not actual WhatsApp registration check
-      });
-      
-    } catch (verifyError) {
-      console.error(`[WHATSAPP_VERIFY] Verification failed for ${formattedPhone}:`, verifyError.message);
-      
-      res.json({ 
-        message: "Phone number verification failed",
-        formattedNumber: formattedPhone,
-        isValidWhatsApp: false,
-        error: verifyError.message
-      });
-    }
-    
-  } catch (error) {
-    console.error(`[WHATSAPP_VERIFY] Error verifying phone number:`, error.message);
-    throw new Error(`Phone number verification failed: ${error.message}`);
-  }
+  res.json({ 
+    message: "Phone number format is valid",
+    formattedNumber: cleanPhone.startsWith("91") ? `+${cleanPhone}` : `+91${cleanPhone}`
+  });
 }));
 
 // Error handling middleware (must be last)

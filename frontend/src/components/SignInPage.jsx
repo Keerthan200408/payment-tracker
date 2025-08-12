@@ -76,20 +76,13 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
       setIsLoading(true);
       setError('');
       
-      // Extract the ID token from the Google response
-      const idToken = response.credential;
-      
-      if (!idToken || typeof idToken !== 'string') {
-        throw new Error('Invalid Google token received');
-      }
-      
       // Send Google token to backend
       const googleResponse = await authAPI.googleSignIn({
-        googleToken: idToken,
+        googleToken: response.credential,
       });
 
       if (googleResponse.data.needsUsername) {
-        const userInfo = JSON.parse(atob(idToken.split('.')[1]));
+        const userInfo = JSON.parse(atob(response.credential.split('.')[1]));
         setGoogleEmail(userInfo.email);
         setChosenUsername(userInfo.email.split('@')[0]);
         setShowUsernameModal(true);

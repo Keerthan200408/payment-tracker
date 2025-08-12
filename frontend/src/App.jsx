@@ -6,18 +6,14 @@ import ClientsPage from "./components/ClientsPage.jsx";
 import PaymentsPage from "./components/PaymentsPage.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import ToastManager from "./components/ToastManager.jsx";
-import SessionTimer from "./components/SessionTimer.jsx";
 import { 
   authAPI, 
   clientsAPI, 
   paymentsAPI, 
   typesAPI, 
   importAPI,
-  handleAPIError,
-  getClients
+  handleAPIError 
 } from './utils/api';
-
-const AUTO_LOGOUT_MS = 4 * 60 * 60 * 1000; // 4 hours
 
 const App = () => {
   const [sessionToken, setSessionToken] = useState(null);
@@ -43,18 +39,11 @@ const App = () => {
   const apiCacheRef = useRef({});
   const [types, setTypes] = useState([]);
   const CACHE_DURATION = 5 * 60 * 1000;
-  const logoutTimerRef = useRef(null);
 
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
   const logout = () => {
   console.log("Logging out user:", currentUser);
-  
-  // Clear logout timer
-  if (logoutTimerRef.current) {
-    clearTimeout(logoutTimerRef.current);
-    logoutTimerRef.current = null;
-  }
   
   // Clear all pending requests
   Object.keys(apiCacheRef.current).forEach(key => {
@@ -101,76 +90,9 @@ const sortDataByCreatedAt = (data, sortOrder = 'desc') => {
   });
 };
 
-// Enhanced sorting that maintains client order
-const sortClientsByCreatedAt = (clients, sortOrder = 'desc') => {
-  if (!Array.isArray(clients)) return [];
-  
-  // First, sort by createdAt
-  const sortedClients = [...clients].sort((a, b) => {
-    const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
-    const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
-    
-    if (sortOrder === 'desc') {
-      return dateB - dateA; // Newest first
-    } else {
-      return dateA - dateB; // Oldest first
-    }
-  });
-  
-  // Create a map to maintain order for clients without createdAt
-  const orderMap = new Map();
-  sortedClients.forEach((client, index) => {
-    const key = `${client.Client_Name}_${client.Type}`;
-    orderMap.set(key, index);
-  });
-  
-  return sortedClients;
-};
-
-// Enhanced sorting for payments that maintains client order
-const sortPaymentsByClientOrder = (payments, clients, sortOrder = 'desc') => {
-  if (!Array.isArray(payments) || !Array.isArray(clients)) return [];
-  
-  // Create client order map from clients array
-  const clientOrderMap = new Map();
-  clients.forEach((client, index) => {
-    const key = `${client.Client_Name}_${client.Type}`;
-    clientOrderMap.set(key, index);
-  });
-  
-  // Sort payments by client order first, then by createdAt
-  return [...payments].sort((a, b) => {
-    const keyA = `${a.Client_Name}_${a.Type}`;
-    const keyB = `${b.Client_Name}_${b.Type}`;
-    
-    const orderA = clientOrderMap.get(keyA) ?? Number.MAX_SAFE_INTEGER;
-    const orderB = clientOrderMap.get(keyB) ?? Number.MAX_SAFE_INTEGER;
-    
-    // If both clients have the same order, sort by createdAt
-    if (orderA === orderB) {
-      const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
-      const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
-      
-      if (sortOrder === 'desc') {
-        return dateB - dateA;
-      } else {
-        return dateA - dateB;
-      }
-    }
-    
-    // Maintain client order
-    return orderA - orderB;
-  });
-};
-
   const handleSessionError = (error) => {
   if (error.response && (error.response.status === 401 || error.response.status === 403)) {
     console.log("Session invalid, logging out");
-    // Clear any existing logout timers since we're logging out now
-    if (logoutTimerRef.current) {
-      clearTimeout(logoutTimerRef.current);
-      logoutTimerRef.current = null;
-    }
     logout();
   } else if (error.response?.status === 429) {
     console.log("Rate limit hit, backing off");
@@ -263,72 +185,39 @@ const fetchTypes = async (token) => {
 }, []);
 
   // Initialize session
-  useEffect(() => {
-    if (isInitialized) return; // Prevent re-initialization
-    
-    const storedUser = localStorage.getItem("currentUser");
-    const storedToken = localStorage.getItem("sessionToken");
-    const storedPage = localStorage.getItem("currentPage");
-    const storedYear = localStorage.getItem("currentYear");
-    const sessionState = localStorage.getItem("sessionState");
+useEffect(() => {
+  if (isInitialized) return; // Prevent re-initialization
+  
+  const storedUser = localStorage.getItem("currentUser");
+  const storedToken = localStorage.getItem("sessionToken");
+  const storedPage = localStorage.getItem("currentPage");
+  const storedYear = localStorage.getItem("currentYear");
 
-    console.log("App.jsx: Stored sessionToken on load:", storedToken);
+  console.log("App.jsx: Stored sessionToken on load:", storedToken);
+  
+  if (storedUser && storedToken) {
+    console.log("Restoring session for user:", storedUser);
+    setCurrentUser(storedUser);
+    setSessionToken(storedToken);
     
-    if (storedUser && storedToken) {
-      // Check if session is still valid
-      let shouldRestoreSession = true;
-      
-      if (sessionState) {
-        try {
-          const parsedState = JSON.parse(sessionState);
-          const timeSinceLastActivity = Date.now() - parsedState.timestamp;
-          
-          if (timeSinceLastActivity > AUTO_LOGOUT_MS) {
-            console.log('Session expired, clearing stored data');
-            localStorage.removeItem("currentUser");
-            localStorage.removeItem("sessionToken");
-            localStorage.removeItem("currentPage");
-            localStorage.removeItem("currentYear");
-            localStorage.removeItem("sessionState");
-            localStorage.removeItem("lastActivity");
-            shouldRestoreSession = false;
-          }
-        } catch (error) {
-          console.error('Error parsing session state:', error);
-          // If we can't parse the session state, clear everything
-          localStorage.clear();
-          shouldRestoreSession = false;
-        }
-      }
-      
-      if (shouldRestoreSession) {
-        console.log("Restoring session for user:", storedUser);
-        setCurrentUser(storedUser);
-        setSessionToken(storedToken);
-        
-        const validPages = ["home", "clients", "payments", "reports", "addClient"];
-        setPage(validPages.includes(storedPage) ? storedPage : "home");
-        
-        const yearToSet = storedYear && parseInt(storedYear) >= 2025 ? storedYear : "2025";
-        console.log("App.jsx: Setting currentYear:", yearToSet);
-        setCurrentYear(yearToSet);
-        
-        // Always force refresh on initial load
-        setTimeout(() => {
-          fetchClients(storedToken, true); // forceRefresh = true
-          fetchPayments(storedToken, yearToSet, true); // forceRefresh = true
-        }, 200);
-      } else {
-        console.log("App.jsx: Session expired, setting page to signIn");
-        setPage("signIn");
-      }
-    } else {
-      console.log("App.jsx: No stored user or token, setting page to signIn");
-      setPage("signIn");
-    }
+    const validPages = ["home", "clients", "payments", "reports", "addClient"];
+    setPage(validPages.includes(storedPage) ? storedPage : "home");
     
-    setIsInitialized(true);
-  }, []); // Remove dependencies to prevent re-runs
+    const yearToSet = storedYear && parseInt(storedYear) >= 2025 ? storedYear : "2025";
+    console.log("App.jsx: Setting currentYear:", yearToSet);
+    setCurrentYear(yearToSet);
+    
+    // Fetch data with debounce
+    setTimeout(() => {
+      fetchClients(storedToken);
+    }, 200);
+  } else {
+    console.log("App.jsx: No stored user or token, setting page to signIn");
+    setPage("signIn");
+  }
+  
+  setIsInitialized(true);
+}, []); // Remove dependencies to prevent re-runs
 
 
   // Save current page to localStorage
@@ -404,13 +293,13 @@ const fetchClients = async (token, forceRefresh = false) => {
   const requestPromise = (async () => {
     try {
       console.log("Fetching clients with token:", token?.substring(0, 10) + "...");
-      const response = await getClients(selectedYear);
+      const response = await clientsAPI.getClients();
       
-      console.log("Clients fetched:", response);
-      const clientsData = Array.isArray(response) ? response : [];
+      console.log("Clients fetched:", response.data);
+      const clientsData = Array.isArray(response.data) ? response.data : [];
       
       // Sort clients by createdAt (newest first)
-      const sortedClientsData = sortClientsByCreatedAt(clientsData, 'desc');
+      const sortedClientsData = sortDataByCreatedAt(clientsData, 'desc');
       console.log("Clients sorted by createdAt (newest first)");
       
       setClientsData(sortedClientsData);
@@ -477,8 +366,8 @@ const fetchPayments = async (token, year, forceRefresh = false) => {
       console.log(`Fetched payments for ${year}:`, data);
 
       // Sort payments by createdAt (newest first)
-      const sortedPaymentsData = sortPaymentsByClientOrder(data, clientsData, 'desc');
-      console.log("Payments sorted by client order and createdAt (newest first)");
+      const sortedPaymentsData = sortDataByCreatedAt(data, 'desc');
+      console.log("Payments sorted by createdAt (newest first)");
 
       setPaymentsData(sortedPaymentsData);
 
@@ -964,624 +853,277 @@ const updatePayment = async (
   }
 };
 
-  // Auto-logout logic
-  const resetLogoutTimer = useCallback(() => {
-    if (logoutTimerRef.current) {
-      clearTimeout(logoutTimerRef.current);
-    }
-    
-    // Clear any existing warning timer
-    if (window.warningTimer) {
-      clearTimeout(window.warningTimer);
-      window.warningTimer = null;
-    }
-    
-    if (sessionToken && currentUser) {
-      // Set warning at 30 minutes before logout
-      const warningTime = AUTO_LOGOUT_MS - (30 * 60 * 1000); // 30 minutes before
-      
-      // Warning timer - store reference globally to prevent memory leaks
-      window.warningTimer = setTimeout(() => {
-        if (sessionToken && currentUser) {
-          // Create a more user-friendly warning
-          const warningDiv = document.createElement('div');
-          warningDiv.id = 'session-warning-modal';
-          warningDiv.innerHTML = `
-            <div style="
-              position: fixed;
-              top: 50%;
-              left: 50%;
-              transform: translate(-50%, -50%);
-              background: white;
-              padding: 20px;
-              border-radius: 8px;
-              box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-              z-index: 10000;
-              max-width: 400px;
-              text-align: center;
-              border: 2px solid #f59e0b;
-            ">
-              <h3 style="color: #d97706; margin-bottom: 15px;">⚠️ Session Expiring Soon</h3>
-              <p style="margin-bottom: 20px; color: #374151;">
-                Your session will expire in 30 minutes due to inactivity.
-              </p>
-              <div style="display: flex; gap: 10px; justify-content: center;">
-                <button id="extendSession" style="
-                  background: #10b981;
-                  color: white;
-                  border: none;
-                  padding: 10px 20px;
-                  border-radius: 6px;
-                  cursor: pointer;
-                  font-weight: 500;
-                ">Extend Session</button>
-                <button id="continueSession" style="
-                  background: #6b7280;
-                  color: white;
-                  border: none;
-                  padding: 10px 20px;
-                  border-radius: 6px;
-                  cursor: pointer;
-                  font-weight: 500;
-                ">Continue</button>
-              </div>
-            </div>
-          `;
-          
-          // Remove any existing warning modal
-          const existingWarning = document.getElementById('session-warning-modal');
-          if (existingWarning) {
-            existingWarning.remove();
-          }
-          
-          document.body.appendChild(warningDiv);
-          
-          // Add event listeners
-          document.getElementById('extendSession').addEventListener('click', () => {
-            document.body.removeChild(warningDiv);
-            resetLogoutTimer(); // Reset timer if user wants to extend
-          });
-          
-          document.getElementById('continueSession').addEventListener('click', () => {
-            document.body.removeChild(warningDiv);
-          });
-          
-          // Auto-remove after 2 minutes if user doesn't respond
-          setTimeout(() => {
-            if (document.body.contains(warningDiv)) {
-              document.body.removeChild(warningDiv);
-            }
-          }, 2 * 60 * 1000);
-        }
-      }, warningTime);
-      
-      // Main logout timer
-      logoutTimerRef.current = setTimeout(() => {
-        console.log('Auto-logout due to inactivity after 4 hours');
-        logout();
-        // Show a message to the user
-        alert('You have been logged out due to inactivity. Please sign in again.');
-      }, AUTO_LOGOUT_MS);
-    }
-  }, [sessionToken, currentUser]);
-
-  // Make resetLogoutTimer available globally for API interceptors
-  useEffect(() => {
-    if (sessionToken && currentUser) {
-      window.resetLogoutTimer = resetLogoutTimer;
-    } else {
-      delete window.resetLogoutTimer;
-    }
-    
-    return () => {
-      delete window.resetLogoutTimer;
-    };
-  }, [sessionToken, currentUser, resetLogoutTimer]);
-
-  // Reset timer on user activity
-  useEffect(() => {
-    if (!sessionToken || !currentUser) return;
-
-    // Debounce function to prevent excessive timer resets
-    let activityTimeout = null;
-    const debouncedActivity = () => {
-      if (activityTimeout) {
-        clearTimeout(activityTimeout);
-      }
-      activityTimeout = setTimeout(() => {
-        resetLogoutTimer();
-        activityTimeout = null;
-      }, 1000); // Only reset timer after 1 second of no activity
-    };
-
-    const handleActivity = (event) => {
-      // Ignore certain types of events that might be noise
-      if (event.type === 'mousemove') {
-        // Only count mouse movement if it's significant (more than 10px)
-        if (event.movementX > 10 || event.movementY > 10) {
-          debouncedActivity();
-        }
-      } else if (event.type === 'scroll') {
-        // Only count scroll if it's user-initiated (not programmatic)
-        if (event.isTrusted) {
-          debouncedActivity();
-        }
-      } else {
-        // For other events, always count as activity
-        debouncedActivity();
-      }
-    };
-
-    // Add event listeners with passive option for better performance
-    const activityEvents = ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll', 'click'];
-    activityEvents.forEach(event => {
-      window.addEventListener(event, handleActivity, { passive: true });
-    });
-
-    // Handle page visibility changes (when user switches tabs)
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        resetLogoutTimer();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    // Handle window focus/blur (when user switches between applications)
-    const handleWindowFocus = () => {
-      resetLogoutTimer();
-    };
-    window.addEventListener('focus', handleWindowFocus);
-
-    // Handle when user leaves the page for a long time
-    let pageLeaveTimer = null;
-    const handlePageLeave = () => {
-      pageLeaveTimer = setTimeout(() => {
-        // If user has been away for more than 4 hours, force logout
-        if (sessionToken && currentUser) {
-          console.log('User has been away from page for too long, logging out');
-          logout();
-        }
-      }, AUTO_LOGOUT_MS);
-    };
-
-    const handlePageReturn = () => {
-      if (pageLeaveTimer) {
-        clearTimeout(pageLeaveTimer);
-        pageLeaveTimer = null;
-      }
-      resetLogoutTimer();
-    };
-
-    document.addEventListener('mouseleave', handlePageLeave);
-    document.addEventListener('mouseenter', handlePageReturn);
-
-    // Reset timer initially
-    resetLogoutTimer();
-
-    return () => {
-      // Clean up event listeners
-      activityEvents.forEach(event => {
-        window.removeEventListener(event, handleActivity);
-      });
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleWindowFocus);
-      document.removeEventListener('mouseleave', handlePageLeave);
-      document.removeEventListener('mouseenter', handlePageReturn);
-      
-      // Clear timers
-      if (logoutTimerRef.current) {
-        clearTimeout(logoutTimerRef.current);
-      }
-      if (pageLeaveTimer) {
-        clearTimeout(pageLeaveTimer);
-      }
-      if (activityTimeout) {
-        clearTimeout(activityTimeout);
-      }
-      if (window.warningTimer) {
-        clearTimeout(window.warningTimer);
-        window.warningTimer = null;
-      }
-      
-      // Remove any existing warning modal
-      const existingWarning = document.getElementById('session-warning-modal');
-      if (existingWarning) {
-        existingWarning.remove();
-      }
-    };
-  }, [sessionToken, currentUser, resetLogoutTimer]);
-
-  // Reset timer when user logs in
-  useEffect(() => {
-    if (sessionToken && currentUser) {
-      resetLogoutTimer();
-    }
-  }, [sessionToken, currentUser, resetLogoutTimer]);
-
-  // Handle page unload (when user closes tab/browser)
-  useEffect(() => {
-    if (!sessionToken || !currentUser) return;
-
-    const handleBeforeUnload = (e) => {
-      // Clear the logout timer when user is leaving the page
-      if (logoutTimerRef.current) {
-        clearTimeout(logoutTimerRef.current);
-        logoutTimerRef.current = null;
-      }
-      
-      // Optional: Show a warning if user has unsaved changes
-      // You can customize this based on your needs
-      // e.preventDefault();
-      // e.returnValue = '';
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [sessionToken, currentUser]);
-
-  // Handle page refresh and navigation
-  useEffect(() => {
-    if (!sessionToken || !currentUser) return;
-
-    // Store the current timestamp when the component mounts
-    const currentTime = Date.now();
-    const lastActivity = localStorage.getItem('lastActivity');
-    
-    if (lastActivity) {
-      const timeSinceLastActivity = currentTime - parseInt(lastActivity);
-      // If more than 4 hours have passed since last activity, logout
-      if (timeSinceLastActivity > AUTO_LOGOUT_MS) {
-        console.log('Session expired due to time since last activity, logging out');
-        logout();
-        return;
-      }
-    }
-
-    // Update last activity timestamp
-    localStorage.setItem('lastActivity', currentTime.toString());
-    
-    // Save session state for recovery
-    const sessionState = {
-      timestamp: currentTime,
-      user: currentUser,
-      page: page,
-      year: currentYear
-    };
-    localStorage.setItem('sessionState', JSON.stringify(sessionState));
-
-    return () => {
-      // Update last activity when component unmounts
-      localStorage.setItem('lastActivity', Date.now().toString());
-    };
-  }, [sessionToken, currentUser, page, currentYear]);
-
-  // Handle device sleep/wake and other device events
-  useEffect(() => {
-    if (!sessionToken || !currentUser) return;
-
-    // Handle when device wakes up from sleep
-    const handleWakeUp = () => {
-      console.log('Device woke up, resetting logout timer');
-      resetLogoutTimer();
-    };
-
-    // Handle when device goes to sleep
-    const handleSleep = () => {
-      console.log('Device going to sleep');
-      // You could optionally show a notification here
-    };
-
-    // Handle online/offline status
-    const handleOnline = () => {
-      console.log('Device came back online, resetting logout timer');
-      resetLogoutTimer();
-    };
-
-    const handleOffline = () => {
-      console.log('Device went offline');
-      // You could optionally show a notification here
-    };
-
-    // Add event listeners for device events
-    window.addEventListener('focus', handleWakeUp);
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) {
-        handleWakeUp();
-      }
-    });
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('focus', handleWakeUp);
-      document.removeEventListener('visibilitychange', handleWakeUp);
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, [sessionToken, currentUser, resetLogoutTimer]);
-
-  // Optionally, reset timer on API calls (if you want to treat API activity as activity)
-  // You can wrap your API calls to call resetLogoutTimer()
-
-  // Session health check - verify session is still valid
-  useEffect(() => {
-    if (!sessionToken || !currentUser) return;
-
-    const healthCheckInterval = setInterval(async () => {
-      try {
-        // Make a lightweight API call to verify session
-        const response = await fetch('https://payment-tracker-aswa.onrender.com/api/health', {
-          method: 'GET',
-          headers: { Authorization: `Bearer ${sessionToken}` },
-          signal: AbortSignal.timeout(5000) // 5 second timeout
-        });
-        
-        if (!response.ok) {
-          console.log('Session health check failed, logging out');
-          logout();
-        } else {
-          // Update last activity on successful health check
-          localStorage.setItem('lastActivity', Date.now().toString());
-        }
-      } catch (error) {
-        // Only logout on network errors, not on timeout
-        if (error.name === 'AbortError') {
-          console.log('Health check timeout, continuing session');
-        } else {
-          console.log('Session health check error:', error.message);
-          // Don't logout immediately on network errors, just log
-        }
-      }
-    }, 5 * 60 * 1000); // Check every 5 minutes
-
-    return () => {
-      clearInterval(healthCheckInterval);
-    };
-  }, [sessionToken, currentUser]);
-
-
-
   return (
     <ErrorBoundary>
       <ToastManager>
         {(toastContext) => (
           <div className="min-h-screen bg-gray-50">
-            {/* Session Timer - shows countdown to auto-logout */}
-            <SessionTimer 
-              sessionToken={sessionToken}
-              currentUser={currentUser}
-              resetLogoutTimer={resetLogoutTimer}
-            />
-            
-            {page === "signIn" ? (
-              <SignInPage
-                setSessionToken={setSessionToken}
-                setCurrentUser={setCurrentUser}
-                setPage={setPage}
-              />
-            ) : (
-              <>
-                <nav className="bg-white shadow-sm w-full p-4 sm:hidden flex justify-between items-center border-b border-gray-200">
-                  <div className="flex items-center">
-                    <i className="fas fa-money-bill-wave text-2xl mr-2 text-gray-800"></i>
-                    <h1 className="text-xl font-semibold text-gray-800">Payment Tracker</h1>
-                  </div>
+        {page === "signIn" && (
+          <SignInPage
+            setSessionToken={setSessionToken}
+            setCurrentUser={setCurrentUser}
+            setPage={setPage}
+          />
+        )}
+        {page !== "signIn" && (
+          <div className="flex flex-col sm:flex-row">
+            <nav className="bg-white shadow-sm w-full p-4 sm:hidden flex justify-between items-center border-b border-gray-200">
+              <div className="flex items-center">
+                <i className="fas fa-money-bill-wave text-2xl mr-2 text-gray-800"></i>
+                <h1 className="text-xl font-semibold text-gray-800">
+                  Payment Tracker
+                </h1>
+              </div>
+              <button
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                className="text-gray-800 focus:outline-none"
+              >
+                <i className="fas fa-bars text-2xl"></i>
+              </button>
+            </nav>
+            <nav
+              className={`bg-white shadow-lg w-full sm:w-64 p-4 fixed top-0 left-0 h-auto sm:h-full border-r border-gray-200 z-50 ${
+                isSidebarOpen ? "block" : "hidden sm:block"
+              }`}
+            >
+              <div className="flex items-center mb-6 pb-4 border-b border-gray-200">
+                <i className="fas fa-money-bill-wave text-2xl mr-2 text-gray-800"></i>
+                <h1 className="text-xl font-semibold text-gray-800">
+                  Payment Tracker
+                </h1>
+              </div>
+              <ul className="space-y-1">
+                <li>
                   <button
-                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                    className="text-gray-800 focus:outline-none"
+                    onClick={() => {
+                      setPage("home");
+                      setIsSidebarOpen(false);
+                    }}
+                    className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
+                      page === "home"
+                        ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700"
+                        : "text-gray-700 hover:bg-gray-50"
+                    }`}
                   >
-                    <i className="fas fa-bars text-2xl"></i>
+                    <i className="fas fa-tachometer-alt mr-3 w-4"></i> Dashboard
                   </button>
-                </nav>
-                <div className="flex flex-col sm:flex-row">
-                  <nav
-                    className={`bg-white shadow-lg w-full sm:w-64 p-4 fixed top-0 left-0 h-auto sm:h-full border-r border-gray-200 z-50 ${isSidebarOpen ? "block" : "hidden sm:block"}`}
+                </li>
+                <li>
+                  <button
+                    onClick={() => {
+                      setPage("clients");
+                      setIsSidebarOpen(false);
+                    }}
+                    className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
+                      page === "clients"
+                        ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700"
+                        : "text-gray-700 hover:bg-gray-50"
+                    }`}
                   >
-                    <div className="flex items-center mb-6 pb-4 border-b border-gray-200">
-                      <i className="fas fa-money-bill-wave text-2xl mr-2 text-gray-800"></i>
-                      <h1 className="text-xl font-semibold text-gray-800">Payment Tracker</h1>
-                    </div>
-                    <ul className="space-y-1">
-                      <li>
-                        <button
-                          onClick={() => {
-                            setPage("home");
-                            setIsSidebarOpen(false);
-                          }}
-                          className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
-                            page === "home"
-                              ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700"
-                              : "text-gray-700 hover:bg-gray-50"
-                          }`}
-                        >
-                          <i className="fas fa-tachometer-alt mr-3 w-4"></i> Dashboard
-                        </button>
-                      </li>
-                      <li>
-                        <button
-                          onClick={() => {
-                            setPage("clients");
-                            setIsSidebarOpen(false);
-                          }}
-                          className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
-                            page === "clients"
-                              ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700"
-                              : "text-gray-700 hover:bg-gray-50"
-                          }`}
-                        >
-                          <i className="fas fa-users mr-3 w-4"></i> Clients
-                        </button>
-                      </li>
-                      <li>
-                        <button
-                          onClick={() => {
-                            setPage("payments");
-                            setIsSidebarOpen(false);
-                          }}
-                          className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
-                            page === "payments"
-                              ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700"
-                              : "text-gray-700 hover:bg-gray-50"
-                          }`}
-                        >
-                          <i className="fas fa-money-bill-wave mr-3 w-4"></i> Payments
-                        </button>
-                      </li>
-                      <li>
-                        <button
-                          onClick={() => {
-                            setPage("reports");
-                            setIsSidebarOpen(false);
-                          }}
-                          className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
-                            page === "reports"
-                              ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700"
-                              : "text-gray-700 hover:bg-gray-50"
-                          }`}
-                        >
-                          <i className="fas fa-chart-line mr-3 w-4"></i> Reports
-                        </button>
-                      </li>
-                      <li>
-                        <button
-                          onClick={() => {
-                            logout();
-                            setIsSidebarOpen(false);
-                          }}
-                          className="w-full text-left p-3 rounded-lg flex items-center transition-colors text-red-600 hover:bg-red-50"
-                        >
-                          <i className="fas fa-sign-out-alt mr-3 w-4"></i> Logout
-                        </button>
-                      </li>
-                    </ul>
-                  </nav>
-                  <main className="flex-1 p-6 overflow-y-auto sm:ml-64 mt-16 sm:mt-0 bg-gray-50">
-                    {isImporting && (
-                      <div className="mb-4 p-4 bg-yellow-50 text-yellow-800 rounded-lg text-center border border-yellow-200">
-                        <i className="fas fa-spinner fa-spin mr-2"></i>
-                        Importing, please wait... Do not refresh the page.
-                      </div>
-                    )}
-                    {page === "home" && (
-                      <HomePage
-                        paymentsData={paymentsData}
-                        setPaymentsData={setPaymentsData}
-                        searchQuery={searchQuery}
-                        setSearchQuery={setSearchQuery}
-                        monthFilter={monthFilter}
-                        setMonthFilter={setMonthFilter}
-                        statusFilter={statusFilter}
-                        setStatusFilter={setStatusFilter}
-                        updatePayment={updatePayment}
-                        handleContextMenu={handleContextMenu}
-                        contextMenu={contextMenu}
-                        hideContextMenu={hideContextMenu}
-                        deleteRow={deleteRow}
-                        setPage={setPage}
-                        importCsv={importCsv}
-                        isImporting={isImporting}
-                        sessionToken={sessionToken}
-                        currentYear={currentYear}
-                        setCurrentYear={setCurrentYear}
-                        handleYearChange={handleYearChange}
-                        setErrorMessage={setErrorMessage}
-                        apiCacheRef={apiCacheRef}
-                        currentUser={currentUser}
-                        onMount={() =>
-                          console.log(
-                            "App.jsx: HomePage mounted with sessionToken:",
-                            sessionToken?.substring(0, 10) + "..."
-                          )
-                        }
-                        fetchTypes={fetchTypes}
-                        csvFileInputRef={csvFileInputRef}
-                        refreshTrigger={refreshTrigger}
-                        fetchPayments={fetchPayments}
-                        saveTimeouts={saveTimeouts}
-                        showToast={toastContext.showToast}
-                      />
-                    )}
-                    {page === "addClient" && (
-                      <AddClientPage
-                        setPage={setPage}
-                        fetchClients={fetchClients}
-                        fetchPayments={fetchPayments}
-                        sessionToken={sessionToken}
-                        currentUser={currentUser}
-                        editClient={editClient}
-                        setEditClient={setEditClient}
-                        types={types}
-                        apiCacheRef={apiCacheRef}
-                        fetchTypes={fetchTypes}
-                        setRefreshTrigger={setRefreshTrigger}
-                      />
-                    )}
-                    {page === "clients" && (
-                      <ClientsPage
-                        clientsData={clientsData}
-                        setClientsData={setClientsData}
-                        setPage={setPage}
-                        setEditClient={setEditClient}
-                        fetchClients={fetchClients}
-                        fetchPayments={fetchPayments}
-                        sessionToken={sessionToken}
-                        currentYear={currentYear}
-                        isImporting={isImporting}
-                        importCsv={importCsv}
-                      />
-                    )}
-                    {page === "payments" && (
-                      <PaymentsPage
-                        paymentsData={paymentsData}
-                        setPaymentsData={setPaymentsData}
-                        fetchClients={fetchClients}
-                        fetchPayments={fetchPayments}
-                        sessionToken={sessionToken}
-                        isImporting={isImporting}
-                        currentYear={currentYear}
-                        setCurrentYear={setCurrentYear}
-                        handleYearChange={handleYearChange}
-                      />
-                    )}
-                    {page === "reports" && (
-                      <HomePage
-                        paymentsData={paymentsData}
-                        setPaymentsData={setPaymentsData}
-                        searchQuery={searchQuery}
-                        setSearchQuery={setSearchQuery}
-                        monthFilter={monthFilter}
-                        setMonthFilter={setMonthFilter}
-                        statusFilter={statusFilter}
-                        setStatusFilter={setStatusFilter}
-                        updatePayment={updatePayment}
-                        handleContextMenu={handleContextMenu}
-                        contextMenu={contextMenu}
-                        hideContextMenu={hideContextMenu}
-                        deleteRow={deleteRow}
-                        setPage={setPage}
-                        importCsv={importCsv}
-                        isReportsPage={true}
-                        isImporting={isImporting}
-                        sessionToken={sessionToken}
-                        currentYear={currentYear}
-                        setCurrentYear={setCurrentYear}
-                        handleYearChange={handleYearChange}
-                        setErrorMessage={setErrorMessage}
-                        apiCacheRef={apiCacheRef}
-                        saveTimeouts={saveTimeouts}
-                        showToast={toastContext.showToast}
-                      />
-                    )}
-                  </main>
+                    <i className="fas fa-users mr-3 w-4"></i> Clients
+                  </button>
+                </li>
+                <li>
+                  <button
+                    onClick={() => {
+                      setPage("payments");
+                      setIsSidebarOpen(false);
+                    }}
+                    className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
+                      page === "payments"
+                        ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700"
+                        : "text-gray-700 hover:bg-gray-50"
+                    }`}
+                  >
+                    <i className="fas fa-money-bill-wave mr-3 w-4"></i> Payments
+                  </button>
+                </li>
+                <li>
+                  <button
+                    onClick={() => {
+                      setPage("reports");
+                      setIsSidebarOpen(false);
+                    }}
+                    className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
+                      page === "reports"
+                        ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700"
+                        : "text-gray-700 hover:bg-gray-50"
+                    }`}
+                  >
+                    <i className="fas fa-chart-line mr-3 w-4"></i> Reports
+                  </button>
+                </li>
+                <li>
+    <button
+      onClick={() => {
+        logout();
+        setIsSidebarOpen(false);
+      }}
+      className="w-full text-left p-3 rounded-lg flex items-center transition-colors text-red-600 hover:bg-red-50"
+    >
+      <i className="fas fa-sign-out-alt mr-3 w-4"></i> Logout
+    </button>
+  </li>
+              </ul>
+            </nav>
+            <main className="flex-1 p-6 overflow-y-auto sm:ml-64 mt-16 sm:mt-0 bg-gray-50">
+              <header className="flex items-center justify-between mb-8 bg-white p-4 rounded-lg shadow-sm">
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900 mb-1">
+                    {page === "home"
+                      ? "Dashboard"
+                      : page.charAt(0).toUpperCase() + page.slice(1)}
+                  </h1>
+                  <p className="text-gray-600 text-sm">
+                    {page === "home" &&
+                      "Welcome to your payment tracking dashboard"}
+                    {page === "clients" &&
+                      "Manage your clients and their information"}
+                    {page === "payments" && "Track and manage payment records"}
+                    {page === "reports" &&
+                      "View detailed reports and analytics"}
+                  </p>
                 </div>
-              </>
-            )}
+                <div className="relative" ref={profileMenuRef}>
+                  <button
+                    onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                    className="focus:outline-none p-2 rounded-full hover:bg-gray-100 transition-colors"
+                  >
+                    <i className="fas fa-user-circle text-3xl text-gray-700"></i>
+                  </button>
+                  {isProfileMenuOpen && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                      <div className="p-4 border-b border-gray-100">
+                        <p className="font-semibold text-gray-900">
+                          {currentUser}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </header>
+              {isImporting && (
+                <div className="mb-4 p-4 bg-yellow-50 text-yellow-800 rounded-lg text-center border border-yellow-200">
+                  <i className="fas fa-spinner fa-spin mr-2"></i>
+                  Importing, please wait... Do not refresh the page.
+                </div>
+              )}
+              {page === "home" && (
+                <HomePage
+                  paymentsData={paymentsData}
+                  setPaymentsData={setPaymentsData}
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
+                  monthFilter={monthFilter}
+                  setMonthFilter={setMonthFilter}
+                  statusFilter={statusFilter}
+                  setStatusFilter={setStatusFilter}
+                  updatePayment={updatePayment}
+                  handleContextMenu={handleContextMenu}
+                  contextMenu={contextMenu}
+                  hideContextMenu={hideContextMenu}
+                  deleteRow={deleteRow}
+                  setPage={setPage}
+                  importCsv={importCsv}
+                  isImporting={isImporting}
+                  sessionToken={sessionToken}
+                  currentYear={currentYear}
+                  setCurrentYear={setCurrentYear}
+                  handleYearChange={handleYearChange}
+                  setErrorMessage={setErrorMessage}
+                  apiCacheRef={apiCacheRef}
+                  currentUser={currentUser}
+                  onMount={() =>
+                    console.log(
+                      "App.jsx: HomePage mounted with sessionToken:",
+                      sessionToken?.substring(0, 10) + "..."
+                    )
+                  }
+                  fetchTypes={fetchTypes}
+                  csvFileInputRef={csvFileInputRef}
+                  refreshTrigger={refreshTrigger}
+                  fetchPayments={fetchPayments}
+                  saveTimeouts={saveTimeouts}
+                  showToast={toastContext.showToast}
+                />
+              )}
+              {page === "addClient" && (
+                <AddClientPage
+                  setPage={setPage}
+                  fetchClients={fetchClients}
+                  fetchPayments={fetchPayments}
+                  sessionToken={sessionToken}
+                  currentUser={currentUser}
+                  editClient={editClient}
+                  setEditClient={setEditClient}
+                  types={types}
+                  apiCacheRef={apiCacheRef}
+                  fetchTypes={fetchTypes}
+                  setRefreshTrigger={setRefreshTrigger}
+                />
+              )}
+              {page === "clients" && (
+                <ClientsPage
+                  clientsData={clientsData}
+                  setClientsData={setClientsData}
+                  setPage={setPage}
+                  setEditClient={setEditClient}
+                  fetchClients={fetchClients}
+                  fetchPayments={fetchPayments}
+                  sessionToken={sessionToken}
+                  currentYear={currentYear}
+                  isImporting={isImporting}
+                  importCsv={importCsv}
+                />
+              )}
+              {page === "payments" && (
+                <PaymentsPage
+                  paymentsData={paymentsData}
+                  setPaymentsData={setPaymentsData}
+                  fetchClients={fetchClients}
+                  fetchPayments={fetchPayments}
+                  sessionToken={sessionToken}
+                  isImporting={isImporting}
+                  currentYear={currentYear}
+                  setCurrentYear={setCurrentYear}
+                  handleYearChange={handleYearChange}
+                />
+              )}
+              {page === "reports" && (
+                <HomePage
+                  paymentsData={paymentsData}
+                  setPaymentsData={setPaymentsData}
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
+                  monthFilter={monthFilter}
+                  setMonthFilter={setMonthFilter}
+                  statusFilter={statusFilter}
+                  setStatusFilter={setStatusFilter}
+                  updatePayment={updatePayment}
+                  handleContextMenu={handleContextMenu}
+                  contextMenu={contextMenu}
+                  hideContextMenu={hideContextMenu}
+                  deleteRow={deleteRow}
+                  setPage={setPage}
+                  importCsv={importCsv}
+                  isReportsPage={true}
+                  isImporting={isImporting}
+                  sessionToken={sessionToken}
+                  currentYear={currentYear}
+                  setCurrentYear={setCurrentYear}
+                  handleYearChange={handleYearChange}
+                  setErrorMessage={setErrorMessage}
+                  apiCacheRef={apiCacheRef}
+                  saveTimeouts={saveTimeouts}
+                  showToast={toastContext.showToast}
+                />
+              )}
+            </main>
           </div>
         )}
-      </ToastManager>
+      </div>
+        )}
+    </ToastManager>
     </ErrorBoundary>
   );
 };

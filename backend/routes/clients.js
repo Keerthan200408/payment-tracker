@@ -13,85 +13,23 @@ const {
 } = require("../utils/sanitize");
 const { ValidationError, NotFoundError } = require("../middleware/errorHandler");
 
-// Get all clients
-router.get("/", authenticateToken, asyncHandler(async (req, res) => {
-  const username = req.user.username;
-  const { year } = req.query;
+// Get Clients
+router.get("/get-clients", authenticateToken, asyncHandler(async (req, res) => {
+  console.log(`Fetching clients for user: ${req.user.username}`);
+  const db = await database.getDb();
+  const clients = await database.getClientsCollection(req.user.username).find({}).toArray();
   
-  logger.info("Fetch clients request", username, { year });
+  const processedClients = clients.map(client => ({
+    Client_Name: client.Client_Name || "",
+    Email: client.Email || "",
+    Type: client.Type || "",
+    Amount_To_Be_Paid: parseFloat(client.Monthly_Payment) || 0,
+    Phone_Number: client.Phone_Number || "",
+    createdAt: client.createdAt || new Date(0).toISOString(),
+  }));
   
-  try {
-    const db = await database.getDb();
-    const clientsCollection = database.getClientsCollection(username);
-    
-    // Use aggregation pipeline for better performance and consistent ordering
-    const pipeline = [
-      {
-        $lookup: {
-          from: `payments_${username}`,
-          let: { clientName: "$Client_Name" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $eq: ["$Client_Name", "$$clientName"] },
-                    { $eq: ["$Year", parseInt(year)] }
-                  ]
-                }
-              }
-            }
-          ],
-          as: "payments"
-        }
-      },
-      {
-        $addFields: {
-          hasPayments: { $gt: [{ $size: "$payments" }, 0] },
-          lastPaymentDate: {
-            $max: {
-              $map: {
-                input: "$payments",
-                as: "payment",
-                in: "$$payment.Last_Updated"
-              }
-            }
-          }
-        }
-      },
-      {
-        $sort: {
-          // First sort by whether they have payments (new clients without payments first)
-          hasPayments: 1,
-          // Then by creation date (newest first)
-          createdAt: -1,
-          // Finally by last payment date for clients with payments
-          lastPaymentDate: -1
-        }
-      },
-      {
-        $project: {
-          _id: 1,
-          Client_Name: 1,
-          Email: 1,
-          Phone: 1,
-          Address: 1,
-          createdAt: 1,
-          updatedAt: 1,
-          hasPayments: 1,
-          lastPaymentDate: 1
-        }
-      }
-    ];
-    
-    const clients = await clientsCollection.aggregate(pipeline).toArray();
-    
-    logger.info("Clients fetched successfully", username, { count: clients.length, year });
-    res.json(clients);
-  } catch (error) {
-    logger.error("Fetch clients error", error, { username, year });
-    throw error;
-  }
+  console.log(`Returning ${processedClients.length} clients`);
+  res.json(processedClients);
 }));
 
 // Add Client
