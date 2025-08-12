@@ -833,7 +833,7 @@ const updatePayment = async (
     setPaymentsData((prev) => {
       const updatedPayments = [...prev];
       const rowData = { ...updatedPayments[rowIndex] };
-      rowData[month] = value || "";
+      rowData[month] = value;
 
       const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
       const activeMonths = months.filter(
@@ -879,7 +879,7 @@ const updatePayment = async (
       clientName: updatedRowData.Client_Name,
       type: updatedRowData.Type,
       month,
-      value: value || "",
+      value: value,
     };
 
     const response = await savePaymentWithRetry(payloadData);

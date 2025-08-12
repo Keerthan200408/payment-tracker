@@ -728,7 +728,7 @@ app.post("/api/save-payment", authenticateToken, paymentLimiter, async (req, res
       return res.status(404).json({ error: "Payment record not found" });
     }
 
-    const updatedPayments = { ...payment.Payments, [monthKey]: numericValue === 0 ? "" : numericValue.toString() };
+    const updatedPayments = { ...payment.Payments, [monthKey]: numericValue.toString() };
     const months = Object.keys(monthMap).map((key) => monthMap[key]);
     const amountToBePaid = parseFloat(payment.Amount_To_Be_Paid) || 0;
 
@@ -907,7 +907,7 @@ app.post("/api/batch-save-payments", authenticateToken, paymentLimiter, async (r
     const updatedPayments = {
       ...paymentData.Payments,
       ...processedUpdates.reduce((acc, { month, value }) => {
-        acc[month] = value === 0 ? "" : value.toString(); // Store as empty string for UI consistency
+        acc[month] = value.toString(); // Store as string for UI consistency
         return acc;
       }, {}),
     };

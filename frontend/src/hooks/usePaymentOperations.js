@@ -72,7 +72,7 @@ export const usePaymentOperations = (apiCache, setErrorMessage) => {
       setPaymentsData((prev) => {
         const updatedPayments = [...prev];
         const rowData = { ...updatedPayments[rowIndex] };
-        rowData[month] = value || "";
+        rowData[month] = value;
 
         const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
         const months = ['january', 'february', 'march', 'april', 'may', 'june', 
@@ -120,7 +120,7 @@ export const usePaymentOperations = (apiCache, setErrorMessage) => {
         clientName: updatedRowData.Client_Name,
         type: updatedRowData.Type,
         month,
-        value: value || "",
+        value: value,
       };
 
       const response = await savePaymentWithRetry(payloadData);

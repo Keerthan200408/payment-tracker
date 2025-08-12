@@ -97,7 +97,7 @@ const calculateDuePayment = (rowData, months, currentYear) => {
 
   const totalPaymentsMade = months.reduce((sum, month) => {
     const rawValue = sanitizedData[month];
-    const payment = (rawValue === "" || rawValue === "0.00" || rawValue == null) ? 0 : parseFloat(rawValue);
+    const payment = (rawValue === "" || rawValue == null) ? 0 : parseFloat(rawValue);
     if (isNaN(payment) || payment < 0) {
       log(`HomePage.jsx: calculateDuePayment: Invalid payment for ${month}: ${rawValue}, treating as 0`);
       return sum;
@@ -109,7 +109,7 @@ const calculateDuePayment = (rowData, months, currentYear) => {
   // Calculate active months (months with non-zero payments)
   const activeMonths = months.filter((month) => {
     const rawValue = sanitizedData[month];
-    const payment = (rawValue === "" || rawValue === "0.00" || rawValue == null) ? 0 : parseFloat(rawValue);
+    const payment = (rawValue === "" || rawValue == null) ? 0 : parseFloat(rawValue);
     return !isNaN(payment) && payment > 0;
   }).length;
 
@@ -204,11 +204,17 @@ const validateRowData = (rowData, currentYear) => {
   
   MONTHS.forEach((month) => {
     const rawValue = rowData[month];
-    if (rawValue == null || rawValue === "" || rawValue === "0.00" || isNaN(parseFloat(rawValue)) || parseFloat(rawValue) < 0) {
+    if (rawValue == null || rawValue === "" || isNaN(parseFloat(rawValue)) || parseFloat(rawValue) < 0) {
       log(`HomePage.jsx: Invalid payment for ${rowData.Client_Name || 'unknown'}, ${month}: ${rawValue}, defaulting to empty string for UI`);
       sanitizedData[month] = "";
     } else {
-      sanitizedData[month] = parseFloat(rawValue).toString(); // Normalize to string for UI consistency
+      // Handle zero values properly - convert "0", "0.00", etc. to "0"
+      const parsedValue = parseFloat(rawValue);
+      if (parsedValue === 0) {
+        sanitizedData[month] = "0";
+      } else {
+        sanitizedData[month] = parsedValue.toString(); // Normalize to string for UI consistency
+      }
     }
   });
   
