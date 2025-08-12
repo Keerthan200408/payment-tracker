@@ -26,7 +26,7 @@ app.use(
   cors({
     origin: [
       "https://reliable-eclair-abf03c.netlify.app",
-      "http://localhost:5173",
+      "http://localhost:5174",
     ],
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -578,7 +578,7 @@ app.put("/api/update-client", authenticateToken, async (req, res) => {
 });
 
 // Delete Client
-app.post("/api/delete-client", authenticateToken, async (req, res) => {
+app.delete("/api/delete-client", authenticateToken, async (req, res) => {
   let { Client_Name, Type } = req.body;
   if (!Client_Name || !Type) {
     return res.status(400).json({ error: "Client name and type are required" });
@@ -1770,7 +1770,7 @@ app.post("/api/send-whatsapp", authenticateToken, whatsappLimiter, async (req, r
 });
 
 // Start server
-const PORT = process.env.PORT || 5173;
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, async () => {
   try {
     await mongoClient.connect();

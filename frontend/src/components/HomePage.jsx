@@ -106,15 +106,7 @@ const calculateDuePayment = (rowData, months, currentYear) => {
     return sum + payment;
   }, 0);
 
-  // Calculate active months (months with non-zero payments)
-  const activeMonths = months.filter((month) => {
-    const rawValue = sanitizedData[month];
-    const payment = (rawValue === "" || rawValue === "0.00" || rawValue == null) ? 0 : parseFloat(rawValue);
-    return !isNaN(payment) && payment > 0;
-  }).length;
-
-  // Use active months for expected total
-  const expectedTotal = activeMonths > 0 ? amountToBePaid * activeMonths : 0;
+  const expectedTotal = amountToBePaid * 12;
   const due = Math.max(expectedTotal - totalPaymentsMade, 0);
   
   log(`HomePage.jsx: calculateDuePayment: Expected = ${expectedTotal}, Total Paid = ${totalPaymentsMade}, Due_Payment = ${due}`);
@@ -1941,3 +1933,4 @@ const handleInputChange = useCallback(
 };
 
 export default HomePage;
+//what happening
