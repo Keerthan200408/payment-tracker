@@ -25,28 +25,19 @@ const googleClient = new OAuth2Client(config.GOOGLE_CLIENT_ID);
 // Google Sign-In
 router.post("/google-signin", asyncHandler(async (req, res) => {
   console.log("Received /api/google-signin request");
-  console.log("Request headers:", req.headers);
-  console.log("Request body:", req.body);
-  
   const { googleToken } = req.body;
   
   if (!googleToken) {
-    console.error("Google token is missing");
     throw new ValidationError("Google token is required");
   }
   
-  console.log("Google Client ID:", config.GOOGLE_CLIENT_ID);
-  console.log("Token length:", googleToken.length);
-  
   try {
-    console.log("Verifying Google token...");
     const ticket = await googleClient.verifyIdToken({
       idToken: googleToken,
       audience: config.GOOGLE_CLIENT_ID,
     });
     const payload = ticket.getPayload();
     const email = payload.email;
-    console.log("Google token verified for email:", email);
 
     const db = await database.getDb();
     const users = database.getUsersCollection();
@@ -58,16 +49,12 @@ router.post("/google-signin", asyncHandler(async (req, res) => {
       const username = user.Username;
       const sessionToken = generateToken({ username });
       setTokenCookie(res, sessionToken);
-      console.log("User found, returning session token for:", username);
       return res.json({ username, sessionToken });
     } else {
-      console.log("User not found, needs username selection");
       return res.json({ needsUsername: true });
     }
   } catch (error) {
     console.error("Google sign-in error:", error.message);
-    console.error("Full error:", error);
-    console.error("Error stack:", error.stack);
     throw new AuthError("Invalid Google token");
   }
 }));

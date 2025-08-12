@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { authAPI, handleAPIError } from '../utils/api';
 
 const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fetchPayments }) => {
@@ -71,16 +71,10 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
     }
   };
 
-  const handleGoogleSignIn = useCallback(async (response) => {
+  const handleGoogleSignIn = async (response) => {
     try {
       setIsLoading(true);
       setError('');
-      
-      // Validate the response has a credential
-      if (!response || !response.credential) {
-        setError('Google Sign-in failed. Please try again.');
-        return;
-      }
       
       // Send Google token to backend
       const googleResponse = await authAPI.googleSignIn({
@@ -109,20 +103,11 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
         setPage('home');
       }
     } catch (error) {
-      console.error('Google Sign-in error:', error);
-      if (error.response?.status === 401) {
-        setError('Google Sign-in failed. Please try signing in again.');
-        // Reset Google Sign-in state
-        if (window.google) {
-          window.google.accounts.id.cancel();
-        }
-      } else {
-        handleAPIError(error, setError);
-      }
+      handleAPIError(error, setError);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  };
 
   const handleUsernameSubmit = async () => {
     if (!chosenUsername.trim()) {
@@ -164,72 +149,43 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
     }
   };
   useEffect(() => {
-    const initializeGoogleSignIn = () => {
-      if (window.google && buttonRef.current) {
-        try {
-          const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-          console.log('Initializing Google Sign-In with client ID:', clientId);
-          
-          if (!clientId) {
-            console.error('Google Client ID is not configured');
-            setError('Google Sign-In is not properly configured. Please contact support.');
-            return;
-          }
-          
-          // Cancel any existing initialization
-          try {
-            window.google.accounts.id.cancel();
-          } catch (e) {
-            // Ignore cleanup errors
-          }
-          
-          window.google.accounts.id.initialize({
-            client_id: clientId,
-            callback: handleGoogleSignIn,
-            auto_select: false,
-            cancel_on_tap_outside: true,
-            context: "signin",
-            ux_mode: "popup", // Explicitly set popup mode
-          });
-          window.google.accounts.id.renderButton(buttonRef.current, {
-            theme: "outline",
-            size: "large",
-            width: 300,
-          });
-          console.log('Google Sign-In initialized successfully');
-        } catch (error) {
-          console.error('Error initializing Google Sign-In:', error);
-          setError('Failed to initialize Google Sign-In. Please refresh the page.');
-        }
-      }
-    };
-
-    if (!window.google) {
-      const script = document.createElement("script");
-      script.src = "https://accounts.google.com/gsi/client";
-      script.async = true;
-      script.defer = true;
-      script.onload = initializeGoogleSignIn;
-      script.onerror = () => {
-        console.error('Failed to load Google Sign-In script');
-        setError('Failed to load Google Sign-In. Please check your internet connection.');
-      };
-      document.head.appendChild(script);
-    } else {
-      // Add a small delay to ensure proper initialization
-      setTimeout(initializeGoogleSignIn, 100);
+  const initializeGoogleSignIn = () => {
+    if (window.google && buttonRef.current) {
+      window.google.accounts.id.initialize({
+        client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+        callback: handleGoogleSignIn,
+        auto_select: false,
+        cancel_on_tap_outside: true,
+        context: "signin",
+        ux_mode: "popup", // Use popup mode to avoid cross-origin issues
+      });
+      window.google.accounts.id.renderButton(buttonRef.current, {
+        theme: "outline",
+        size: "large",
+        width: 300,
+      });
+      // Prompt for Google Sign-In
+      window.google.accounts.id.prompt();
     }
+  };
 
-    return () => {
-      if (window.google) {
-        try {
-          window.google.accounts.id.cancel();
-        } catch (e) {
-          // Ignore cleanup errors
-        }
-      }
-    };
-  }, [handleGoogleSignIn]);
+  if (!window.google) {
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = initializeGoogleSignIn;
+    document.head.appendChild(script);
+  } else {
+    initializeGoogleSignIn();
+  }
+
+  return () => {
+    if (window.google) {
+      window.google.accounts.id.cancel();
+    }
+  };
+}, [handleGoogleSignIn]);
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
       <div className="w-full max-w-md p-6 bg-white rounded-lg shadow-md">

@@ -50,9 +50,13 @@ app.options("*", cors());
 
 // COOP/COEP headers for Google Sign-In
 app.use((req, res, next) => {
-  // Set permissive headers for all routes to avoid Google Sign-In issues
-  res.setHeader("Cross-Origin-Opener-Policy", "unsafe-none");
-  res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
+  if (req.path === "/api/google-signin" || req.path === "/api/google-signup") {
+    res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+    res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
+  } else {
+    res.setHeader("Cross-Origin-Opener-Policy", "unsafe-none");
+    res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
+  }
   next();
 });
 
@@ -72,11 +76,7 @@ app.use(express.json());
 
 // Health check
 app.get("/", (req, res) => {
-  res.json({ 
-    message: "Payment Tracker Backend is running!",
-    googleClientId: config.GOOGLE_CLIENT_ID ? "Configured" : "Not configured",
-    googleClientIdValue: config.GOOGLE_CLIENT_ID ? config.GOOGLE_CLIENT_ID.substring(0, 20) + "..." : "Not configured"
-  });
+  res.json({ message: "Payment Tracker Backend is running!" });
 });
 
 // Import route modules
