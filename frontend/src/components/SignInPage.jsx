@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { authAPI, handleAPIError } from '../utils/api';
 
 const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fetchPayments }) => {
@@ -71,7 +71,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
     }
   };
 
-  const handleGoogleSignIn = async (response) => {
+  const handleGoogleSignIn = useCallback(async (response) => {
     try {
       setIsLoading(true);
       setError('');
@@ -107,7 +107,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [setCurrentUser, setSessionToken, setPage, fetchClients, fetchPayments, setGoogleEmail, setChosenUsername, setShowUsernameModal, setError, setIsLoading]);
 
   const handleUsernameSubmit = async () => {
     if (!chosenUsername.trim()) {
