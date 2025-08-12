@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { authAPI, handleAPIError } from '../utils/api';
+import axios from 'axios';
+
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://payment-tracker-aswa.onrender.com';
 
 const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fetchPayments }) => {
   const [isSignup, setIsSignup] = useState(false);
@@ -20,9 +22,12 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
     setError('');
     setIsLoading(true);
     try {
-      const response = await authAPI.login({
+      const response = await axios.post(`${BASE_URL}/api/login`, {
         username: loginUsername,
         password: loginPassword,
+      }, {
+        timeout: 20000,
+        withCredentials: true,
       });
       
       const { username, sessionToken } = response.data;
@@ -40,7 +45,8 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
       
       setPage('home');
     } catch (error) {
-      handleAPIError(error, setError);
+      console.error('Login error:', error.response?.data?.error || error.message);
+      setError(error.response?.data?.error || 'Error logging in. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -58,17 +64,28 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
     setError('');
     setIsLoading(true);
     try {
-      await authAPI.signup({
+      await axios.post(`${BASE_URL}/api/signup`, {
         username,
         password,
+      }, {
+        timeout: 20000,
+        withCredentials: true,
       });
       alert('Account created successfully! Your personalized data sheets have been set up.');
       await handleLogin(username, password);
     } catch (error) {
-      handleAPIError(error, setError);
-    } finally {
-      setIsLoading(false);
-    }
+  console.error('Signup error:', error.response?.data?.error || error.message);
+  const errorMsg = error.response?.data?.error || 'Error signing up. Please try again.';
+  let userMessage = errorMsg;
+  if (errorMsg.includes('Username already exists')) {
+    userMessage = 'This username is already taken. Please choose another.';
+  } else if (errorMsg.includes('Quota exceeded')) {
+    userMessage = 'Server is busy. Please try again later.';
+  }
+  setError(userMessage);
+} finally {
+  setIsLoading(false);
+}
   };
 
   const handleGoogleSignIn = async (response) => {
@@ -77,8 +94,11 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
       setError('');
       
       // Send Google token to backend
-      const googleResponse = await authAPI.googleSignIn({
+      const googleResponse = await axios.post(`${BASE_URL}/api/google-signin`, {
         googleToken: response.credential,
+      }, {
+        timeout: 20000,
+        withCredentials: true,
       });
 
       if (googleResponse.data.needsUsername) {
@@ -103,10 +123,18 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
         setPage('home');
       }
     } catch (error) {
-      handleAPIError(error, setError);
-    } finally {
-      setIsLoading(false);
-    }
+  console.error('Google sign-in error:', error);
+  const errorMsg = error.response?.data?.error || 'Error signing in with Google. Please try again.';
+  let userMessage = errorMsg;
+  if (errorMsg.includes('Google account already linked')) {
+    userMessage = 'This Google account is already linked to another username.';
+  } else if (errorMsg.includes('Quota exceeded')) {
+    userMessage = 'Server is busy. Please try again later.';
+  }
+  setError(userMessage);
+} finally {
+  setIsLoading(false);
+}
   };
 
   const handleUsernameSubmit = async () => {
@@ -122,9 +150,12 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
       setIsLoading(true);
       setError('');
 
-      const response = await authAPI.googleSignUp({
+      const response = await axios.post(`${BASE_URL}/api/google-signup`, {
         email: googleEmail,
         username: chosenUsername.trim(),
+      }, {
+        timeout: 20000,
+        withCredentials: true,
       });
 
       const { username, sessionToken } = response.data;
@@ -143,10 +174,18 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
       setShowUsernameModal(false);
       setPage('home');
     } catch (error) {
-      handleAPIError(error, setError);
-    } finally {
-      setIsLoading(false);
-    }
+  console.error('Username setup error:', error);
+  const errorMsg = error.response?.data?.error || 'Error setting up username. Please try again.';
+  let userMessage = errorMsg;
+  if (errorMsg.includes('Username already exists')) {
+    userMessage = 'This username is already taken. Please choose another.';
+  } else if (errorMsg.includes('Quota exceeded')) {
+    userMessage = 'Server is busy. Please try again later.';
+  }
+  setError(userMessage);
+} finally {
+  setIsLoading(false);
+}
   };
   useEffect(() => {
   const initializeGoogleSignIn = () => {

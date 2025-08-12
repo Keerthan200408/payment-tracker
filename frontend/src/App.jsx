@@ -1,21 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import axios from "axios";
 import SignInPage from "./components/SignInPage.jsx";
 import HomePage from "./components/HomePage.jsx";
 import AddClientPage from "./components/AddClientPage.jsx";
 import ClientsPage from "./components/ClientsPage.jsx";
 import PaymentsPage from "./components/PaymentsPage.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
-import ToastManager from "./components/ToastManager.jsx";
-import { 
-  authAPI, 
-  clientsAPI, 
-  paymentsAPI, 
-  typesAPI, 
-  importAPI,
-  handleAPIError 
-} from './utils/api';
 
-const AUTO_LOGOUT_MS = 4 * 60 * 60 * 1000; // 4 hours
+const BASE_URL = "https://payment-tracker-aswa.onrender.com/api";
 
 const App = () => {
   const [sessionToken, setSessionToken] = useState(null);
@@ -41,7 +33,6 @@ const App = () => {
   const apiCacheRef = useRef({});
   const [types, setTypes] = useState([]);
   const CACHE_DURATION = 5 * 60 * 1000;
-  const logoutTimerRef = useRef(null);
 
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -72,7 +63,9 @@ const App = () => {
   
   // Invalidate token on backend (fire and forget)
   if (sessionToken) {
-    authAPI.logout().catch(error => {
+    axios.post(`${BASE_URL}/logout`, {}, {
+      headers: { Authorization: `Bearer ${sessionToken}` },
+    }).catch(error => {
       console.error("Logout API error:", error.message);
     });
   }
@@ -130,7 +123,10 @@ const fetchTypes = async (token) => {
     try {
       console.log(`App.jsx: Fetching types for ${currentUser} with token:`, token?.substring(0, 10) + "...");
       
-      const response = await typesAPI.getTypes();
+      const response = await axios.get(`${BASE_URL}/get-types`, {
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 10000,
+      });
       
       const typesData = Array.isArray(response.data) ? response.data : [];
       console.log(`App.jsx: Types fetched for ${currentUser}:`, typesData);
@@ -169,8 +165,47 @@ const fetchTypes = async (token) => {
   return () => clearTimeout(timeoutId);
 }, [sessionToken, currentUser]); // Add currentUser as dependency
 
-  // Note: Axios interceptors are now handled in the centralized API configuration
-  // No need for additional axios setup here
+  // Set axios defaults
+  useEffect(() => {
+    axios.defaults.withCredentials = true;
+
+    // Set up Axios interceptor
+    const interceptor = axios.interceptors.response.use(
+      (response) => response,
+      async (error) => {
+        const originalRequest = error.config;
+        if (error.response?.status === 403 && !originalRequest._retry) {
+          originalRequest._retry = true;
+          try {
+            const storedToken = localStorage.getItem("sessionToken");
+            const response = await axios.post(
+              `${BASE_URL}/refresh-token`,
+              {},
+              {
+                headers: { Authorization: `Bearer ${storedToken}` },
+                withCredentials: true,
+              }
+            );
+            const { sessionToken: newToken } = response.data;
+            localStorage.setItem("sessionToken", newToken);
+            setSessionToken(newToken);
+            originalRequest.headers.Authorization = `Bearer ${newToken}`;
+            return axios(originalRequest);
+          } catch (refreshError) {
+            console.error("Token refresh failed:", refreshError);
+            logout();
+            return Promise.reject(refreshError);
+          }
+        }
+        return Promise.reject(error);
+      }
+    );
+
+    // Cleanup interceptor on unmount
+    return () => {
+      axios.interceptors.response.eject(interceptor);
+    };
+  }, []);
 
   useEffect(() => {
   return () => {
@@ -210,10 +245,9 @@ useEffect(() => {
     console.log("App.jsx: Setting currentYear:", yearToSet);
     setCurrentYear(yearToSet);
     
-    // Always force refresh on initial load
+    // Fetch data with debounce
     setTimeout(() => {
-      fetchClients(storedToken, true); // forceRefresh = true
-      fetchPayments(storedToken, yearToSet, true); // forceRefresh = true
+      fetchClients(storedToken);
     }, 200);
   } else {
     console.log("App.jsx: No stored user or token, setting page to signIn");
@@ -297,7 +331,10 @@ const fetchClients = async (token, forceRefresh = false) => {
   const requestPromise = (async () => {
     try {
       console.log("Fetching clients with token:", token?.substring(0, 10) + "...");
-      const response = await clientsAPI.getClients();
+      const response = await axios.get(`${BASE_URL}/get-clients`, {
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 10000,
+      });
       
       console.log("Clients fetched:", response.data);
       const clientsData = Array.isArray(response.data) ? response.data : [];
@@ -364,7 +401,11 @@ const fetchPayments = async (token, year, forceRefresh = false) => {
   const requestPromise = (async () => {
     try {
       console.log(`Fetching payments for ${year} with token:`, token?.substring(0, 10) + "...");
-      const response = await paymentsAPI.getPaymentsByYear(year);
+      const response = await axios.get(`${BASE_URL}/get-payments-by-year`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { year },
+        timeout: 10000,
+      });
 
       const data = Array.isArray(response.data) ? response.data : [];
       console.log(`Fetched payments for ${year}:`, data);
@@ -429,9 +470,9 @@ const fetchPayments = async (token, year, forceRefresh = false) => {
     if (!rowData) return;
     try {
       console.log("Deleting row:", rowData.Client_Name, rowData.Type);
-      await clientsAPI.deleteClient({ 
-        clientName: rowData.Client_Name, 
-        type: rowData.Type 
+      await axios.delete(`${BASE_URL}/delete-client`, {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+        data: { Client_Name: rowData.Client_Name, Type: rowData.Type },
       });
       // Optimistic updates after successful deletion
       setPaymentsData(
@@ -590,7 +631,12 @@ const importCsv = async (e) => {
     
     try {
       const response = await retryWithBackoff(
-        () => importAPI.importCSV({ records }),
+        () =>
+          axios.post(`${BASE_URL}/import-csv`, records, {
+            headers: { Authorization: `Bearer ${sessionToken}` },
+            params: { year: currentYear },
+            timeout: 60000, // Increased timeout for large imports
+          }),
         3,
         1000
       );
@@ -754,7 +800,15 @@ const updatePayment = async (
   const savePaymentWithRetry = async (payload, retries = 3, delayMs = 1000) => {
     for (let i = 0; i < retries; i++) {
       try {
-        const response = await paymentsAPI.savePayment(payload, year);
+        const response = await axios.post(
+          `${BASE_URL}/save-payment`,
+          payload,
+          {
+            headers: { Authorization: `Bearer ${sessionToken}` },
+            params: { year },
+            timeout: 10000,
+          }
+        );
         return response.data;
       } catch (error) {
         if (
@@ -782,13 +836,10 @@ const updatePayment = async (
       rowData[month] = value || "";
 
       const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
-      
-      // Calculate active months (months with any value, matching backend logic)
       const activeMonths = months.filter(
-        (m) => rowData[m] !== "" && rowData[m] !== null && rowData[m] !== undefined
+        (m) => rowData[m] && parseFloat(rowData[m]) > 0
       ).length;
-      
-      const expectedPayment = activeMonths * amountToBePaid;
+      const expectedPayment = activeMonths > 0 ? amountToBePaid * activeMonths : 0;
       const totalPayments = months.reduce(
         (sum, m) => sum + (parseFloat(rowData[m]) || 0),
         0
@@ -807,9 +858,9 @@ const updatePayment = async (
         if (prevRow) {
           const prevAmountToBePaid = parseFloat(prevRow.Amount_To_Be_Paid) || 0;
           const prevActiveMonths = months.filter(
-            (m) => prevRow[m] !== "" && prevRow[m] !== null && prevRow[m] !== undefined
+            (m) => prevRow[m] && parseFloat(prevRow[m]) > 0
           ).length;
-          const prevExpectedPayment = prevActiveMonths * prevAmountToBePaid;
+          const prevExpectedPayment = prevActiveMonths > 0 ? prevAmountToBePaid * prevActiveMonths : 0;
           const prevTotalPayments = months.reduce(
             (sum, m) => sum + (parseFloat(prevRow[m]) || 0),
             0
@@ -857,270 +908,272 @@ const updatePayment = async (
   }
 };
 
-  // Auto-logout logic
-  const resetLogoutTimer = useCallback(() => {
-    if (logoutTimerRef.current) {
-      clearTimeout(logoutTimerRef.current);
-    }
-    logoutTimerRef.current = setTimeout(() => {
-      logout();
-      // Optionally, show a message to the user
-      alert('You have been logged out due to inactivity.');
-    }, AUTO_LOGOUT_MS);
-  }, []);
-
-  useEffect(() => {
-    // Reset timer on any user activity
-    const activityEvents = ['mousemove', 'keydown', 'mousedown', 'touchstart'];
-    activityEvents.forEach(event => {
-      window.addEventListener(event, resetLogoutTimer);
-    });
-    // Reset timer on mount
-    resetLogoutTimer();
-    return () => {
-      activityEvents.forEach(event => {
-        window.removeEventListener(event, resetLogoutTimer);
-      });
-      if (logoutTimerRef.current) {
-        clearTimeout(logoutTimerRef.current);
-      }
-    };
-  }, [resetLogoutTimer]);
-
-  // Optionally, reset timer on API calls (if you want to treat API activity as activity)
-  // You can wrap your API calls to call resetLogoutTimer()
-
   return (
     <ErrorBoundary>
-      <ToastManager>
-        {(toastContext) => (
-          <div className="min-h-screen bg-gray-50">
-            {page === "signIn" ? (
-              <SignInPage
-                setSessionToken={setSessionToken}
-                setCurrentUser={setCurrentUser}
-                setPage={setPage}
-              />
-            ) : (
-              <>
-                <nav className="bg-white shadow-sm w-full p-4 sm:hidden flex justify-between items-center border-b border-gray-200">
-                  <div className="flex items-center">
-                    <i className="fas fa-money-bill-wave text-2xl mr-2 text-gray-800"></i>
-                    <h1 className="text-xl font-semibold text-gray-800">Payment Tracker</h1>
-                  </div>
+      
+      <div className="min-h-screen bg-gray-50">
+        {page === "signIn" && (
+          <SignInPage
+            setSessionToken={setSessionToken}
+            setCurrentUser={setCurrentUser}
+            setPage={setPage}
+          />
+        )}
+        {page !== "signIn" && (
+          <div className="flex flex-col sm:flex-row">
+            <nav className="bg-white shadow-sm w-full p-4 sm:hidden flex justify-between items-center border-b border-gray-200">
+              <div className="flex items-center">
+                <i className="fas fa-money-bill-wave text-2xl mr-2 text-gray-800"></i>
+                <h1 className="text-xl font-semibold text-gray-800">
+                  Payment Tracker
+                </h1>
+              </div>
+              <button
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                className="text-gray-800 focus:outline-none"
+              >
+                <i className="fas fa-bars text-2xl"></i>
+              </button>
+            </nav>
+            <nav
+              className={`bg-white shadow-lg w-full sm:w-64 p-4 fixed top-0 left-0 h-auto sm:h-full border-r border-gray-200 z-50 ${
+                isSidebarOpen ? "block" : "hidden sm:block"
+              }`}
+            >
+              <div className="flex items-center mb-6 pb-4 border-b border-gray-200">
+                <i className="fas fa-money-bill-wave text-2xl mr-2 text-gray-800"></i>
+                <h1 className="text-xl font-semibold text-gray-800">
+                  Payment Tracker
+                </h1>
+              </div>
+              <ul className="space-y-1">
+                <li>
                   <button
-                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                    className="text-gray-800 focus:outline-none"
+                    onClick={() => {
+                      setPage("home");
+                      setIsSidebarOpen(false);
+                    }}
+                    className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
+                      page === "home"
+                        ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700"
+                        : "text-gray-700 hover:bg-gray-50"
+                    }`}
                   >
-                    <i className="fas fa-bars text-2xl"></i>
+                    <i className="fas fa-tachometer-alt mr-3 w-4"></i> Dashboard
                   </button>
-                </nav>
-                <div className="flex flex-col sm:flex-row">
-                  <nav
-                    className={`bg-white shadow-lg w-full sm:w-64 p-4 fixed top-0 left-0 h-auto sm:h-full border-r border-gray-200 z-50 ${isSidebarOpen ? "block" : "hidden sm:block"}`}
+                </li>
+                <li>
+                  <button
+                    onClick={() => {
+                      setPage("clients");
+                      setIsSidebarOpen(false);
+                    }}
+                    className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
+                      page === "clients"
+                        ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700"
+                        : "text-gray-700 hover:bg-gray-50"
+                    }`}
                   >
-                    <div className="flex items-center mb-6 pb-4 border-b border-gray-200">
-                      <i className="fas fa-money-bill-wave text-2xl mr-2 text-gray-800"></i>
-                      <h1 className="text-xl font-semibold text-gray-800">Payment Tracker</h1>
-                    </div>
-                    <ul className="space-y-1">
-                      <li>
-                        <button
-                          onClick={() => {
-                            setPage("home");
-                            setIsSidebarOpen(false);
-                          }}
-                          className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
-                            page === "home"
-                              ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700"
-                              : "text-gray-700 hover:bg-gray-50"
-                          }`}
-                        >
-                          <i className="fas fa-tachometer-alt mr-3 w-4"></i> Dashboard
-                        </button>
-                      </li>
-                      <li>
-                        <button
-                          onClick={() => {
-                            setPage("clients");
-                            setIsSidebarOpen(false);
-                          }}
-                          className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
-                            page === "clients"
-                              ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700"
-                              : "text-gray-700 hover:bg-gray-50"
-                          }`}
-                        >
-                          <i className="fas fa-users mr-3 w-4"></i> Clients
-                        </button>
-                      </li>
-                      <li>
-                        <button
-                          onClick={() => {
-                            setPage("payments");
-                            setIsSidebarOpen(false);
-                          }}
-                          className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
-                            page === "payments"
-                              ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700"
-                              : "text-gray-700 hover:bg-gray-50"
-                          }`}
-                        >
-                          <i className="fas fa-money-bill-wave mr-3 w-4"></i> Payments
-                        </button>
-                      </li>
-                      <li>
-                        <button
-                          onClick={() => {
-                            setPage("reports");
-                            setIsSidebarOpen(false);
-                          }}
-                          className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
-                            page === "reports"
-                              ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700"
-                              : "text-gray-700 hover:bg-gray-50"
-                          }`}
-                        >
-                          <i className="fas fa-chart-line mr-3 w-4"></i> Reports
-                        </button>
-                      </li>
-                      <li>
-                        <button
-                          onClick={() => {
-                            logout();
-                            setIsSidebarOpen(false);
-                          }}
-                          className="w-full text-left p-3 rounded-lg flex items-center transition-colors text-red-600 hover:bg-red-50"
-                        >
-                          <i className="fas fa-sign-out-alt mr-3 w-4"></i> Logout
-                        </button>
-                      </li>
-                    </ul>
-                  </nav>
-                  <main className="flex-1 p-6 overflow-y-auto sm:ml-64 mt-16 sm:mt-0 bg-gray-50">
-                    {isImporting && (
-                      <div className="mb-4 p-4 bg-yellow-50 text-yellow-800 rounded-lg text-center border border-yellow-200">
-                        <i className="fas fa-spinner fa-spin mr-2"></i>
-                        Importing, please wait... Do not refresh the page.
-                      </div>
-                    )}
-                    {page === "home" && (
-                      <HomePage
-                        paymentsData={paymentsData}
-                        setPaymentsData={setPaymentsData}
-                        searchQuery={searchQuery}
-                        setSearchQuery={setSearchQuery}
-                        monthFilter={monthFilter}
-                        setMonthFilter={setMonthFilter}
-                        statusFilter={statusFilter}
-                        setStatusFilter={setStatusFilter}
-                        updatePayment={updatePayment}
-                        handleContextMenu={handleContextMenu}
-                        contextMenu={contextMenu}
-                        hideContextMenu={hideContextMenu}
-                        deleteRow={deleteRow}
-                        setPage={setPage}
-                        importCsv={importCsv}
-                        isImporting={isImporting}
-                        sessionToken={sessionToken}
-                        currentYear={currentYear}
-                        setCurrentYear={setCurrentYear}
-                        handleYearChange={handleYearChange}
-                        setErrorMessage={setErrorMessage}
-                        apiCacheRef={apiCacheRef}
-                        currentUser={currentUser}
-                        onMount={() =>
-                          console.log(
-                            "App.jsx: HomePage mounted with sessionToken:",
-                            sessionToken?.substring(0, 10) + "..."
-                          )
-                        }
-                        fetchTypes={fetchTypes}
-                        csvFileInputRef={csvFileInputRef}
-                        refreshTrigger={refreshTrigger}
-                        fetchPayments={fetchPayments}
-                        saveTimeouts={saveTimeouts}
-                        showToast={toastContext.showToast}
-                      />
-                    )}
-                    {page === "addClient" && (
-                      <AddClientPage
-                        setPage={setPage}
-                        fetchClients={fetchClients}
-                        fetchPayments={fetchPayments}
-                        sessionToken={sessionToken}
-                        currentUser={currentUser}
-                        editClient={editClient}
-                        setEditClient={setEditClient}
-                        types={types}
-                        apiCacheRef={apiCacheRef}
-                        fetchTypes={fetchTypes}
-                        setRefreshTrigger={setRefreshTrigger}
-                      />
-                    )}
-                    {page === "clients" && (
-                      <ClientsPage
-                        clientsData={clientsData}
-                        setClientsData={setClientsData}
-                        setPage={setPage}
-                        setEditClient={setEditClient}
-                        fetchClients={fetchClients}
-                        fetchPayments={fetchPayments}
-                        sessionToken={sessionToken}
-                        currentYear={currentYear}
-                        isImporting={isImporting}
-                        importCsv={importCsv}
-                      />
-                    )}
-                    {page === "payments" && (
-                      <PaymentsPage
-                        paymentsData={paymentsData}
-                        setPaymentsData={setPaymentsData}
-                        fetchClients={fetchClients}
-                        fetchPayments={fetchPayments}
-                        sessionToken={sessionToken}
-                        isImporting={isImporting}
-                        currentYear={currentYear}
-                        setCurrentYear={setCurrentYear}
-                        handleYearChange={handleYearChange}
-                      />
-                    )}
-                    {page === "reports" && (
-                      <HomePage
-                        paymentsData={paymentsData}
-                        setPaymentsData={setPaymentsData}
-                        searchQuery={searchQuery}
-                        setSearchQuery={setSearchQuery}
-                        monthFilter={monthFilter}
-                        setMonthFilter={setMonthFilter}
-                        statusFilter={statusFilter}
-                        setStatusFilter={setStatusFilter}
-                        updatePayment={updatePayment}
-                        handleContextMenu={handleContextMenu}
-                        contextMenu={contextMenu}
-                        hideContextMenu={hideContextMenu}
-                        deleteRow={deleteRow}
-                        setPage={setPage}
-                        importCsv={importCsv}
-                        isReportsPage={true}
-                        isImporting={isImporting}
-                        sessionToken={sessionToken}
-                        currentYear={currentYear}
-                        setCurrentYear={setCurrentYear}
-                        handleYearChange={handleYearChange}
-                        setErrorMessage={setErrorMessage}
-                        apiCacheRef={apiCacheRef}
-                        saveTimeouts={saveTimeouts}
-                        showToast={toastContext.showToast}
-                      />
-                    )}
-                  </main>
+                    <i className="fas fa-users mr-3 w-4"></i> Clients
+                  </button>
+                </li>
+                <li>
+                  <button
+                    onClick={() => {
+                      setPage("payments");
+                      setIsSidebarOpen(false);
+                    }}
+                    className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
+                      page === "payments"
+                        ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700"
+                        : "text-gray-700 hover:bg-gray-50"
+                    }`}
+                  >
+                    <i className="fas fa-money-bill-wave mr-3 w-4"></i> Payments
+                  </button>
+                </li>
+                <li>
+                  <button
+                    onClick={() => {
+                      setPage("reports");
+                      setIsSidebarOpen(false);
+                    }}
+                    className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${
+                      page === "reports"
+                        ? "bg-blue-50 text-blue-700 border-r-2 border-blue-700"
+                        : "text-gray-700 hover:bg-gray-50"
+                    }`}
+                  >
+                    <i className="fas fa-chart-line mr-3 w-4"></i> Reports
+                  </button>
+                </li>
+                <li>
+    <button
+      onClick={() => {
+        logout();
+        setIsSidebarOpen(false);
+      }}
+      className="w-full text-left p-3 rounded-lg flex items-center transition-colors text-red-600 hover:bg-red-50"
+    >
+      <i className="fas fa-sign-out-alt mr-3 w-4"></i> Logout
+    </button>
+  </li>
+              </ul>
+            </nav>
+            <main className="flex-1 p-6 overflow-y-auto sm:ml-64 mt-16 sm:mt-0 bg-gray-50">
+              <header className="flex items-center justify-between mb-8 bg-white p-4 rounded-lg shadow-sm">
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900 mb-1">
+                    {page === "home"
+                      ? "Dashboard"
+                      : page.charAt(0).toUpperCase() + page.slice(1)}
+                  </h1>
+                  <p className="text-gray-600 text-sm">
+                    {page === "home" &&
+                      "Welcome to your payment tracking dashboard"}
+                    {page === "clients" &&
+                      "Manage your clients and their information"}
+                    {page === "payments" && "Track and manage payment records"}
+                    {page === "reports" &&
+                      "View detailed reports and analytics"}
+                  </p>
                 </div>
-              </>
-            )}
+                <div className="relative" ref={profileMenuRef}>
+                  <button
+                    onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                    className="focus:outline-none p-2 rounded-full hover:bg-gray-100 transition-colors"
+                  >
+                    <i className="fas fa-user-circle text-3xl text-gray-700"></i>
+                  </button>
+                  {isProfileMenuOpen && (
+                    <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                      <div className="p-4 border-b border-gray-100">
+                        <p className="font-semibold text-gray-900">
+                          {currentUser}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </header>
+              {isImporting && (
+                <div className="mb-4 p-4 bg-yellow-50 text-yellow-800 rounded-lg text-center border border-yellow-200">
+                  <i className="fas fa-spinner fa-spin mr-2"></i>
+                  Importing, please wait... Do not refresh the page.
+                </div>
+              )}
+              {page === "home" && (
+                <HomePage
+                  paymentsData={paymentsData}
+                  setPaymentsData={setPaymentsData}
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
+                  monthFilter={monthFilter}
+                  setMonthFilter={setMonthFilter}
+                  statusFilter={statusFilter}
+                  setStatusFilter={setStatusFilter}
+                  updatePayment={updatePayment}
+                  handleContextMenu={handleContextMenu}
+                  contextMenu={contextMenu}
+                  hideContextMenu={hideContextMenu}
+                  deleteRow={deleteRow}
+                  setPage={setPage}
+                  importCsv={importCsv}
+                  isImporting={isImporting}
+                  sessionToken={sessionToken}
+                  currentYear={currentYear}
+                  setCurrentYear={setCurrentYear}
+                  handleYearChange={handleYearChange}
+                  setErrorMessage={setErrorMessage}
+                  apiCacheRef={apiCacheRef}
+                  currentUser={currentUser}
+                  onMount={() =>
+                    console.log(
+                      "App.jsx: HomePage mounted with sessionToken:",
+                      sessionToken?.substring(0, 10) + "..."
+                    )
+                  }
+                  fetchTypes={fetchTypes}
+                  csvFileInputRef={csvFileInputRef}
+                  refreshTrigger={refreshTrigger}
+                  fetchPayments={fetchPayments}
+                  saveTimeouts={saveTimeouts}
+                />
+              )}
+              {page === "addClient" && (
+                <AddClientPage
+                  setPage={setPage}
+                  fetchClients={fetchClients}
+                  fetchPayments={fetchPayments}
+                  sessionToken={sessionToken}
+                  currentUser={currentUser}
+                  editClient={editClient}
+                  setEditClient={setEditClient}
+                  types={types}
+                  apiCacheRef={apiCacheRef}
+                  fetchTypes={fetchTypes}
+                  setRefreshTrigger={setRefreshTrigger}
+                />
+              )}
+              {page === "clients" && (
+                <ClientsPage
+                  clientsData={clientsData}
+                  setClientsData={setClientsData}
+                  setPage={setPage}
+                  setEditClient={setEditClient}
+                  fetchClients={fetchClients}
+                  fetchPayments={fetchPayments}
+                  sessionToken={sessionToken}
+                  currentYear={currentYear}
+                  isImporting={isImporting}
+                  importCsv={importCsv}
+                />
+              )}
+              {page === "payments" && (
+                <PaymentsPage
+                  paymentsData={paymentsData}
+                  setPaymentsData={setPaymentsData}
+                  fetchClients={fetchClients}
+                  fetchPayments={fetchPayments}
+                  sessionToken={sessionToken}
+                  isImporting={isImporting}
+                  currentYear={currentYear}
+                  setCurrentYear={setCurrentYear}
+                  handleYearChange={handleYearChange}
+                />
+              )}
+              {page === "reports" && (
+                <HomePage
+                  paymentsData={paymentsData}
+                  setPaymentsData={setPaymentsData}
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
+                  monthFilter={monthFilter}
+                  setMonthFilter={setMonthFilter}
+                  statusFilter={statusFilter}
+                  setStatusFilter={setStatusFilter}
+                  updatePayment={updatePayment}
+                  handleContextMenu={handleContextMenu}
+                  contextMenu={contextMenu}
+                  hideContextMenu={hideContextMenu}
+                  deleteRow={deleteRow}
+                  setPage={setPage}
+                  importCsv={importCsv}
+                  isReportsPage={true}
+                  isImporting={isImporting}
+                  sessionToken={sessionToken}
+                  currentYear={currentYear}
+                  setCurrentYear={setCurrentYear}
+                  handleYearChange={handleYearChange}
+                  setErrorMessage={setErrorMessage}
+                  apiCacheRef={apiCacheRef}
+                  saveTimeouts={saveTimeouts}
+                />
+              )}
+            </main>
           </div>
         )}
-      </ToastManager>
+      </div>
     </ErrorBoundary>
   );
 };
