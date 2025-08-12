@@ -1619,6 +1619,11 @@ const handleInputChange = useCallback(
                 return row;
               })
             );
+            // Also update the popup state to reflect the new remark
+            setRemarkPopup(prev => ({
+              ...prev,
+              currentRemark: newRemark
+            }));
           }}
         />
 
