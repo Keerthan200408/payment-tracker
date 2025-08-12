@@ -19,8 +19,16 @@ const Toast = ({
   }, [duration, onClose]);
 
   const getToastStyles = () => {
-    const baseStyles = "relative p-4 rounded-lg shadow-lg transition-all duration-300 transform max-w-sm w-full";
-    
+    const baseStyles = "fixed z-50 p-4 rounded-lg shadow-lg transition-all duration-300 transform";
+    const positionStyles = {
+      'top-right': 'top-4 right-4',
+      'top-left': 'top-4 left-4',
+      'bottom-right': 'bottom-4 right-4',
+      'bottom-left': 'bottom-4 left-4',
+      'top-center': 'top-4 left-1/2 transform -translate-x-1/2',
+      'bottom-center': 'bottom-4 left-1/2 transform -translate-x-1/2'
+    };
+
     const typeStyles = {
       success: 'bg-green-500 text-white border-l-4 border-green-600',
       error: 'bg-red-500 text-white border-l-4 border-red-600',
@@ -28,7 +36,7 @@ const Toast = ({
       info: 'bg-blue-500 text-white border-l-4 border-blue-600'
     };
 
-    return `${baseStyles} ${typeStyles[type]} ${isVisible ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}`;
+    return `${baseStyles} ${positionStyles[position]} ${typeStyles[type]} ${isVisible ? 'translate-y-0 opacity-100' : 'translate-y-2 opacity-0'}`;
   };
 
   const getIcon = () => {
@@ -43,18 +51,17 @@ const Toast = ({
 
   return (
     <div className={getToastStyles()}>
-      <div className="flex items-start gap-3">
-        <i className={`${getIcon()} flex-shrink-0 mt-0.5`}></i>
-        <span className="text-sm font-medium flex-1 break-words leading-relaxed">{message}</span>
+      <div className="flex items-center">
+        <i className={`${getIcon()} mr-2`}></i>
+        <span className="text-sm font-medium">{message}</span>
         <button
           onClick={() => {
             setIsVisible(false);
             setTimeout(() => onClose(), 300);
           }}
-          className="flex-shrink-0 text-white hover:text-gray-200 transition-colors p-1 -m-1"
-          title="Close notification"
+          className="ml-3 text-white hover:text-gray-200 transition-colors"
         >
-          <i className="fas fa-times text-xs"></i>
+          <i className="fas fa-times"></i>
         </button>
       </div>
     </div>
