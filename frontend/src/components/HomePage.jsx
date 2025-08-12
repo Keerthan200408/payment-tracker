@@ -12,8 +12,7 @@ import {
   paymentsAPI, 
   communicationAPI, 
   importAPI,
-  handleAPIError,
-  clientsAPI
+  handleAPIError 
 } from '../utils/api';
 import BatchStatus from './BatchStatus.jsx';
 import LoadingSkeleton from './LoadingSkeleton.jsx';
@@ -81,9 +80,6 @@ const HomePage = ({
   const [lastUpdateTime, setLastUpdateTime] = useState(null);
   const pendingUpdatesRef = useRef({}); // Track in-flight updates by key
   const [showPerformanceDashboard, setShowPerformanceDashboard] = useState(false);
-  const [previousYearDueMap, setPreviousYearDueMap] = useState({});
-  // Track latest request ID per cell
-  const latestRequestIdRef = useRef({});
 
   // Performance monitoring
   const performanceMonitor = usePerformanceMonitor('HomePage', {
@@ -109,44 +105,18 @@ const HomePage = ({
 
   const months = MONTHS;
 
-  // Helper to build previous year due map
-  const buildPreviousYearDueMap = useCallback((prevYearPayments) => {
-    const map = {};
-    prevYearPayments.forEach(row => {
-      const key = `${row.Client_Name}|||${row.Type}`;
-      map[key] = parseFloat(row.Due_Payment) || 0;
-    });
-    return map;
-  }, []);
+const calculateDuePayment = (rowData, months, currentYear) => {
+  log(`HomePage.jsx: calculateDuePayment for ${rowData.Client_Name || 'unknown'}, Year = ${currentYear}`);
 
-  // Load previous year's payments if currentYear > 2025
-  useEffect(() => {
-    const loadPrevYearDue = async () => {
-      if (parseInt(currentYear) > 2025 && sessionToken) {
-        const prevYear = (parseInt(currentYear) - 1).toString();
-        try {
-          const response = await paymentsAPI.getPaymentsByYear(prevYear);
-          const prevYearPayments = Array.isArray(response.data) ? response.data : [];
-          setPreviousYearDueMap(buildPreviousYearDueMap(prevYearPayments));
-        } catch (err) {
-          setPreviousYearDueMap({});
-        }
-      } else {
-        setPreviousYearDueMap({});
-      }
-    };
-    loadPrevYearDue();
-  }, [currentYear, sessionToken, buildPreviousYearDueMap]);
-
-  // Updated calculateDuePayment to accept previousYearsDue
-  const calculateDuePayment = (rowData, months, currentYear, previousYearsDue = 0) => {
-    log(`HomePage.jsx: calculateDuePayment for ${rowData.Client_Name || 'unknown'}, Year = ${currentYear}`);
   const sanitizedData = validateRowData(rowData, currentYear);
   const amountToBePaid = parseFloat(sanitizedData.Amount_To_Be_Paid) || 0;
+  
   if (amountToBePaid <= 0) {
     log(`HomePage.jsx: calculateDuePayment: Returning 0 due to invalid Amount_To_Be_Paid: ${amountToBePaid}`);
     return 0;
   }
+
+  // Calculate current year's due payment
   const totalPaymentsMade = months.reduce((sum, month) => {
     const rawValue = sanitizedData[month];
     const payment = (rawValue === "" || rawValue === "0.00" || rawValue == null) ? 0 : parseFloat(rawValue);
@@ -154,21 +124,30 @@ const HomePage = ({
       log(`HomePage.jsx: calculateDuePayment: Invalid payment for ${month}: ${rawValue}, treating as 0`);
       return sum;
     }
+    log(`HomePage.jsx: calculateDuePayment: Month ${month} = ${payment}`);
     return sum + payment;
   }, 0);
+
+  // Calculate active months (months with any value, not just positive payments)
   const activeMonths = months.filter((month) => {
     const rawValue = sanitizedData[month];
     return rawValue !== "" && rawValue !== null && rawValue !== undefined;
   }).length;
-    let totalDue;
-  if (parseInt(currentYear) > 2025) {
-      // Correct formula: previousYearsDue + (activeMonths * amountToBePaid - totalPaymentsMade)
-      totalDue = previousYearsDue + (activeMonths * amountToBePaid - totalPaymentsMade);
-    } else {
-      totalDue = activeMonths * amountToBePaid - totalPaymentsMade;
-    }
-    return Math.max(Math.round(totalDue * 100) / 100, 0);
-  };
+
+  // Use active months for expected total (matches backend logic)
+  const expectedTotal = activeMonths * amountToBePaid;
+  const currentYearDue = Math.max(expectedTotal - totalPaymentsMade, 0);
+  
+  // For cumulative calculation, we need to get the previous year's due payment
+  // For now, we'll use the current year due as the backend will handle cumulative calculation
+  // The backend's processPaymentUpdate function handles the cumulative logic properly
+  const totalDue = currentYearDue;
+  
+  log(`HomePage.jsx: calculateDuePayment: Expected = ${expectedTotal}, Total Paid = ${totalPaymentsMade}, Current Year Due = ${currentYearDue}, Total Due = ${totalDue}, Active Months = ${activeMonths}`);
+  
+  return Math.round(totalDue * 100) / 100;
+};
+
 
   const getPaymentStatus = useCallback((row, month) => {
     const globalRowIndex = paymentsData.findIndex(
@@ -377,105 +356,102 @@ const validateRowData = (rowData, currentYear) => {
     [searchUserYears]
   );
 
-  // Helper to recalculate all due payments after data load
-  const recalculateAllDuePayments = useCallback((data, prevYearDueMap, months, year) => {
-    return data.map(row => {
-      const key = `${row.Client_Name}|||${row.Type}`;
-      const previousYearsDue = parseInt(year) > 2025 ? (prevYearDueMap[key] || 0) : 0;
-      const recalculatedDue = calculateDuePayment(row, months, year, previousYearsDue);
-      return { ...row, Due_Payment: recalculatedDue.toFixed(2) };
-    });
-  }, [calculateDuePayment]);
-
-  // Patch: After fetching payments, recalculate due for all rows
-  useEffect(() => {
-    if (paymentsData && paymentsData.length > 0) {
-      // Use the latest previousYearDueMap (from frontend state)
-      setPaymentsData(prevData => recalculateAllDuePayments(prevData, previousYearDueMap, months, currentYear));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentYear, previousYearDueMap]);
-
-  // Patch: When adding a new year, always fetch and recalculate previous year's due before using as base
   const handleAddNewYear = useCallback(async () => {
     const newYear = (parseInt(currentYear) + 1).toString();
     log(`HomePage.jsx: Attempting to add new year: ${newYear}`);
+
+    // Prevent multiple simultaneous requests
     if (isLoadingYears) {
       log("HomePage.jsx: Add new year request already in progress, skipping");
       return;
     }
+
     if (mountedRef.current) {
       setIsLoadingYears(true);
     }
+
     const controller = new AbortController();
+
     try {
+      // Add a small delay to ensure any previous requests are completed
       await new Promise(resolve => setTimeout(resolve, 100));
-      // Always fetch previous year's data and recalculate due
-      const prevYear = currentYear;
-      let prevYearPayments = [];
-      try {
-        const prevYearResp = await paymentsAPI.getPaymentsByYear(prevYear);
-        prevYearPayments = Array.isArray(prevYearResp.data) ? prevYearResp.data : [];
-      } catch (err) {
-        prevYearPayments = [];
-      }
-      // Recalculate all due payments for previous year
-      let prevYearDueMapToSend = {};
-      if (prevYearPayments.length > 0) {
-        const prevYearDueMap = buildPreviousYearDueMap(prevYearPayments);
-        const recalculatedPrevYear = recalculateAllDuePayments(prevYearPayments, prevYearDueMap, months, prevYear);
-        recalculatedPrevYear.forEach(row => {
-          const key = `${row.Client_Name}|||${row.Type}`;
-          prevYearDueMapToSend[key] = parseFloat(row.Due_Payment) || 0;
-        });
-      }
-      // Optionally, send this map to backend if API supports it (not shown here)
+      
       const response = await yearsAPI.addNewYear({ year: newYear });
       log("HomePage.jsx: Add new year response:", response.data);
-      // Force-refresh years from backend, clear localStorage cache
-      localStorage.removeItem('availableYears');
-      await searchUserYears(controller.signal); // always fetch from backend
-      // Fetch new year's payments from backend
+
+      const yearsCacheKey = getCacheKey("/get-user-years", { sessionToken });
+      const paymentsCacheKey = getCacheKey("/get-payments-by-year", { year: newYear, sessionToken });
+      delete apiCacheRef.current[yearsCacheKey];
+      delete apiCacheRef.current[paymentsCacheKey];
+
+      await searchUserYears(controller.signal);
+
+      const clientsResponse = await clientsAPI.getClients();
+      const expectedClientCount = clientsResponse.data.length;
+
       const paymentsResponse = await paymentsAPI.getPaymentsByYear(newYear);
-      let paymentsDataNewYear = paymentsResponse.data || [];
-      paymentsDataNewYear = paymentsDataNewYear.map(row => {
-        const key = `${row.Client_Name}|||${row.Type}`;
-        const prevDue = prevYearDueMapToSend[key] || 0;
-        return { ...row, Due_Payment: prevDue.toFixed(2) };
-      });
-      setPaymentsData(paymentsDataNewYear);
+
+      const paymentsData = paymentsResponse.data || [];
+      setPaymentsData(paymentsData);
+      const correctedPaymentsData = paymentsData.map((row) => ({
+        ...row,
+        Due_Payment: "0.00"
+      }));
+      setPaymentsData(correctedPaymentsData);
       setCurrentYear(newYear);
       localStorage.setItem("currentYear", newYear);
+
+      if (paymentsData.length === 0 && expectedClientCount > 0) {
+        const errorMsg = `No clients found for ${newYear}. Please check the Clients sheet.`;
+        setLocalErrorMessage(errorMsg);
+        setErrorMessage(errorMsg);
+        showToast(errorMsg, 'error', 5000);
+      } else if (paymentsData.length < expectedClientCount) {
+        const errorMsg = `Warning: Only ${paymentsData.length} client(s) found for ${newYear}. Expected ${expectedClientCount} clients from the Clients sheet.`;
+        setLocalErrorMessage(errorMsg);
+        setErrorMessage(errorMsg);
+        showToast(errorMsg, 'warning', 5000);
+      } else {
         setLocalErrorMessage("");
         setErrorMessage("");
-      showToast(`Year ${newYear} added successfully with ${paymentsDataNewYear.length} clients.`, 'success', 3000);
+        showToast(`Year ${newYear} added successfully with ${paymentsData.length} clients.`, 'success', 3000);
+      }
     } catch (error) {
+      if (error.name === "AbortError") {
+        log("HomePage.jsx: Add new year request cancelled");
+        return;
+      }
       log("HomePage.jsx: Error adding new year:", error);
-      let errorMsg = error.response?.data?.error || error.message;
+      let errorMsg = error.response?.data?.error || "An unknown error occurred";
       let userMessage = `Failed to add new year: ${errorMsg}`;
-      // Always re-fetch years and payments after an error
-      localStorage.removeItem('availableYears');
-      await searchUserYears(controller.signal);
-      const paymentsResponse = await paymentsAPI.getPaymentsByYear(newYear);
-      let paymentsDataNewYear = paymentsResponse.data || [];
-      if (paymentsDataNewYear.length > 0) {
-        setPaymentsData(paymentsDataNewYear);
+      
+      // Handle specific error cases
+      if (errorMsg.includes("already exists")) {
+        userMessage = `Year ${newYear} already exists. Switching to ${newYear}...`;
+        // Automatically switch to the new year even if it already exists
         setCurrentYear(newYear);
         localStorage.setItem("currentYear", newYear);
-        showToast(`Year ${newYear} was added (possibly after a retry).`, 'info', 4000);
         setLocalErrorMessage("");
         setErrorMessage("");
-      } else {
+        showToast(userMessage, 'info', 3000);
+        return;
+      } else if (errorMsg.includes("No clients found")) {
+        userMessage = "No clients found. Please add clients before creating a new year.";
+      } else if (errorMsg.includes("Database connection failed") || errorMsg.includes("Database collections not accessible")) {
+        userMessage = "Database connection issue. Please try again in a few seconds.";
+      } else if (errorMsg.includes("Failed to fetch clients") || errorMsg.includes("Failed to insert payment records")) {
+        userMessage = "Database operation failed. Please try again.";
+      }
+      
       setLocalErrorMessage(userMessage);
       setErrorMessage(userMessage);
       showToast(userMessage, 'error', 5000);
-      }
     } finally {
       if (mountedRef.current) {
         setIsLoadingYears(false);
       }
     }
-  }, [currentYear, sessionToken, getCacheKey, searchUserYears, setPaymentsData, setCurrentYear, setErrorMessage, months, buildPreviousYearDueMap, recalculateAllDuePayments, paymentsAPI, clientsAPI, paymentsData]);
+  }, [currentYear, sessionToken, getCacheKey, searchUserYears, setPaymentsData, setCurrentYear, setErrorMessage]);
 
   const hasValidEmail = useCallback((clientData) => {
     const email = clientData?.Email || '';
@@ -530,7 +506,7 @@ const validateRowData = (rowData, currentYear) => {
         notifyStatuses,
       });
 
-      const hasValidPhone = clientPhone && /^(\+91|91)?[6-9]\d{9}$/.test(clientPhone.trim().replace(/[\s-]/g, ''));
+      const hasValidPhone = clientPhone && /^\+?[\d\s-]{10,15}$/.test(clientPhone.trim());
       const hasValidEmailAddress = hasValidEmail({ Email: clientEmail, email: clientEmail });
 
       log(`HomePage.jsx: Notification checks`, {
@@ -540,7 +516,6 @@ const validateRowData = (rowData, currentYear) => {
       });
 
       let notificationSent = false;
-      let notificationMedium = null;
 
       if (hasValidPhone) {
         let isValidWhatsApp = true;
@@ -553,7 +528,9 @@ const validateRowData = (rowData, currentYear) => {
 
           if (!verifyResponse.data.isValidWhatsApp) {
             log(`HomePage.jsx: ${clientPhone} is not registered with WhatsApp`);
-            showToast(`Cannot send WhatsApp message to ${clientName}: Phone number is not registered with WhatsApp.`, 'error', 5000);
+            setLocalErrorMessage(
+              `Cannot send WhatsApp message to ${clientName}: Phone number is not registered with WhatsApp.`
+            );
             isValidWhatsApp = false;
           }
         } catch (verifyError) {
@@ -562,9 +539,11 @@ const validateRowData = (rowData, currentYear) => {
             status: verifyError.response?.status,
             data: verifyError.response?.data,
           });
-          showToast(`Failed to verify WhatsApp status for ${clientName}: ${
+          setLocalErrorMessage(
+            `Failed to verify WhatsApp status for ${clientName}: ${
               verifyError.response?.data?.error || verifyError.message
-            }`, 'error', 5000);
+            }`
+          );
           isValidWhatsApp = false;
         }
 
@@ -590,16 +569,17 @@ const validateRowData = (rowData, currentYear) => {
               messageId: response.data.messageId || "N/A",
             });
             notificationSent = true;
-            notificationMedium = 'whatsapp';
           } catch (whatsappError) {
             log(`HomePage.jsx: WhatsApp attempt failed for ${clientPhone} (${clientName})`, {
               message: whatsappError.message,
               status: whatsappError.response?.status,
               data: whatsappError.response?.data,
             });
-            showToast(`Failed to send WhatsApp message to ${clientName}: ${
+            setLocalErrorMessage(
+              `Failed to send WhatsApp message to ${clientName}: ${
                 whatsappError.response?.data?.error || whatsappError.message
-              }. Attempting email.`, 'error', 5000);
+              }. Attempting email.`
+            );
           }
         }
       } else {
@@ -669,148 +649,207 @@ const validateRowData = (rowData, currentYear) => {
             messageId: response.data.messageId || "N/A",
           });
           notificationSent = true;
-          notificationMedium = 'gmail';
-          showToast(`Email notification sent successfully to ${clientName}`, 'success', 5000);
+          setLocalErrorMessage(`Email notification sent successfully to ${clientName}`);
         } catch (emailError) {
           log(`HomePage.jsx: Email failed for ${clientEmail} (${clientName})`, {
             message: emailError.message,
             status: emailError.response?.status,
             data: emailError.response?.data,
           });
-          showToast(`Failed to send email notification to ${clientName}: ${
+          setLocalErrorMessage(
+            `Failed to send email notification to ${clientName}: ${
               emailError.response?.data?.error || emailError.message
-            }`, 'error', 5000);
+            }`
+          );
         }
       } else if (!hasValidPhone && !hasValidEmailAddress) {
         log(`HomePage.jsx: No valid contact for ${clientName}`);
-        showToast(`No notification sent for ${clientName}: No valid phone or email provided.`, 'error', 5000);
-        notificationMedium = 'none';
+        setLocalErrorMessage(
+          `No notification sent for ${clientName}: No valid phone or email provided.`
+        );
       } else if (!notificationSent) {
         log(`HomePage.jsx: Email not attempted for ${clientName} due to invalid email`);
-        showToast(`No notification sent for ${clientName}: Email address invalid or missing.`, 'error', 5000);
-        notificationMedium = 'none';
-      }
-
-      // Show toast for 5 seconds indicating the medium used
-      if (notificationMedium === 'whatsapp') {
-        showToast('Notification sent via WhatsApp', 'success', 5000);
-      } else if (notificationMedium === 'gmail') {
-        showToast('Notification sent via Gmail', 'success', 5000);
-      } else {
-        showToast('No valid contact for notification', 'error', 5000);
+        setLocalErrorMessage(
+          `No notification sent for ${clientName}: Email address invalid or missing.`
+        );
       }
 
       return notificationSent;
     },
-    [sessionToken, hasValidEmail, showToast]
+    [sessionToken, hasValidEmail, setLocalErrorMessage, currentYear]
   );
 
-  // Patch all due payment calculations to use previousYearDueMap
-  const getPreviousYearsDue = (row) => {
-    if (parseInt(currentYear) > 2025) {
-      const key = `${row.Client_Name}|||${row.Type}`;
-      return previousYearDueMap[key] || 0;
-    }
-    return 0;
-  };
-
-  // Patch debouncedUpdate
   const debouncedUpdate = useCallback(
     (rowIndex, month, value, year) => {
       if (!paymentsData.length) {
         log("HomePage.jsx: Cannot queue update, paymentsData is empty");
-        showToast("Please wait for data to load before making updates.", 'error', 5000);
+        setErrorMessage("Please wait for data to load before making updates.");
         return;
       }
+      
       if (!paymentsData[rowIndex]) {
         log("HomePage.jsx: Invalid rowIndex:", rowIndex);
-        showToast("Invalid row index.", 'error', 5000);
+        setErrorMessage("Invalid row index.");
         return;
       }
+
       const key = `${rowIndex}-${month}`;
+      
       if (debounceTimersRef.current[key]) {
         clearTimeout(debounceTimersRef.current[key]);
       }
+
       setPendingUpdates((prev) => ({
         ...prev,
         [key]: true,
       }));
-      // Generate a unique request ID for this cell update
-      const requestId = Date.now() + Math.random();
-      latestRequestIdRef.current[key] = requestId;
+
       debounceTimersRef.current[key] = setTimeout(async () => {
         try {
           const originalRow = paymentsData[rowIndex];
           log(`HomePage.jsx: Saving payment for ${originalRow.Client_Name}, month: ${month}, value: ${value}, year: ${currentYear}`);
+          
+          // Ensure currentYear is valid
           if (!currentYear || currentYear === 'undefined' || currentYear === 'null') {
             log(`HomePage.jsx: Invalid currentYear: ${currentYear}, type: ${typeof currentYear}`);
             throw new Error(`Invalid year: ${currentYear}`);
           }
+          
+          log(`HomePage.jsx: Making API call with year: ${currentYear}`);
           const response = await paymentsAPI.savePayment({
             clientName: originalRow.Client_Name,
             type: originalRow.Type,
             month: month.toLowerCase(),
             value: value || ""
           }, currentYear);
-          // Only update UI if this is the latest request for this cell
-          if (latestRequestIdRef.current[key] === requestId && response.data.updatedRow) {
-            const refreshed = await paymentsAPI.getPaymentsByYear(currentYear);
-            const refreshedData = Array.isArray(refreshed.data) ? refreshed.data : [];
-            setPaymentsData(refreshedData);
-            // Find the updated row
-            const updatedRow = refreshedData[rowIndex];
-            if (updatedRow) {
-              // Prepare notifyStatuses for all months (or just the updated month)
-              const notifyStatuses = [
-                {
-                  month,
-                  status: getPaymentStatus(updatedRow, month),
-                  paidAmount: parseFloat(updatedRow[month]) || 0,
-                  expectedAmount: parseFloat(updatedRow.Amount_To_Be_Paid) || 0,
-                },
-              ];
-              handleNotifications(
-                updatedRow.Client_Name,
-                updatedRow.Email,
-                updatedRow.Phone_Number,
-                updatedRow.Type,
-                currentYear,
-                notifyStatuses,
-                updatedRow.Due_Payment
-              );
-            }
+          
+          if (response.data.updatedRow) {
+            setPaymentsData((prev) =>
+              prev.map((row, idx) => {
+                if (idx !== rowIndex) return row;
+                
+                // Preserve the real-time due payment calculation
+                // The backend response might have stale due payment data
+                const updatedRow = {
+                  ...row,
+                  ...response.data.updatedRow,
+                  Email: row.Email || response.data.updatedRow.Email,
+                };
+                
+                // Recalculate due payment with current data to ensure accuracy
+                const recalculatedDue = calculateDuePayment(updatedRow, months, currentYear);
+                updatedRow.Due_Payment = recalculatedDue.toFixed(2);
+                
+                log(`HomePage.jsx: debouncedUpdate: Updated due payment for ${updatedRow.Client_Name || 'unknown'} to ${recalculatedDue}`);
+                
+                return updatedRow;
+              })
+            );
           }
+          
+          // Clear pending status
           setPendingUpdates((prev) => {
             const newPending = { ...prev };
             delete newPending[key];
             return newPending;
           });
+          
+          // Update last update time
           setLastUpdateTime(Date.now());
+          
           log("HomePage.jsx: Payment saved successfully");
+          
         } catch (error) {
           log(`HomePage.jsx: Error saving payment:`, error);
           log(`HomePage.jsx: Error details - status: ${error.response?.status}, data:`, error.response?.data);
+          
+          // Clear pending status on error
           setPendingUpdates((prev) => {
             const newPending = { ...prev };
             delete newPending[key];
             return newPending;
           });
-          showToast(`Failed to save payment: ${error.response?.data?.error || error.message}`, 'error', 5000);
-          setPaymentsData(paymentsData);
+          
+          setErrorMessage(`Failed to save payment: ${error.response?.data?.error || error.message}`);
         }
+        
         delete debounceTimersRef.current[key];
-      }, 1000);
+      }, 1000); // Simple 1 second delay
     },
-    [paymentsData, setPaymentsData, currentYear, months, calculateDuePayment, getPreviousYearsDue, getPaymentStatus, handleNotifications]
+    [paymentsData, setErrorMessage, setPaymentsData, currentYear, months, calculateDuePayment]
+  );
+  
+
+const handleYearChangeDebounced = useCallback(
+  debounce(async (year) => {
+    log("HomePage.jsx: Year change requested to:", year);
+    
+    // Clear existing states to prevent stale data
+    setLocalInputValues({});
+    setPendingUpdates({});
+    if (batchTimerRef.current) {
+      clearTimeout(batchTimerRef.current);
+      batchTimerRef.current = null;
+    }
+
+    // Use the parent's handleYearChange function to properly update the parent's state
+    if (handleYearChange) {
+      await handleYearChange(year);
+    } else {
+      // Fallback: update currentYear and localStorage
+      localStorage.setItem("currentYear", year);
+      setCurrentYear(year);
+    }
+    
+    log("HomePage.jsx: Year change completed");
+  }, 1000), // Increased from 300ms to 1000ms
+  [setCurrentYear, handleYearChange, setLocalInputValues, setPendingUpdates]
 );
 
-const handleInputChange = (rowIndex, month, value) => {
-  setLocalInputValues((prev) => ({
-    ...prev,
-    [`${rowIndex}-${month}`]: value,
-  }));
-  debouncedUpdate(rowIndex, month, value, currentYear);
-};
+const handleInputChange = useCallback(
+  (rowIndex, month, value) => {
+    const trimmedValue = value.trim();
+    const parsedValue = trimmedValue === "" || trimmedValue === "0.00" ? "0" : trimmedValue;
+
+    if (trimmedValue !== "" && trimmedValue !== "0.00" && (isNaN(parseFloat(parsedValue)) || parseFloat(parsedValue) < 0)) {
+      setErrorMessage("Please enter a valid non-negative number.");
+      return;
+    }
+
+    const key = `${rowIndex}-${month}`;
+    setLocalInputValues((prev) => ({
+      ...prev,
+      [key]: trimmedValue,
+    }));
+
+    // Create updated row with new value
+    const updatedRow = { ...paymentsData[rowIndex], [month]: parsedValue };
+    
+    // Recalculate Due_Payment using the same logic as backend
+    const recalculatedDue = calculateDuePayment(updatedRow, months, currentYear);
+
+    // Update the frontend view immediately with new due payment
+    setPaymentsData((prev) => {
+      const newData = [...prev];
+      newData[rowIndex] = {
+        ...newData[rowIndex],
+        [month]: trimmedValue, // Use trimmedValue for UI consistency
+        Due_Payment: recalculatedDue.toFixed(2),
+      };
+      log(`HomePage.jsx: handleInputChange: Real-time update for ${newData[rowIndex].Client_Name || 'unknown'}, ${month} = ${trimmedValue}, Due_Payment = ${recalculatedDue}`);
+      return newData;
+    });
+
+    // Queue backend update (debounced) - only if value actually changed
+    const currentValue = paymentsData[rowIndex]?.[month] || "";
+    if (trimmedValue !== currentValue) {
+      debouncedUpdate(rowIndex, month, parsedValue, currentYear);
+    }
+  },
+  [debouncedUpdate, paymentsData, currentYear, setPaymentsData, setErrorMessage, months, calculateDuePayment]
+);
+
+
 
 
   useEffect(() => {
@@ -866,10 +905,8 @@ const handleInputChange = (rowIndex, month, value) => {
       }
     } catch (error) {
       log('HomePage.jsx: Error fetching payments:', error);
-      showToast(
-        error.response?.data?.error || 'Failed to load payments data.',
-        'error',
-        5000
+      setLocalErrorMessage(
+        error.response?.data?.error || 'Failed to load payments data.'
       );
       
       // Try to get cached data as fallback
@@ -984,11 +1021,11 @@ const handleInputChange = (rowIndex, month, value) => {
   const handleAddType = async () => {
     log(`HomePage.jsx: type: ${newType}, user: ${currentUser}`);
     if (!newType.trim()) {
-      showToast("Type name cannot be empty.", 'error', 5000);
+      setLocalErrorMessage("Type name cannot be empty.");
       return;
     }
     if (newType.trim().length > 50) {
-      showToast("Type name too long.", 'error', 5000);
+      setLocalErrorMessage("Type name too long.");
       return;
     }
     const capitalizedType = newType.trim().toUpperCase();
@@ -1006,7 +1043,7 @@ const handleInputChange = (rowIndex, month, value) => {
       const cacheKey = `types_${currentUser}_${sessionToken}`;
       delete apiCacheRef.current[cacheKey];
       await fetchTypes(sessionToken);
-      showToast(`Type ${capitalizedType} added successfully.`, 'success', 3000);
+      alert(`Type ${capitalizedType} added successfully.`);
     } catch (error) {
       log(`HomePage.jsx: Error adding type for ${currentUser}:`, error);
       const errorMsg = error.response?.data?.error || error.message;
@@ -1016,7 +1053,7 @@ const handleInputChange = (rowIndex, month, value) => {
       } else if (error.message.includes("timeout")) {
         userMessage = "Request timed out. Please check your connection and try again.";
       }
-      showToast(userMessage, 'error', 5000);
+      setLocalErrorMessage(userMessage);
       if (error.response?.status === 401 || errorMsg.includes("Invalid token")) {
         setPage("signIn");
       }
@@ -1500,27 +1537,6 @@ const handleInputChange = (rowIndex, month, value) => {
       </>
     );
   };
-
-  // Restore handleYearChangeDebounced
-  const handleYearChangeDebounced = useCallback(
-    debounce(async (year) => {
-      log("HomePage.jsx: Year change requested to:", year);
-      setLocalInputValues({});
-      setPendingUpdates({});
-      if (batchTimerRef.current) {
-        clearTimeout(batchTimerRef.current);
-        batchTimerRef.current = null;
-      }
-      if (handleYearChange) {
-        await handleYearChange(year);
-      } else {
-        localStorage.setItem("currentYear", year);
-        setCurrentYear(year);
-      }
-      log("HomePage.jsx: Year change completed");
-    }, 1000),
-    [setCurrentYear, handleYearChange, setLocalInputValues, setPendingUpdates]
-  );
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">

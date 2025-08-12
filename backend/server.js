@@ -6,20 +6,6 @@ const axios = require("axios");
 
 // Import modular components
 const config = require("./config");
-
-// Startup check for required notification environment variables
-const requiredEnv = [
-  'EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_USER', 'EMAIL_PASS', 'EMAIL_FROM',
-  'ULTRAMSG_TOKEN', 'ULTRAMSG_INSTANCE_ID'
-];
-const missingEnv = requiredEnv.filter((key) => !config[key]);
-if (missingEnv.length > 0) {
-  console.error("\n[ERROR] Missing required environment variables for notifications:", missingEnv.join(", "));
-  console.error("Notifications (email/WhatsApp) will NOT work until you set these in your .env file.\n");
-  // Optionally, exit the process if you want to force correct setup:
-  // process.exit(1);
-}
-
 const database = require("./db/mongo");
 const { authenticateToken, setTokenCookie, clearTokenCookie } = require("./middleware/auth");
 const { errorHandler, asyncHandler, notFoundHandler } = require("./middleware/errorHandler");
@@ -290,28 +276,18 @@ app.post("/api/save-payment", authenticateToken, paymentLimiter, asyncHandler(as
   try {
     const db = await database.getDb();
     const paymentsCollection = database.getPaymentsCollection(username);
-    let paymentRecord = await paymentsCollection.findOne({ 
+    const payment = await paymentsCollection.findOne({ 
       Client_Name: clientName, 
       Type: type, 
       Year: parseInt(year) 
     });
     
-    if (!paymentRecord) {
-      // Create payment record if it does not exist
-      const createdAt = new Date().toISOString();
-      const newPaymentDoc = createPaymentDocument(clientName, type, 0, parseInt(year), createdAt);
-      await paymentsCollection.insertOne(newPaymentDoc);
-      logger.payment("Created missing payment record for first payment", username, { clientName, type, year });
-      // Fetch the newly created record
-      paymentRecord = await paymentsCollection.findOne({ 
-        Client_Name: clientName, 
-        Type: type, 
-        Year: parseInt(year) 
-      });
+    if (!payment) {
+      throw new Error("Payment record not found");
     }
 
     const updatedPayments = { 
-      ...paymentRecord.Payments, 
+      ...payment.Payments, 
       [monthKey]: numericValue === 0 ? "" : numericValue.toString() 
     };
 
@@ -326,7 +302,7 @@ app.post("/api/save-payment", authenticateToken, paymentLimiter, asyncHandler(as
     }
 
     // Use centralized payment update utility
-    const updatedPayment = processPaymentUpdate(paymentRecord, updatedPayments, parseInt(year), prevYearPayment);
+    const updatedPayment = processPaymentUpdate(payment, updatedPayments, parseInt(year), prevYearPayment);
 
     await paymentsCollection.updateOne(
       { Client_Name: clientName, Type: type, Year: parseInt(year) },
@@ -334,9 +310,9 @@ app.post("/api/save-payment", authenticateToken, paymentLimiter, asyncHandler(as
     );
 
     const updatedRow = {
-      Client_Name: paymentRecord.Client_Name,
-      Type: paymentRecord.Type,
-      Amount_To_Be_Paid: parseFloat(paymentRecord.Amount_To_Be_Paid) || 0,
+      Client_Name: payment.Client_Name,
+      Type: payment.Type,
+      Amount_To_Be_Paid: parseFloat(payment.Amount_To_Be_Paid) || 0,
       january: updatedPayments.January || "",
       february: updatedPayments.February || "",
       march: updatedPayments.March || "",
@@ -363,15 +339,12 @@ app.post("/api/save-payment", authenticateToken, paymentLimiter, asyncHandler(as
 // Send Email
 app.post("/api/send-email", authenticateToken, asyncHandler(async (req, res) => {
   const { to, subject, html } = req.body;
-  console.log(`[EMAIL] Attempting to send email to: ${to}, subject: ${subject}`);
   
   if (!to || !subject || !html) {
-    console.error("[EMAIL] Missing required fields", { to, subject, html });
     throw new Error("Recipient email, subject, and HTML content are required");
   }
   
   if (!validateInput.email(to)) {
-    console.error("[EMAIL] Invalid recipient email address", { to });
     throw new Error("Invalid recipient email address");
   }
 
@@ -381,7 +354,6 @@ app.post("/api/send-email", authenticateToken, asyncHandler(async (req, res) => 
     res.json({ message: "Email sent successfully", messageId: result.messageId });
   } catch (error) {
     logger.error("Send email error", error, { to, subject });
-    console.error("[EMAIL] Error sending email:", error.message);
     throw error;
   }
 }));
@@ -389,15 +361,12 @@ app.post("/api/send-email", authenticateToken, asyncHandler(async (req, res) => 
 // Send WhatsApp
 app.post("/api/send-whatsapp", authenticateToken, whatsappLimiter, asyncHandler(async (req, res) => {
   const { to, message } = req.body;
-  console.log(`[WHATSAPP] Attempting to send WhatsApp to: ${to}`);
   
   if (!to || !message) {
-    console.error("[WHATSAPP] Missing required fields", { to, message });
     throw new Error("Recipient phone number and message are required");
   }
   
   if (!validateInput.phone(to)) {
-    console.error("[WHATSAPP] Invalid recipient phone number", { to });
     throw new Error("Invalid recipient phone number");
   }
   
@@ -439,26 +408,10 @@ app.post("/api/send-whatsapp", authenticateToken, whatsappLimiter, asyncHandler(
       });
       return res.json({ message: "WhatsApp message sent successfully", messageId: response.data.messageId || "N/A" });
     } else {
-      console.error("[WHATSAPP] Unexpected response from WhatsApp API:", response.data);
-      
-      // Handle specific error cases
-      let errorMessage = "Failed to send WhatsApp message";
-      
-      if (response.data.error) {
-        errorMessage = response.data.error;
-      } else if (response.data.message) {
-        errorMessage = response.data.message;
-      } else if (response.data.status === "error") {
-        errorMessage = "WhatsApp API returned error status";
-      } else if (response.data.sent === "false") {
-        errorMessage = "WhatsApp message was not sent - phone number may not be registered with WhatsApp";
-      }
-      
-      throw new Error(errorMessage);
+      throw new Error(`Unexpected response from WhatsApp API: ${JSON.stringify(response.data)}`);
     }
   } catch (error) {
     logger.error("Send WhatsApp error", error, { to, user: req.user.username });
-    console.error("[WHATSAPP] Error sending WhatsApp:", error.message);
     throw error;
   }
 }));
@@ -734,6 +687,7 @@ app.post("/api/add-new-year", authenticateToken, asyncHandler(async (req, res) =
     // Check if year already exists with retry logic
     let existingYear = null;
     retryCount = 0;
+    
     while (retryCount < maxRetries) {
       try {
         existingYear = await paymentsCollection.findOne({ Year: parseInt(year) });
@@ -741,13 +695,14 @@ app.post("/api/add-new-year", authenticateToken, asyncHandler(async (req, res) =
       } catch (error) {
         retryCount++;
         if (retryCount >= maxRetries) {
-          return res.status(200).json({ message: `Year ${year} already exists (after retries)` });
+          throw new Error(`Failed to check existing year after ${maxRetries} attempts: ${error.message}`);
         }
-        await new Promise(resolve => setTimeout(resolve, 200 * retryCount)); // shorter wait
+        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
       }
     }
+    
     if (existingYear) {
-      return res.status(200).json({ message: `Year ${year} already exists` });
+      throw new Error(`Year ${year} already exists`);
     }
     
     // Create payment records for all clients for the new year
@@ -770,9 +725,9 @@ app.post("/api/add-new-year", authenticateToken, asyncHandler(async (req, res) =
       } catch (error) {
         retryCount++;
         if (retryCount >= maxRetries) {
-          return res.status(500).json({ message: `Failed to insert payment records after ${maxRetries} attempts: ${error.message}` });
+          throw new Error(`Failed to insert payment records after ${maxRetries} attempts: ${error.message}`);
         }
-        await new Promise(resolve => setTimeout(resolve, 200 * retryCount)); // shorter wait
+        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
       }
     }
     
@@ -1015,65 +970,16 @@ app.post("/api/verify-whatsapp-contact", authenticateToken, asyncHandler(async (
     throw new Error("Phone number is required");
   }
   
-  if (!validateInput.phone(phoneNumber)) {
+  // Basic phone number validation
+  const cleanPhone = phoneNumber.replace(/\D/g, "");
+  if (cleanPhone.length < 10) {
     throw new Error("Invalid phone number format");
   }
   
-  try {
-    // Format phone number
-    let formattedPhone = phoneNumber.trim().replace(/[\s-]/g, "");
-    if (!formattedPhone.startsWith("+")) {
-      formattedPhone = `+91${formattedPhone.replace(/\D/g, "")}`;
-    }
-    
-    console.log(`[WHATSAPP_VERIFY] Checking WhatsApp registration for: ${formattedPhone}`);
-    
-    // Try to send a test message to UltraMsg API to verify the number
-    const verifyPayload = {
-      token: config.ULTRAMSG_TOKEN,
-      to: formattedPhone,
-      body: "WhatsApp verification test", // This won't actually be sent, just used for verification
-    };
-    
-    try {
-      // Use UltraMsg's contact verification endpoint if available
-      // For now, we'll use a simple approach - attempt to validate format and assume valid
-      const phoneRegex = /^\+[1-9]\d{1,14}$/;
-      if (!phoneRegex.test(formattedPhone)) {
-        throw new Error("Invalid international phone number format");
-      }
-      
-      // Additional validation: Indian numbers should be +91 followed by 10 digits
-      if (formattedPhone.startsWith("+91")) {
-        const indianNumber = formattedPhone.substring(3);
-        if (!/^[6-9]\d{9}$/.test(indianNumber)) {
-          throw new Error("Invalid Indian mobile number format");
-        }
-      }
-      
-      console.log(`[WHATSAPP_VERIFY] Phone number ${formattedPhone} passed format validation`);
-      
-      res.json({ 
-        message: "Phone number format is valid",
-        formattedNumber: formattedPhone,
-        isValidWhatsApp: true // Note: This is format validation, not actual WhatsApp registration check
-      });
-      
-    } catch (verifyError) {
-      console.error(`[WHATSAPP_VERIFY] Verification failed for ${formattedPhone}:`, verifyError.message);
-      
-      res.json({ 
-        message: "Phone number verification failed",
-        formattedNumber: formattedPhone,
-        isValidWhatsApp: false,
-        error: verifyError.message
-      });
-    }
-    
-  } catch (error) {
-    console.error(`[WHATSAPP_VERIFY] Error verifying phone number:`, error.message);
-    throw new Error(`Phone number verification failed: ${error.message}`);
-  }
+  res.json({ 
+    message: "Phone number format is valid",
+    formattedNumber: cleanPhone.startsWith("91") ? `+${cleanPhone}` : `+91${cleanPhone}`
+  });
 }));
 
 // Error handling middleware (must be last)
