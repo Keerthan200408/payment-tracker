@@ -5,12 +5,23 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
-import axios from "axios";
 import { debounce } from "lodash";
-
-const BASE_URL = "https://payment-tracker-aswa.onrender.com/api";
-const BATCH_DELAY = 1000;
-const BATCH_SIZE = 5;
+import { 
+  yearsAPI, 
+  typesAPI, 
+  paymentsAPI, 
+  communicationAPI, 
+  importAPI,
+  handleAPIError 
+} from '../utils/api';
+import BatchStatus from './BatchStatus.jsx';
+import LoadingSkeleton from './LoadingSkeleton.jsx';
+import DataTable from './DataTable.jsx';
+import usePerformanceMonitor from '../hooks/usePerformanceMonitor';
+import apiCacheManager from '../utils/apiCache';
+import PerformanceDashboard from './PerformanceDashboard.jsx';
+const BATCH_DELAY = 3000; // Increased from 1000 to 3000ms
+const BATCH_SIZE = 3; // Reduced from 5 to 3
 const CACHE_DURATION = 5 * 60 * 1000;
 
 // Conditional logging for production
@@ -46,6 +57,7 @@ const HomePage = ({
   refreshTrigger,
   fetchPayments = () => {},
   saveTimeouts = { current: {} },
+  showToast = () => {},
 }) => {
   const [availableYears, setAvailableYears] = useState(["2025"]);
   const [isLoadingYears, setIsLoadingYears] = useState(false);
@@ -54,7 +66,6 @@ const HomePage = ({
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isUpdating, setIsUpdating] = useState(false);
   const debounceTimersRef = useRef({});
-  const updateQueueRef = useRef([]);
   const batchTimerRef = useRef(null);
   const activeRequestsRef = useRef(new Set());
   const tableRef = useRef(null);
@@ -66,6 +77,16 @@ const HomePage = ({
   const mountedRef = useRef(true);
   const [isLoadingPayments, setIsLoadingPayments] = useState(false);
   const [lastRefreshTrigger, setLastRefreshTrigger] = useState(0);
+  const [lastUpdateTime, setLastUpdateTime] = useState(null);
+  const pendingUpdatesRef = useRef({}); // Track in-flight updates by key
+  const [showPerformanceDashboard, setShowPerformanceDashboard] = useState(false);
+
+  // Performance monitoring
+  const performanceMonitor = usePerformanceMonitor('HomePage', {
+    trackRenders: true,
+    trackApiCalls: true,
+    logToConsole: process.env.NODE_ENV === 'development'
+  });
 
   const MONTHS = [
     "january",
@@ -95,6 +116,7 @@ const calculateDuePayment = (rowData, months, currentYear) => {
     return 0;
   }
 
+  // Calculate current year's due payment
   const totalPaymentsMade = months.reduce((sum, month) => {
     const rawValue = sanitizedData[month];
     const payment = (rawValue === "" || rawValue === "0.00" || rawValue == null) ? 0 : parseFloat(rawValue);
@@ -106,20 +128,24 @@ const calculateDuePayment = (rowData, months, currentYear) => {
     return sum + payment;
   }, 0);
 
-  // Calculate active months (months with non-zero payments)
+  // Calculate active months (months with any value, not just positive payments)
   const activeMonths = months.filter((month) => {
     const rawValue = sanitizedData[month];
-    const payment = (rawValue === "" || rawValue === "0.00" || rawValue == null) ? 0 : parseFloat(rawValue);
-    return !isNaN(payment) && payment > 0;
+    return rawValue !== "" && rawValue !== null && rawValue !== undefined;
   }).length;
 
-  // Use active months for expected total
-  const expectedTotal = activeMonths > 0 ? amountToBePaid * activeMonths : 0;
-  const due = Math.max(expectedTotal - totalPaymentsMade, 0);
+  // Use active months for expected total (matches backend logic)
+  const expectedTotal = activeMonths * amountToBePaid;
+  const currentYearDue = Math.max(expectedTotal - totalPaymentsMade, 0);
   
-  log(`HomePage.jsx: calculateDuePayment: Expected = ${expectedTotal}, Total Paid = ${totalPaymentsMade}, Due_Payment = ${due}`);
+  // For cumulative calculation, we need to get the previous year's due payment
+  // For now, we'll use the current year due as the backend will handle cumulative calculation
+  // The backend's processPaymentUpdate function handles the cumulative logic properly
+  const totalDue = currentYearDue;
   
-  return Math.round(due * 100) / 100;
+  log(`HomePage.jsx: calculateDuePayment: Expected = ${expectedTotal}, Total Paid = ${totalPaymentsMade}, Current Year Due = ${currentYearDue}, Total Due = ${totalDue}, Active Months = ${activeMonths}`);
+  
+  return Math.round(totalDue * 100) / 100;
 };
 
 
@@ -296,12 +322,7 @@ const validateRowData = (rowData, currentYear) => {
         log("HomePage.jsx: Fetching user-specific years from API");
 
         try {
-          const response = await axios.get(`${BASE_URL}/get-user-years`, {
-            headers: { Authorization: `Bearer ${sessionToken}` },
-            timeout: 10000,
-            signal: abortSignal,
-          });
-
+          const response = await yearsAPI.getUserYears();
           const years = Array.isArray(response.data) ? response.data : ["2025"];
           setAvailableYears(years);
           setCachedData(cacheKey, years);
@@ -312,14 +333,7 @@ const validateRowData = (rowData, currentYear) => {
             return;
           }
           log('HomePage.jsx: Error fetching user years:', error);
-          const errorMsg = error.response?.data?.error || error.message;
-          let userMessage = 'Failed to fetch available years. Defaulting to current year.';
-          if (errorMsg.includes('Sheet not found')) {
-            userMessage = 'No payment data found. Defaulting to current year.';
-          } else if (errorMsg.includes('Quota exceeded')) {
-            userMessage = 'Server is busy. Defaulting to current year.';
-          }
-          setLocalErrorMessage(userMessage);
+          handleAPIError(error, setLocalErrorMessage);
           setAvailableYears([new Date().getFullYear().toString()]);
         } finally {
           if (mountedRef.current) {
@@ -346,6 +360,12 @@ const validateRowData = (rowData, currentYear) => {
     const newYear = (parseInt(currentYear) + 1).toString();
     log(`HomePage.jsx: Attempting to add new year: ${newYear}`);
 
+    // Prevent multiple simultaneous requests
+    if (isLoadingYears) {
+      log("HomePage.jsx: Add new year request already in progress, skipping");
+      return;
+    }
+
     if (mountedRef.current) {
       setIsLoadingYears(true);
     }
@@ -353,15 +373,10 @@ const validateRowData = (rowData, currentYear) => {
     const controller = new AbortController();
 
     try {
-      const response = await axios.post(
-        `${BASE_URL}/add-new-year`,
-        { year: newYear },
-        {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-          timeout: 10000,
-          signal: controller.signal,
-        }
-      );
+      // Add a small delay to ensure any previous requests are completed
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const response = await yearsAPI.addNewYear({ year: newYear });
       log("HomePage.jsx: Add new year response:", response.data);
 
       const yearsCacheKey = getCacheKey("/get-user-years", { sessionToken });
@@ -371,19 +386,10 @@ const validateRowData = (rowData, currentYear) => {
 
       await searchUserYears(controller.signal);
 
-      const clientsResponse = await axios.get(`${BASE_URL}/get-clients`, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-        timeout: 10000,
-        signal: controller.signal,
-      });
+      const clientsResponse = await clientsAPI.getClients();
       const expectedClientCount = clientsResponse.data.length;
 
-      const paymentsResponse = await axios.get(`${BASE_URL}/get-payments-by-year`, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-        params: { year: newYear },
-        timeout: 10000,
-        signal: controller.signal,
-      });
+      const paymentsResponse = await paymentsAPI.getPaymentsByYear(newYear);
 
       const paymentsData = paymentsResponse.data || [];
       setPaymentsData(paymentsData);
@@ -399,16 +405,16 @@ const validateRowData = (rowData, currentYear) => {
         const errorMsg = `No clients found for ${newYear}. Please check the Clients sheet.`;
         setLocalErrorMessage(errorMsg);
         setErrorMessage(errorMsg);
-        alert(errorMsg);
+        showToast(errorMsg, 'error', 5000);
       } else if (paymentsData.length < expectedClientCount) {
         const errorMsg = `Warning: Only ${paymentsData.length} client(s) found for ${newYear}. Expected ${expectedClientCount} clients from the Clients sheet.`;
         setLocalErrorMessage(errorMsg);
         setErrorMessage(errorMsg);
-        alert(errorMsg);
+        showToast(errorMsg, 'warning', 5000);
       } else {
         setLocalErrorMessage("");
         setErrorMessage("");
-        alert(`Year ${newYear} added successfully with ${paymentsData.length} clients.`);
+        showToast(`Year ${newYear} added successfully with ${paymentsData.length} clients.`, 'success', 3000);
       }
     } catch (error) {
       if (error.name === "AbortError") {
@@ -418,16 +424,28 @@ const validateRowData = (rowData, currentYear) => {
       log("HomePage.jsx: Error adding new year:", error);
       let errorMsg = error.response?.data?.error || "An unknown error occurred";
       let userMessage = `Failed to add new year: ${errorMsg}`;
-      if (errorMsg.includes("Please add or import payment data")) {
-        userMessage = "Please add or import payment data for the current year before adding a new year.";
-      } else if (errorMsg.includes("Sheet already exists")) {
-        userMessage = "This year already exists for your account.";
+      
+      // Handle specific error cases
+      if (errorMsg.includes("already exists")) {
+        userMessage = `Year ${newYear} already exists. Switching to ${newYear}...`;
+        // Automatically switch to the new year even if it already exists
+        setCurrentYear(newYear);
+        localStorage.setItem("currentYear", newYear);
+        setLocalErrorMessage("");
+        setErrorMessage("");
+        showToast(userMessage, 'info', 3000);
+        return;
       } else if (errorMsg.includes("No clients found")) {
-        userMessage = "No clients found in the Clients sheet. Please add clients before creating a new year.";
+        userMessage = "No clients found. Please add clients before creating a new year.";
+      } else if (errorMsg.includes("Database connection failed") || errorMsg.includes("Database collections not accessible")) {
+        userMessage = "Database connection issue. Please try again in a few seconds.";
+      } else if (errorMsg.includes("Failed to fetch clients") || errorMsg.includes("Failed to insert payment records")) {
+        userMessage = "Database operation failed. Please try again.";
       }
+      
       setLocalErrorMessage(userMessage);
       setErrorMessage(userMessage);
-      alert(userMessage);
+      showToast(userMessage, 'error', 5000);
     } finally {
       if (mountedRef.current) {
         setIsLoadingYears(false);
@@ -478,285 +496,6 @@ const validateRowData = (rowData, currentYear) => {
     log(`Due Payment Debug - Row ${rowIndex} at ${stage}: ${value}`);
   };
 
-  const processBatchUpdates = useCallback(
-    async () => {
-      if (!updateQueueRef.current.length) {
-        log("HomePage.jsx: No updates to process");
-        batchTimerRef.current = null;
-        return;
-      }
-
-      const updates = [...updateQueueRef.current];
-      updateQueueRef.current = [];
-      batchTimerRef.current = null;
-      
-      log(`HomePage.jsx: Processing batch of ${updates.length} updates for year ${currentYear}`, updates);
-      setIsUpdating(true);
-
-      const rowDataCache = new Map();
-      const localValuesCache = { ...localInputValues };
-      const missingContactClients = [];
-
-      updates.forEach(({ rowIndex }) => {
-        if (!rowDataCache.has(rowIndex) && paymentsData[rowIndex]) {
-          rowDataCache.set(rowIndex, paymentsData[rowIndex]);
-        }
-      });
-
-      const updatesByRow = new Map();
-      
-      updates.forEach(({ rowIndex, month, value, year }) => {
-        const rowData = rowDataCache.get(rowIndex);
-        if (!rowData) {
-          log(`HomePage.jsx: Invalid rowIndex ${rowIndex}`);
-          return;
-        }
-
-        if (!updatesByRow.has(rowIndex)) {
-          updatesByRow.set(rowIndex, {
-            rowIndex,
-            year,
-            updates: [],
-            clientName: rowData.Client_Name,
-            type: rowData.Type,
-            clientEmail: rowData.Email || "",
-            clientPhone: rowData.Phone_Number || "",
-            rowData,
-          });
-        }
-        
-        updatesByRow.get(rowIndex).updates.push({ 
-          month: month.toLowerCase(),
-          value 
-        });
-      });
-
-      try {
-        const updatePromises = Array.from(updatesByRow.values()).map(async (rowUpdate) => {
-          const { rowIndex, year, updates, clientName, type, clientEmail, clientPhone, rowData } = rowUpdate;
-          try {
-            log(`HomePage.jsx: Sending batch update for ${clientName}, year ${year}`, updates);
-            const response = await axios.post(
-  `${BASE_URL}/batch-save-payments`,
-  { clientName, type, updates },
-  {
-    headers: { 
-      Authorization: `Bearer ${sessionToken}`,
-      'Content-Type': 'application/json'
-    },
-    params: { year },
-    timeout: 8000,
-    validateStatus: (status) => status < 500,
-  }
-);
-
-const { updatedRow } = response.data;
-
-// Recalculate Due_Payment to ensure correctness
-const recalculatedDuePayment = calculateDuePayment(
-  { ...updatedRow, Client_Name: clientName, Type: type },
-  months,
-  currentYear
-);
-
-// Log for debugging
-log(`HomePage.jsx: Backend response for ${clientName}`, {
-  Backend_Due_Payment: updatedRow.Due_Payment,
-  Recalculated_Due_Payment: recalculatedDuePayment,
-  Year: year,
-  Updates: updates.map(u => `${u.month}: ${u.value}`)
-});
-
-// Always use recalculated value
-const correctedRow = {
-  ...updatedRow,
-  Due_Payment: recalculatedDuePayment.toFixed(2)
-};
-
-// Validate backend response
-if (Math.abs(parseFloat(updatedRow.Due_Payment) - recalculatedDuePayment) > 0.01) {
-  log(`HomePage.jsx: Backend Due_Payment mismatch for ${clientName}: Backend = ${updatedRow.Due_Payment}, Frontend = ${recalculatedDuePayment}`);
-}
-
-const notifyStatuses = updates.map(({ month, value }) => {
-  const paidAmount = parseFloat(value) || 0;
-  const expectedAmount = parseFloat(rowData.Amount_To_Be_Paid) || 0;
-  let status = "Unpaid";
-  if (paidAmount >= expectedAmount && expectedAmount > 0) status = "Paid";
-  else if (paidAmount > 0 && expectedAmount > 0) status = "PartiallyPaid";
-  return {
-    month: month.charAt(0).toUpperCase() + month.slice(1),
-    status,
-    paidAmount,
-    expectedAmount,
-  };
-});
-
-if (clientEmail || clientPhone) {
-  await handleNotifications(
-    clientName,
-    clientEmail,
-    clientPhone,
-    type,
-    year,
-    notifyStatuses,
-    recalculatedDuePayment.toFixed(2)
-  );
-}
-
-return {
-  success: true,
-  rowIndex,
-  updatedRow: correctedRow,
-  updates: rowUpdate.updates,
-  hasNotificationContact: !!(clientEmail || clientPhone),
-};
-
-          } catch (error) {
-            log(`HomePage.jsx: Failed to batch update row ${rowIndex}:`, error);
-            return {
-              success: false,
-              rowIndex,
-              error: error.response?.data?.error || error.message,
-              updates: rowUpdate.updates,
-            };
-          }
-        });
-
-        const results = await Promise.allSettled(updatePromises);
-        
-        const failedUpdates = [];
-        const successfulUpdates = [];
-
-        results.forEach((result) => {
-          if (result.status === 'fulfilled') {
-            if (result.value.success) {
-              successfulUpdates.push(result.value);
-            } else {
-              failedUpdates.push(result.value);
-            }
-          } else {
-            log('HomePage.jsx: Promise rejected:', result.reason);
-          }
-        });
-
-        if (successfulUpdates.length > 0) {
-          setPaymentsData((prev) => {
-            const updated = [...prev];
-            
-            successfulUpdates.forEach(({ rowIndex, updatedRow }) => {
-              if (updatedRow && updated[rowIndex]) {
-                log(`HomePage.jsx: Updating row ${rowIndex} with recalculated Due_Payment: ${updatedRow.Due_Payment} for year ${currentYear}`);
-                
-                const mappedRow = {
-                  ...updated[rowIndex],
-                  Client_Name: updatedRow.Client_Name,
-                  Type: updatedRow.Type,
-                  Amount_To_Be_Paid: updatedRow.Amount_To_Be_Paid,
-                  Email: updatedRow.Email,
-                  Phone_Number: updatedRow.Phone_Number,
-                  January: updatedRow.january || "",
-                  February: updatedRow.february || "",
-                  March: updatedRow.march || "",
-                  April: updatedRow.april || "",
-                  May: updatedRow.may || "",
-                  June: updatedRow.june || "",
-                  July: updatedRow.july || "",
-                  August: updatedRow.august || "",
-                  September: updatedRow.september || "",
-                  October: updatedRow.october || "",
-                  November: updatedRow.november || "",
-                  December: updatedRow.december || "",
-                  Due_Payment: updatedRow.Due_Payment
-                };
-                
-                updated[rowIndex] = mappedRow;
-              }
-            });
-            
-            log(`HomePage.jsx: Updated paymentsData with ${successfulUpdates.length} rows for year ${currentYear}`);
-            return updated;
-          });
-
-          setPendingUpdates((prev) => {
-            const newPending = { ...prev };
-            successfulUpdates.forEach(({ updates, rowIndex }) => {
-              updates.forEach(({ month }) => {
-                const originalMonth = month.charAt(0).toUpperCase() + month.slice(1);
-                delete newPending[`${rowIndex}-${originalMonth}`];
-              });
-            });
-            return newPending;
-          });
-
-          setLocalInputValues((prev) => {
-            const newValues = { ...prev };
-            successfulUpdates.forEach(({ updates, rowIndex, updatedRow }) => {
-              updates.forEach(({ month }) => {
-                const originalMonth = month.charAt(0).toUpperCase() + month.slice(1);
-                const key = `${rowIndex}-${originalMonth}`;
-                newValues[key] = updatedRow[month] || "";
-              });
-            });
-            return newValues;
-          });
-
-          try {
-            const paymentsCacheKey = getCacheKey('/get-payments-by-year', {
-              year: currentYear,
-              sessionToken,
-            });
-            log(`HomePage.jsx: Clearing cache for ${paymentsCacheKey}`);
-            delete apiCacheRef.current[paymentsCacheKey];
-            await fetchPayments(sessionToken, currentYear, true);
-            log("HomePage.jsx: Refreshed payments data after batch update");
-          } catch (error) {
-            log("HomePage.jsx: Failed to refresh payments data:", error);
-            setLocalErrorMessage("Updated payments, but failed to refresh data. Please reload if issues persist.");
-          }
-        }
-
-        if (failedUpdates.length > 0) {
-          const retryUpdates = [];
-          
-          failedUpdates.forEach(({ rowIndex, updates, error }) => {
-            const rowData = rowDataCache.get(rowIndex);
-            const errorMsg = `Failed to update ${rowData?.Client_Name || "unknown"}: ${error}`;
-            
-            log(`HomePage.jsx: ${errorMsg}`);
-            setLocalErrorMessage(errorMsg);
-            setErrorMessage(errorMsg);
-
-            setPaymentsData((prev) =>
-              prev.map((row, idx) =>
-                idx === rowIndex ? rowDataCache.get(rowIndex) || row : row
-              )
-            );
-
-            updates.forEach((update) => {
-              const originalMonth = update.month.charAt(0).toUpperCase() + update.month.slice(1);
-              retryUpdates.push({ 
-                ...update, 
-                month: originalMonth, 
-                rowIndex 
-              });
-            });
-          });
-
-          updateQueueRef.current.unshift(...retryUpdates);
-        }
-        
-      } catch (error) {
-        log("HomePage.jsx: Batch update error:", error);
-        setLocalErrorMessage(`Batch update failed: ${error.message}`);
-        setErrorMessage(`Batch update failed: ${error.message}`);
-      } finally {
-        setIsUpdating(false);
-      }
-    },
-    [paymentsData, sessionToken, months, localInputValues, setErrorMessage, setLocalErrorMessage, fetchPayments, currentYear, getCacheKey]
-  );
-
   const handleNotifications = useCallback(
     async (clientName, clientEmail, clientPhone, type, year, notifyStatuses, duePayment) => {
       log(`HomePage.jsx: Starting notification for ${clientName}`, {
@@ -783,14 +522,9 @@ return {
 
         try {
           log(`HomePage.jsx: Verifying WhatsApp for ${clientPhone}`);
-          const verifyResponse = await axios.post(
-            `${BASE_URL}/verify-whatsapp-contact`,
-            { phone: clientPhone.trim() },
-            {
-              headers: { Authorization: `Bearer ${sessionToken}` },
-              timeout: 5000,
-            }
-          );
+          const verifyResponse = await communicationAPI.verifyWhatsAppContact({
+            phoneNumber: clientPhone.trim()
+          });
 
           if (!verifyResponse.data.isValidWhatsApp) {
             log(`HomePage.jsx: ${clientPhone} is not registered with WhatsApp`);
@@ -826,17 +560,10 @@ return {
               .join("\n")}${duePaymentText}\n\nPlease review your account or contact us for clarifications.\nBest regards,\nPayment Tracker Team`;
 
             log(`HomePage.jsx: Sending WhatsApp to ${clientPhone}`);
-            const response = await axios.post(
-              `${BASE_URL}/send-whatsapp`,
-              {
-                to: clientPhone.trim(),
-                message: messageContent,
-              },
-              {
-                headers: { Authorization: `Bearer ${sessionToken}` },
-                timeout: 10000,
-              }
-            );
+            const response = await communicationAPI.sendWhatsApp({
+              to: clientPhone.trim(),
+              message: messageContent,
+            });
 
             log(`HomePage.jsx: WhatsApp sent successfully to ${clientPhone} for ${clientName}`, {
               messageId: response.data.messageId || "N/A",
@@ -912,18 +639,11 @@ return {
           `;
 
           log(`HomePage.jsx: Sending email to ${clientEmail} for ${clientName}`);
-          const response = await axios.post(
-            `${BASE_URL}/send-email`,
-            {
-              to: clientEmail.trim(),
-              subject: `Payment Status Update - ${clientName} (${type}) - ${year}`,
-              html: emailContent,
-            },
-            {
-              headers: { Authorization: `Bearer ${sessionToken}` },
-              timeout: 10000,
-            }
-          );
+          const response = await communicationAPI.sendEmail({
+            to: clientEmail.trim(),
+            subject: `Payment Status Update - ${clientName} (${type}) - ${year}`,
+            html: emailContent,
+          });
 
           log(`HomePage.jsx: Email sent successfully to ${clientEmail} for ${clientName}`, {
             messageId: response.data.messageId || "N/A",
@@ -984,85 +704,106 @@ return {
         [key]: true,
       }));
 
-      debounceTimersRef.current[key] = setTimeout(() => {
-        const existingIndex = updateQueueRef.current.findIndex(
-          (update) => update.rowIndex === rowIndex && update.month === month
-        );
-        
-        if (existingIndex !== -1) {
-          updateQueueRef.current[existingIndex] = {
-            rowIndex,
-            month,
-            value,
-            year,
-            timestamp: Date.now(),
-          };
-        } else {
-          updateQueueRef.current.push({
-            rowIndex,
-            month,
-            value,
-            year,
-            timestamp: Date.now(),
+      debounceTimersRef.current[key] = setTimeout(async () => {
+        try {
+          const originalRow = paymentsData[rowIndex];
+          log(`HomePage.jsx: Saving payment for ${originalRow.Client_Name}, month: ${month}, value: ${value}, year: ${currentYear}`);
+          
+          // Ensure currentYear is valid
+          if (!currentYear || currentYear === 'undefined' || currentYear === 'null') {
+            log(`HomePage.jsx: Invalid currentYear: ${currentYear}, type: ${typeof currentYear}`);
+            throw new Error(`Invalid year: ${currentYear}`);
+          }
+          
+          log(`HomePage.jsx: Making API call with year: ${currentYear}`);
+          const response = await paymentsAPI.savePayment({
+            clientName: originalRow.Client_Name,
+            type: originalRow.Type,
+            month: month.toLowerCase(),
+            value: value || ""
+          }, currentYear);
+          
+          if (response.data.updatedRow) {
+            setPaymentsData((prev) =>
+              prev.map((row, idx) => {
+                if (idx !== rowIndex) return row;
+                
+                // Preserve the real-time due payment calculation
+                // The backend response might have stale due payment data
+                const updatedRow = {
+                  ...row,
+                  ...response.data.updatedRow,
+                  Email: row.Email || response.data.updatedRow.Email,
+                };
+                
+                // Recalculate due payment with current data to ensure accuracy
+                const recalculatedDue = calculateDuePayment(updatedRow, months, currentYear);
+                updatedRow.Due_Payment = recalculatedDue.toFixed(2);
+                
+                log(`HomePage.jsx: debouncedUpdate: Updated due payment for ${updatedRow.Client_Name || 'unknown'} to ${recalculatedDue}`);
+                
+                return updatedRow;
+              })
+            );
+          }
+          
+          // Clear pending status
+          setPendingUpdates((prev) => {
+            const newPending = { ...prev };
+            delete newPending[key];
+            return newPending;
           });
+          
+          // Update last update time
+          setLastUpdateTime(Date.now());
+          
+          log("HomePage.jsx: Payment saved successfully");
+          
+        } catch (error) {
+          log(`HomePage.jsx: Error saving payment:`, error);
+          log(`HomePage.jsx: Error details - status: ${error.response?.status}, data:`, error.response?.data);
+          
+          // Clear pending status on error
+          setPendingUpdates((prev) => {
+            const newPending = { ...prev };
+            delete newPending[key];
+            return newPending;
+          });
+          
+          setErrorMessage(`Failed to save payment: ${error.response?.data?.error || error.message}`);
         }
-
-        log("HomePage.jsx: Queued update:", { rowIndex, month, value, year });
-
-        if (!batchTimerRef.current) {
-          const batchDelay = updateQueueRef.current.length > 5 ? 500 : 700;
-          batchTimerRef.current = setTimeout(processBatchUpdates, batchDelay);
-        }
-
+        
         delete debounceTimersRef.current[key];
-      }, 600);
+      }, 1000); // Simple 1 second delay
     },
-    [paymentsData, setErrorMessage, processBatchUpdates]
+    [paymentsData, setErrorMessage, setPaymentsData, currentYear, months, calculateDuePayment]
   );
+  
 
- const handleYearChangeDebounced = useCallback(
+const handleYearChangeDebounced = useCallback(
   debounce(async (year) => {
     log("HomePage.jsx: Year change requested to:", year);
     
     // Clear existing states to prevent stale data
-    setPaymentsData([]);
     setLocalInputValues({});
     setPendingUpdates({});
-    updateQueueRef.current = []; // Clear pending updates queue
     if (batchTimerRef.current) {
       clearTimeout(batchTimerRef.current);
       batchTimerRef.current = null;
     }
 
-    // Update currentYear and store in localStorage
-    localStorage.setItem("currentYear", year);
-    setCurrentYear(year);
-
-    if (sessionToken) {
-      setIsLoadingPayments(true);
-      log("HomePage.jsx: Fetching payments for year:", year);
-      
-      // Clear cache for the new year to ensure fresh data
-      const paymentsCacheKey = getCacheKey('/get-payments-by-year', {
-        year,
-        sessionToken,
-      });
-      delete apiCacheRef.current[paymentsCacheKey];
-
-      try {
-        await fetchPayments(sessionToken, year, true); // Force fetch to bypass cache
-        log(`HomePage.jsx: Payments fetched for year ${year}: ${paymentsData.length} items`);
-      } catch (error) {
-        log('HomePage.jsx: Error fetching payments for year:', year, error);
-        setLocalErrorMessage(
-          error.response?.data?.error || 'Failed to load payments data for the selected year.'
-        );
-      } finally {
-        setIsLoadingPayments(false);
-      }
+    // Use the parent's handleYearChange function to properly update the parent's state
+    if (handleYearChange) {
+      await handleYearChange(year);
+    } else {
+      // Fallback: update currentYear and localStorage
+      localStorage.setItem("currentYear", year);
+      setCurrentYear(year);
     }
-  }, 300),
-  [setCurrentYear, sessionToken, fetchPayments, getCacheKey, setPaymentsData, setLocalErrorMessage]
+    
+    log("HomePage.jsx: Year change completed");
+  }, 1000), // Increased from 300ms to 1000ms
+  [setCurrentYear, handleYearChange, setLocalInputValues, setPendingUpdates]
 );
 
 const handleInputChange = useCallback(
@@ -1081,11 +822,13 @@ const handleInputChange = useCallback(
       [key]: trimmedValue,
     }));
 
-    // Recalculate Due_Payment for full row before update
+    // Create updated row with new value
     const updatedRow = { ...paymentsData[rowIndex], [month]: parsedValue };
+    
+    // Recalculate Due_Payment using the same logic as backend
     const recalculatedDue = calculateDuePayment(updatedRow, months, currentYear);
 
-    // Update the frontend view immediately
+    // Update the frontend view immediately with new due payment
     setPaymentsData((prev) => {
       const newData = [...prev];
       newData[rowIndex] = {
@@ -1093,24 +836,17 @@ const handleInputChange = useCallback(
         [month]: trimmedValue, // Use trimmedValue for UI consistency
         Due_Payment: recalculatedDue.toFixed(2),
       };
-      log(`HomePage.jsx: handleInputChange: Optimistic update for ${newData[rowIndex].Client_Name || 'unknown'}, ${month} = ${trimmedValue}, Due_Payment = ${recalculatedDue}`);
+      log(`HomePage.jsx: handleInputChange: Real-time update for ${newData[rowIndex].Client_Name || 'unknown'}, ${month} = ${trimmedValue}, Due_Payment = ${recalculatedDue}`);
       return newData;
     });
 
-    // Backend update
-    updatePayment(
-      rowIndex,
-      month,
-      parsedValue, // Send parsedValue as a string number (e.g., "0" or "1000")
-      currentYear,
-      paymentsData,
-      setPaymentsData,
-      setErrorMessage,
-      sessionToken,
-      saveTimeouts
-    );
+    // Queue backend update (debounced) - only if value actually changed
+    const currentValue = paymentsData[rowIndex]?.[month] || "";
+    if (trimmedValue !== currentValue) {
+      debouncedUpdate(rowIndex, month, parsedValue, currentYear);
+    }
   },
-  [updatePayment, paymentsData, currentYear, sessionToken, setPaymentsData, setErrorMessage, months]
+  [debouncedUpdate, paymentsData, currentYear, setPaymentsData, setErrorMessage, months, calculateDuePayment]
 );
 
 
@@ -1120,18 +856,21 @@ const handleInputChange = useCallback(
   const loadPaymentsData = async () => {
     if (!sessionToken || !currentYear) return;
 
+    // Prevent multiple simultaneous loads
+    if (isLoadingPayments) {
+      log("HomePage.jsx: Already loading payments, skipping");
+      return;
+    }
+
     setIsLoadingPayments(true);
     log(`HomePage.jsx: Fetching payments for year ${currentYear} due to refreshTrigger: ${refreshTrigger}`);
     
-    const paymentsCacheKey = getCacheKey('/get-payments-by-year', {
-      year: currentYear,
-      sessionToken,
-    });
+    const cacheKey = apiCacheManager.generateKey('payments', { year: currentYear, user: currentUser });
+    const startTime = performance.now();
 
     // Clear stale states
     setLocalInputValues({});
     setPendingUpdates({});
-    updateQueueRef.current = [];
     if (batchTimerRef.current) {
       clearTimeout(batchTimerRef.current);
       batchTimerRef.current = null;
@@ -1140,12 +879,25 @@ const handleInputChange = useCallback(
     // Invalidate cache if refreshTrigger changes
     if (refreshTrigger && refreshTrigger !== lastRefreshTrigger) {
       log(`HomePage.jsx: Invalidating cache for payments_${currentYear} due to refreshTrigger change`);
-      delete apiCacheRef.current[paymentsCacheKey];
+      apiCacheManager.invalidate(`payments|year:${currentYear}`);
       setLastRefreshTrigger(refreshTrigger);
     }
 
     try {
-      await fetchPayments(sessionToken, currentYear, refreshTrigger && refreshTrigger !== lastRefreshTrigger);
+      const forceRefresh = refreshTrigger && refreshTrigger !== lastRefreshTrigger;
+      
+      const result = await apiCacheManager.executeWithCache(
+        cacheKey,
+        () => fetchPayments(sessionToken, currentYear, forceRefresh),
+        {
+          forceRefresh,
+          cacheDuration: 5 * 60 * 1000, // 5 minutes
+          retries: 2, // Reduced from 3 to 2
+          retryDelay: 2000 // Increased from 1000 to 2000ms
+        }
+      );
+
+      performanceMonitor.trackApiCall('fetchPayments', startTime);
       log(`HomePage.jsx: Payments fetched for year ${currentYear}: ${paymentsData.length} items`);
 
       if (paymentsData.length > 0) {
@@ -1156,7 +908,9 @@ const handleInputChange = useCallback(
       setLocalErrorMessage(
         error.response?.data?.error || 'Failed to load payments data.'
       );
-      const cachedData = getCachedData(paymentsCacheKey);
+      
+      // Try to get cached data as fallback
+      const cachedData = apiCacheManager.get(cacheKey);
       if (cachedData && !refreshTrigger) {
         setPaymentsData(cachedData);
         log(`HomePage.jsx: Using cached payments for ${currentYear}: ${cachedData.length} items`);
@@ -1166,8 +920,13 @@ const handleInputChange = useCallback(
     }
   };
 
-  loadPaymentsData();
-}, [sessionToken, currentYear, fetchPayments, getCacheKey, getCachedData, setPaymentsData, refreshTrigger, lastRefreshTrigger, setLocalErrorMessage]);
+  // Add a small delay to prevent rapid successive calls
+  const timeoutId = setTimeout(() => {
+    loadPaymentsData();
+  }, 100);
+
+  return () => clearTimeout(timeoutId);
+}, [sessionToken, currentYear, fetchPayments, setPaymentsData, refreshTrigger, lastRefreshTrigger, setLocalErrorMessage, currentUser, performanceMonitor, isLoadingPayments]);
 
   useEffect(() => {
     onMount();
@@ -1194,6 +953,15 @@ const handleInputChange = useCallback(
     });
     setLocalInputValues((prev) => ({ ...prev, ...initialValues }));
   }, [paymentsData, months]);
+
+  // Clear local states when paymentsData changes (e.g., when year changes)
+  useEffect(() => {
+    if (paymentsData.length > 0) {
+      setLocalInputValues({});
+      setPendingUpdates({});
+      log(`HomePage.jsx: Cleared local states for new paymentsData with ${paymentsData.length} items`);
+    }
+  }, [paymentsData]);
 
   useEffect(() => {
     if (paymentsData?.length) {
@@ -1235,11 +1003,6 @@ const handleInputChange = useCallback(
         clearTimeout(batchTimerRef.current);
         batchTimerRef.current = null;
       }
-
-      if (updateQueueRef.current.length > 0 && mountedRef.current) {
-        const updates = [...updateQueueRef.current];
-        updateQueueRef.current = [];
-      }
     };
   }, []);
 
@@ -1268,15 +1031,7 @@ const handleInputChange = useCallback(
     const capitalizedType = newType.trim().toUpperCase();
     try {
       const response = await retryWithBackoff(
-        () =>
-          axios.post(
-            `${BASE_URL}/add-type`,
-            { type: capitalizedType },
-            {
-              headers: { Authorization: `Bearer ${sessionToken}` },
-              timeout: 5000,
-            }
-          ),
+        () => typesAPI.addType({ type: capitalizedType }),
         3,
         1000
       );
@@ -1338,6 +1093,13 @@ const handleInputChange = useCallback(
 
     return (
       <>
+        <BatchStatus
+          isUpdating={Object.keys(pendingUpdates).length > 0}
+          pendingCount={Object.keys(pendingUpdates).length}
+          lastUpdateTime={lastUpdateTime}
+          hasUnsavedChanges={Object.keys(pendingUpdates).length > 0}
+          batchStatus={null}
+        />
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
           <div className="flex gap-3 mb-4 sm:mb-0">
             <button
@@ -1427,127 +1189,40 @@ const handleInputChange = useCallback(
 
         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full" ref={tableRef}>
-              <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
-                <tr>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-                    Client
-                  </th>
-                  <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-                    Type
-                    <button
-                      onClick={() => {
-                        log("HomePage.jsx: Add Type button clicked");
-                        setIsTypeModalOpen(true);
-                      }}
-                      className="ml-2 text-blue-600 hover:text-blue-800 text-xs"
-                      title="Add New Type"
-                    >
-                      <span className="inline-flex items-center">
-                        {typeof window !== "undefined" && window.FontAwesome ? (
-                          <i className="fas fa-plus-circle mr-1"></i>
-                        ) : (
-                          <span className="mr-1">+</span>
-                        )}
-                        Add Type
-                      </span>
-                    </button>
-                  </th>
-                  <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-                    Amount To Be Paid
-                  </th>
-                  {months.map((month, index) => (
-                    <th
-                      key={index}
-                      className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50"
-                    >
-                      {month.charAt(0).toUpperCase() + month.slice(1)}
-                    </th>
-                  ))}
-                  <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-                    Total Due
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {paginatedData.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={15}
-                      className="px-6 py-12 text-center text-gray-500"
-                    >
-                      <div className="flex flex-col items-center">
-                        <i className="fas fa-users text-4xl text-gray-300 mb-3"></i>
-                        <p className="text-lg font-medium text-gray-600">
-                          {searchQuery
-                            ? "No clients found matching your search."
-                            : "No payments found."}
-                        </p>
-                        <p className="text-sm text-gray-400 mt-1">
-                          {!searchQuery && "No payment data found. Try refreshing or check the Clients sheet."}
-                        </p>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  paginatedData.map((row, localRowIndex) => {
-                    const globalRowIndex = paymentsData.findIndex(
-                      (r) => r.Client_Name === row.Client_Name
-                    );
-                    return (
-                      <tr
-                        key={`${row?.Client_Name || "unknown"}-${localRowIndex}`}
-                        onContextMenu={(e) => handleContextMenu(e, globalRowIndex)}
-                        className="hover:bg-gray-50"
-                      >
-                        <td className="px-6 py-4 whitespace-nowrap flex items-center text-sm sm:text-base text-gray-900">
-                          <i className="fas fa-user-circle mr-2 text-gray-400"></i>
-                          {row?.Client_Name || "N/A"}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-center text-sm sm:text-base text-gray-900">
-                          {row?.Type || "N/A"}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm sm:text-base text-gray-900">
-                          ₹{(parseFloat(row?.Amount_To_Be_Paid) || 0).toLocaleString()}.00
-                        </td>
-                        {months.map((month, colIndex) => (
-                          <td
-                            key={colIndex}
-                            className="px-6 py-4 whitespace-nowrap text-center"
-                          >
-                            <input
-                              type="text"
-                              value={
-                                localInputValues[`${globalRowIndex}-${month}`] !== undefined
-                                  ? localInputValues[`${globalRowIndex}-${month}`]
-                                  : row?.[month] || ""
-                              }
-                              onChange={(e) =>
-                                handleInputChange(globalRowIndex, month, e.target.value)
-                              }
-                              className={`w-20 p-1 border border-gray-300 rounded text-right focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base ${getInputBackgroundColor(
-                                row,
-                                month,
-                                globalRowIndex
-                              )}`}
-                              placeholder="0.00"
-                              title={
-                                pendingUpdates[`${globalRowIndex}-${month}`]
-                                  ? "Saving..."
-                                  : ""
-                              }
-                            />
-                          </td>
-                        ))}
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm sm:text-base text-gray-900">
-                          ₹{(parseFloat(row?.Due_Payment) || 0).toLocaleString()}.00
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900">Payment Data</h3>
+              <button
+                onClick={() => {
+                  log("HomePage.jsx: Add Type button clicked");
+                  setIsTypeModalOpen(true);
+                }}
+                className="text-blue-600 hover:text-blue-800 text-sm flex items-center"
+                title="Add New Type"
+              >
+                <span className="inline-flex items-center">
+                  {typeof window !== "undefined" && window.FontAwesome ? (
+                    <i className="fas fa-plus-circle mr-1"></i>
+                  ) : (
+                    <span className="mr-1">+</span>
+                  )}
+                  Add Type
+                </span>
+              </button>
+            </div>
+            <DataTable
+              data={paginatedData}
+              months={months}
+              onCellEdit={handleInputChange}
+              onContextMenu={handleContextMenu}
+              isLoading={isLoadingPayments}
+              currentYear={currentYear}
+              showToast={showToast}
+              localInputValues={localInputValues}
+              handleInputChange={handleInputChange}
+              getInputBackgroundColor={getInputBackgroundColor}
+              pendingUpdates={pendingUpdates}
+              isReportsPage={isReportsPage}
+            />
           </div>
         </div>
 
@@ -1888,6 +1563,24 @@ const handleInputChange = useCallback(
         />
       )}
       {isReportsPage ? renderReports() : renderDashboard()}
+      
+      {/* Performance Dashboard Toggle */}
+      <button
+        onClick={() => setShowPerformanceDashboard(!showPerformanceDashboard)}
+        className="fixed bottom-4 left-4 z-40 bg-gray-800 text-white p-3 rounded-full shadow-lg hover:bg-gray-700 transition-colors"
+        title="Performance Dashboard"
+      >
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+      </button>
+
+      {/* Performance Dashboard */}
+      <PerformanceDashboard
+        isVisible={showPerformanceDashboard}
+        onClose={() => setShowPerformanceDashboard(false)}
+      />
+
       {isTypeModalOpen && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"

@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
-
-const BASE_URL = 'https://payment-tracker-aswa.onrender.com/api';
+import { clientsAPI, handleAPIError } from '../utils/api';
 
 const AddClientPage = ({
   setPage,
@@ -120,20 +118,16 @@ const AddClientPage = ({
     try {
       if (editClient) {
         const payload = {
-          oldClient: { Client_Name: editClient.Client_Name, Type: editClient.Type },
-          newClient: {
-            Client_Name: clientName,
-            Type: type,
-            Amount_To_Be_Paid: paymentValue,
-            Email: email || '',
-            Phone_Number: phoneNumber || '',
-          },
+          oldClientName: editClient.Client_Name,
+          oldType: editClient.Type,
+          clientName,
+          type,
+          monthlyPayment: paymentValue,
+          email: email || '',
+          phoneNumber: phoneNumber || '',
         };
         console.log('Update client payload:', payload);
-        await axios.put(`${BASE_URL}/update-client`, payload, {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-          timeout: 10000,
-        });
+        await clientsAPI.updateClient(payload);
         setSuccess('Client updated successfully! Redirecting to clients page...');
       } else {
         const payload = {
@@ -145,10 +139,7 @@ const AddClientPage = ({
         };
         console.log('Add client payload:', payload);
         
-        await axios.post(`${BASE_URL}/add-client`, payload, {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-          timeout: 10000,
-        });
+        await clientsAPI.addClient(payload);
         setSuccess('Client added successfully! Redirecting to clients page...');
       }
 
@@ -171,22 +162,7 @@ const AddClientPage = ({
       setEditClient(null);
       setPage('clients');
     } catch (err) {
-      console.error('Add/Edit client error:', {
-        status: err.response?.status,
-        data: err.response?.data,
-        message: err.message,
-        fullError: err,
-      });
-      const errorMsg = err.response?.data?.error || err.message || 'Failed to save client.';
-      let userMessage = errorMsg;
-      if (errorMsg.includes('Client already exists')) {
-        userMessage = 'This client name and type combination already exists.';
-      } else if (errorMsg.includes('Sheet not found')) {
-        userMessage = 'Client data sheet not found. Please try again or contact support.';
-      } else if (errorMsg.includes('Quota exceeded')) {
-        userMessage = 'Server is busy. Please try again later.';
-      }
-      setError(userMessage);
+      handleAPIError(err, setError);
     } finally {
       setIsSubmitting(false);
     }

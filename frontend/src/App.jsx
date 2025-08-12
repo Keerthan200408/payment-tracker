@@ -1,13 +1,19 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import axios from "axios";
 import SignInPage from "./components/SignInPage.jsx";
 import HomePage from "./components/HomePage.jsx";
 import AddClientPage from "./components/AddClientPage.jsx";
 import ClientsPage from "./components/ClientsPage.jsx";
 import PaymentsPage from "./components/PaymentsPage.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
-
-const BASE_URL = "https://payment-tracker-aswa.onrender.com/api";
+import ToastManager from "./components/ToastManager.jsx";
+import { 
+  authAPI, 
+  clientsAPI, 
+  paymentsAPI, 
+  typesAPI, 
+  importAPI,
+  handleAPIError 
+} from './utils/api';
 
 const App = () => {
   const [sessionToken, setSessionToken] = useState(null);
@@ -63,9 +69,7 @@ const App = () => {
   
   // Invalidate token on backend (fire and forget)
   if (sessionToken) {
-    axios.post(`${BASE_URL}/logout`, {}, {
-      headers: { Authorization: `Bearer ${sessionToken}` },
-    }).catch(error => {
+    authAPI.logout().catch(error => {
       console.error("Logout API error:", error.message);
     });
   }
@@ -123,10 +127,7 @@ const fetchTypes = async (token) => {
     try {
       console.log(`App.jsx: Fetching types for ${currentUser} with token:`, token?.substring(0, 10) + "...");
       
-      const response = await axios.get(`${BASE_URL}/get-types`, {
-        headers: { Authorization: `Bearer ${token}` },
-        timeout: 10000,
-      });
+      const response = await typesAPI.getTypes();
       
       const typesData = Array.isArray(response.data) ? response.data : [];
       console.log(`App.jsx: Types fetched for ${currentUser}:`, typesData);
@@ -165,47 +166,8 @@ const fetchTypes = async (token) => {
   return () => clearTimeout(timeoutId);
 }, [sessionToken, currentUser]); // Add currentUser as dependency
 
-  // Set axios defaults
-  useEffect(() => {
-    axios.defaults.withCredentials = true;
-
-    // Set up Axios interceptor
-    const interceptor = axios.interceptors.response.use(
-      (response) => response,
-      async (error) => {
-        const originalRequest = error.config;
-        if (error.response?.status === 403 && !originalRequest._retry) {
-          originalRequest._retry = true;
-          try {
-            const storedToken = localStorage.getItem("sessionToken");
-            const response = await axios.post(
-              `${BASE_URL}/refresh-token`,
-              {},
-              {
-                headers: { Authorization: `Bearer ${storedToken}` },
-                withCredentials: true,
-              }
-            );
-            const { sessionToken: newToken } = response.data;
-            localStorage.setItem("sessionToken", newToken);
-            setSessionToken(newToken);
-            originalRequest.headers.Authorization = `Bearer ${newToken}`;
-            return axios(originalRequest);
-          } catch (refreshError) {
-            console.error("Token refresh failed:", refreshError);
-            logout();
-            return Promise.reject(refreshError);
-          }
-        }
-        return Promise.reject(error);
-      }
-    );
-
-    // Cleanup interceptor on unmount
-    return () => {
-      axios.interceptors.response.eject(interceptor);
-    };
-  }, []);
+  // Note: Axios interceptors are now handled in the centralized API configuration
+  // No need for additional axios setup here
 
   useEffect(() => {
   return () => {
@@ -331,10 +293,7 @@ const fetchClients = async (token, forceRefresh = false) => {
   const requestPromise = (async () => {
     try {
       console.log("Fetching clients with token:", token?.substring(0, 10) + "...");
-      const response = await axios.get(`${BASE_URL}/get-clients`, {
-        headers: { Authorization: `Bearer ${token}` },
-        timeout: 10000,
-      });
+      const response = await clientsAPI.getClients();
       
       console.log("Clients fetched:", response.data);
       const clientsData = Array.isArray(response.data) ? response.data : [];
@@ -401,11 +360,7 @@ const fetchPayments = async (token, year, forceRefresh = false) => {
   const requestPromise = (async () => {
     try {
       console.log(`Fetching payments for ${year} with token:`, token?.substring(0, 10) + "...");
-      const response = await axios.get(`${BASE_URL}/get-payments-by-year`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params: { year },
-        timeout: 10000,
-      });
+      const response = await paymentsAPI.getPaymentsByYear(year);
 
       const data = Array.isArray(response.data) ? response.data : [];
       console.log(`Fetched payments for ${year}:`, data);
@@ -470,9 +425,9 @@ const fetchPayments = async (token, year, forceRefresh = false) => {
     if (!rowData) return;
     try {
       console.log("Deleting row:", rowData.Client_Name, rowData.Type);
-      await axios.delete(`${BASE_URL}/delete-client`, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-        data: { Client_Name: rowData.Client_Name, Type: rowData.Type },
+      await clientsAPI.deleteClient({ 
+        clientName: rowData.Client_Name, 
+        type: rowData.Type 
       });
       // Optimistic updates after successful deletion
       setPaymentsData(
@@ -631,12 +586,7 @@ const importCsv = async (e) => {
     
     try {
       const response = await retryWithBackoff(
-        () =>
-          axios.post(`${BASE_URL}/import-csv`, records, {
-            headers: { Authorization: `Bearer ${sessionToken}` },
-            params: { year: currentYear },
-            timeout: 60000, // Increased timeout for large imports
-          }),
+        () => importAPI.importCSV({ records }),
         3,
         1000
       );
@@ -800,15 +750,7 @@ const updatePayment = async (
   const savePaymentWithRetry = async (payload, retries = 3, delayMs = 1000) => {
     for (let i = 0; i < retries; i++) {
       try {
-        const response = await axios.post(
-          `${BASE_URL}/save-payment`,
-          payload,
-          {
-            headers: { Authorization: `Bearer ${sessionToken}` },
-            params: { year },
-            timeout: 10000,
-          }
-        );
+        const response = await paymentsAPI.savePayment(payload, year);
         return response.data;
       } catch (error) {
         if (
@@ -836,10 +778,13 @@ const updatePayment = async (
       rowData[month] = value || "";
 
       const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
+      
+      // Calculate active months (months with any value, matching backend logic)
       const activeMonths = months.filter(
-        (m) => rowData[m] && parseFloat(rowData[m]) > 0
+        (m) => rowData[m] !== "" && rowData[m] !== null && rowData[m] !== undefined
       ).length;
-      const expectedPayment = activeMonths > 0 ? amountToBePaid * activeMonths : 0;
+      
+      const expectedPayment = activeMonths * amountToBePaid;
       const totalPayments = months.reduce(
         (sum, m) => sum + (parseFloat(rowData[m]) || 0),
         0
@@ -858,9 +803,9 @@ const updatePayment = async (
         if (prevRow) {
           const prevAmountToBePaid = parseFloat(prevRow.Amount_To_Be_Paid) || 0;
           const prevActiveMonths = months.filter(
-            (m) => prevRow[m] && parseFloat(prevRow[m]) > 0
+            (m) => prevRow[m] !== "" && prevRow[m] !== null && prevRow[m] !== undefined
           ).length;
-          const prevExpectedPayment = prevActiveMonths > 0 ? prevAmountToBePaid * prevActiveMonths : 0;
+          const prevExpectedPayment = prevActiveMonths * prevAmountToBePaid;
           const prevTotalPayments = months.reduce(
             (sum, m) => sum + (parseFloat(prevRow[m]) || 0),
             0
@@ -910,8 +855,9 @@ const updatePayment = async (
 
   return (
     <ErrorBoundary>
-      
-      <div className="min-h-screen bg-gray-50">
+      <ToastManager>
+        {(toastContext) => (
+          <div className="min-h-screen bg-gray-50">
         {page === "signIn" && (
           <SignInPage
             setSessionToken={setSessionToken}
@@ -1098,6 +1044,7 @@ const updatePayment = async (
                   refreshTrigger={refreshTrigger}
                   fetchPayments={fetchPayments}
                   saveTimeouts={saveTimeouts}
+                  showToast={toastContext.showToast}
                 />
               )}
               {page === "addClient" && (
@@ -1168,12 +1115,15 @@ const updatePayment = async (
                   setErrorMessage={setErrorMessage}
                   apiCacheRef={apiCacheRef}
                   saveTimeouts={saveTimeouts}
+                  showToast={toastContext.showToast}
                 />
               )}
             </main>
           </div>
         )}
       </div>
+        )}
+    </ToastManager>
     </ErrorBoundary>
   );
 };
