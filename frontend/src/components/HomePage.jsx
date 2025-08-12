@@ -728,19 +728,17 @@ const validateRowData = (rowData, currentYear) => {
               prev.map((row, idx) => {
                 if (idx !== rowIndex) return row;
                 
-                // Preserve the real-time due payment calculation
-                // The backend response might have stale due payment data
+                // Only update non-due payment fields from backend response
+                // Keep the due payment that was already calculated in handleInputChange
                 const updatedRow = {
                   ...row,
                   ...response.data.updatedRow,
                   Email: row.Email || response.data.updatedRow.Email,
+                  // Preserve the due payment that was already calculated
+                  Due_Payment: row.Due_Payment,
                 };
                 
-                // Recalculate due payment with current data to ensure accuracy
-                const recalculatedDue = calculateDuePayment(updatedRow, months, currentYear);
-                updatedRow.Due_Payment = recalculatedDue.toFixed(2);
-                
-                log(`HomePage.jsx: debouncedUpdate: Updated due payment for ${updatedRow.Client_Name || 'unknown'} to ${recalculatedDue}`);
+                log(`HomePage.jsx: debouncedUpdate: Backend update completed for ${updatedRow.Client_Name || 'unknown'}`);
                 
                 return updatedRow;
               })
@@ -776,7 +774,7 @@ const validateRowData = (rowData, currentYear) => {
         delete debounceTimersRef.current[key];
       }, 1000); // Simple 1 second delay
     },
-    [paymentsData, setErrorMessage, setPaymentsData, currentYear, months, calculateDuePayment]
+    [paymentsData, setErrorMessage, setPaymentsData, currentYear]
   );
   
 
@@ -822,21 +820,19 @@ const handleInputChange = useCallback(
       [key]: trimmedValue,
     }));
 
-    // Create updated row with new value
-    const updatedRow = { ...paymentsData[rowIndex], [month]: parsedValue };
-    
-    // Recalculate Due_Payment using the same logic as backend
-    const recalculatedDue = calculateDuePayment(updatedRow, months, currentYear);
-
-    // Update the frontend view immediately with new due payment
+    // Update the due payment immediately for real-time feedback
     setPaymentsData((prev) => {
       const newData = [...prev];
+      const updatedRow = { ...newData[rowIndex], [month]: parsedValue };
+      const recalculatedDue = calculateDuePayment(updatedRow, months, currentYear);
+      
       newData[rowIndex] = {
         ...newData[rowIndex],
         [month]: trimmedValue, // Use trimmedValue for UI consistency
         Due_Payment: recalculatedDue.toFixed(2),
       };
-      log(`HomePage.jsx: handleInputChange: Real-time update for ${newData[rowIndex].Client_Name || 'unknown'}, ${month} = ${trimmedValue}, Due_Payment = ${recalculatedDue}`);
+      
+      log(`HomePage.jsx: handleInputChange: Real-time due payment update for ${newData[rowIndex].Client_Name || 'unknown'}, ${month} = ${trimmedValue}, Due_Payment = ${recalculatedDue}`);
       return newData;
     });
 
@@ -846,7 +842,7 @@ const handleInputChange = useCallback(
       debouncedUpdate(rowIndex, month, parsedValue, currentYear);
     }
   },
-  [debouncedUpdate, paymentsData, currentYear, setPaymentsData, setErrorMessage, months, calculateDuePayment]
+  [debouncedUpdate, paymentsData, currentYear, setErrorMessage, setPaymentsData, months, calculateDuePayment]
 );
 
 
