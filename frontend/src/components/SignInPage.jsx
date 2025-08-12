@@ -122,7 +122,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
     } finally {
       setIsLoading(false);
     }
-  }, []); // Remove all dependencies to keep the function stable
+  }, []);
 
   const handleUsernameSubmit = async () => {
     if (!chosenUsername.trim()) {
@@ -166,18 +166,33 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
   useEffect(() => {
     const initializeGoogleSignIn = () => {
       if (window.google && buttonRef.current) {
-        window.google.accounts.id.initialize({
-          client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
-          callback: handleGoogleSignIn,
-          auto_select: false,
-          cancel_on_tap_outside: true,
-          context: "signin",
-        });
-        window.google.accounts.id.renderButton(buttonRef.current, {
-          theme: "outline",
-          size: "large",
-          width: 300,
-        });
+        try {
+          const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+          console.log('Initializing Google Sign-In with client ID:', clientId);
+          
+          if (!clientId) {
+            console.error('Google Client ID is not configured');
+            setError('Google Sign-In is not properly configured. Please contact support.');
+            return;
+          }
+          
+          window.google.accounts.id.initialize({
+            client_id: clientId,
+            callback: handleGoogleSignIn,
+            auto_select: false,
+            cancel_on_tap_outside: true,
+            context: "signin",
+          });
+          window.google.accounts.id.renderButton(buttonRef.current, {
+            theme: "outline",
+            size: "large",
+            width: 300,
+          });
+          console.log('Google Sign-In initialized successfully');
+        } catch (error) {
+          console.error('Error initializing Google Sign-In:', error);
+          setError('Failed to initialize Google Sign-In. Please refresh the page.');
+        }
       }
     };
 
@@ -187,6 +202,10 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
       script.async = true;
       script.defer = true;
       script.onload = initializeGoogleSignIn;
+      script.onerror = () => {
+        console.error('Failed to load Google Sign-In script');
+        setError('Failed to load Google Sign-In. Please check your internet connection.');
+      };
       document.head.appendChild(script);
     } else {
       initializeGoogleSignIn();
