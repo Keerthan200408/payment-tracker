@@ -76,6 +76,12 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
       setIsLoading(true);
       setError('');
       
+      // Validate the response has a credential
+      if (!response || !response.credential) {
+        setError('Google Sign-in failed. Please try again.');
+        return;
+      }
+      
       // Send Google token to backend
       const googleResponse = await authAPI.googleSignIn({
         googleToken: response.credential,
@@ -103,7 +109,16 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
         setPage('home');
       }
     } catch (error) {
-      handleAPIError(error, setError);
+      console.error('Google Sign-in error:', error);
+      if (error.response?.status === 401) {
+        setError('Google Sign-in failed. Please try signing in again.');
+        // Reset Google Sign-in state
+        if (window.google) {
+          window.google.accounts.id.cancel();
+        }
+      } else {
+        handleAPIError(error, setError);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -149,43 +164,42 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
     }
   };
   useEffect(() => {
-  const initializeGoogleSignIn = () => {
-    if (window.google && buttonRef.current) {
-      window.google.accounts.id.initialize({
-        client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
-        callback: handleGoogleSignIn,
-        auto_select: false,
-        cancel_on_tap_outside: true,
-        context: "signin",
-        ux_mode: "popup", // Use popup mode to avoid cross-origin issues
-      });
-      window.google.accounts.id.renderButton(buttonRef.current, {
-        theme: "outline",
-        size: "large",
-        width: 300,
-      });
-      // Prompt for Google Sign-In
-      window.google.accounts.id.prompt();
-    }
-  };
+    const initializeGoogleSignIn = () => {
+      if (window.google && buttonRef.current) {
+        window.google.accounts.id.initialize({
+          client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+          callback: handleGoogleSignIn,
+          auto_select: false,
+          cancel_on_tap_outside: true,
+          context: "signin",
+          // Remove ux_mode to use default redirect mode
+        });
+        window.google.accounts.id.renderButton(buttonRef.current, {
+          theme: "outline",
+          size: "large",
+          width: 300,
+        });
+        // Remove the prompt call to avoid COOP issues
+      }
+    };
 
-  if (!window.google) {
-    const script = document.createElement("script");
-    script.src = "https://accounts.google.com/gsi/client";
-    script.async = true;
-    script.defer = true;
-    script.onload = initializeGoogleSignIn;
-    document.head.appendChild(script);
-  } else {
-    initializeGoogleSignIn();
-  }
-
-  return () => {
-    if (window.google) {
-      window.google.accounts.id.cancel();
+    if (!window.google) {
+      const script = document.createElement("script");
+      script.src = "https://accounts.google.com/gsi/client";
+      script.async = true;
+      script.defer = true;
+      script.onload = initializeGoogleSignIn;
+      document.head.appendChild(script);
+    } else {
+      initializeGoogleSignIn();
     }
-  };
-}, [handleGoogleSignIn]);
+
+    return () => {
+      if (window.google) {
+        window.google.accounts.id.cancel();
+      }
+    };
+  }, [handleGoogleSignIn]);
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
       <div className="w-full max-w-md p-6 bg-white rounded-lg shadow-md">
