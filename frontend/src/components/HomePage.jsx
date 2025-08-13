@@ -1096,14 +1096,7 @@ const handleInputChange = useCallback(
     }));
 
     // Recalculate Due_Payment for full row before update
-    const updatedRow = { 
-      ...paymentsData[rowIndex], 
-      [month]: parsedValue,
-      Remarks: {
-        ...paymentsData[rowIndex].Remarks,
-        [month.charAt(0).toUpperCase() + month.slice(1)]: paymentsData[rowIndex].Remarks?.[month.charAt(0).toUpperCase() + month.slice(1)] || "N/A"
-      }
-    };
+    const updatedRow = { ...paymentsData[rowIndex], [month]: parsedValue };
     const recalculatedDue = calculateDuePayment(updatedRow, months, currentYear);
 
     // Update the frontend view immediately
@@ -1113,10 +1106,6 @@ const handleInputChange = useCallback(
         ...newData[rowIndex],
         [month]: trimmedValue, // Use trimmedValue for UI consistency
         Due_Payment: recalculatedDue.toFixed(2),
-        Remarks: {
-          ...newData[rowIndex].Remarks,
-          [month.charAt(0).toUpperCase() + month.slice(1)]: newData[rowIndex].Remarks?.[month.charAt(0).toUpperCase() + month.slice(1)] || "N/A"
-        }
       };
       log(`HomePage.jsx: handleInputChange: Optimistic update for ${newData[rowIndex].Client_Name || 'unknown'}, ${month} = ${trimmedValue}, Due_Payment = ${recalculatedDue}`);
       return newData;
