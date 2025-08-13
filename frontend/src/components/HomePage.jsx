@@ -400,14 +400,15 @@ const HomePage = ({
     paymentsData.forEach((row, rowIndex) => {
       months.forEach((month) => {
         const key = `${rowIndex}-${month}`;
-        if (localInputValues[key] === undefined) {
-          initialValues[key] = row?.[month] || "";
-        }
+        // Always update values when paymentsData changes (including year changes)
+        initialValues[key] = row?.[month] || "";
       });
     });
-    if (Object.keys(initialValues).length > 0) {
-      setLocalInputValues(prev => ({ ...prev, ...initialValues }));
-    }
+    // Reset all local input values when payments data changes (year change)
+    setLocalInputValues(initialValues);
+    
+    // Also clear any pending updates when data changes
+    setPendingUpdates({});
   }, [paymentsData, months]);
 
   // Fetch years when sessionToken is available
@@ -422,6 +423,11 @@ const HomePage = ({
       debouncedSearchUserYears.cancel();
     };
   }, [sessionToken, debouncedSearchUserYears]);
+
+  // Reset pagination when year or data changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [currentYear, paymentsData]);
 
   // Cleanup on unmount
   useEffect(() => {
