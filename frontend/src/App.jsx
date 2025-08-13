@@ -265,12 +265,23 @@ useEffect(() => {
     }
   }, [page]);
 
-  // Fetch payments when year or token changes
+  // Fetch payments when year or token changes, or when page becomes 'home'
   useEffect(() => {
-    if (sessionToken && currentYear) {
+    if (sessionToken && currentYear && (page === 'home' || page === 'reports')) {
       fetchPayments(sessionToken, currentYear);
     }
-  }, [currentYear, sessionToken]);
+  }, [currentYear, sessionToken, page]);
+
+  // Fetch data when returning to home page
+  useEffect(() => {
+    if (page === 'home' && sessionToken && currentYear) {
+      // Ensure we have fresh data when returning to home
+      if (!paymentsData || paymentsData.length === 0) {
+        console.log('App.jsx: No payments data found, fetching...');
+        fetchPayments(sessionToken, currentYear, true); // Force refresh
+      }
+    }
+  }, [page, sessionToken, currentYear, paymentsData]);
 
   // Save current year to localStorage
   useEffect(() => {
@@ -836,11 +847,13 @@ const updatePayment = async (
       rowData[month] = value;
 
       const amountToBePaid = parseFloat(rowData.Amount_To_Be_Paid) || 0;
-      const activeMonths = months.filter(
-        (m) => rowData[m] && parseFloat(rowData[m]) > 0
+      const paymentMonths = ['january', 'february', 'march', 'april', 'may', 'june', 
+                           'july', 'august', 'september', 'october', 'november', 'december'];
+      const activeMonths = paymentMonths.filter(
+        (m) => rowData[m] && rowData[m] !== "" && rowData[m] !== null && rowData[m] !== undefined
       ).length;
-      const expectedPayment = activeMonths > 0 ? amountToBePaid * activeMonths : 0;
-      const totalPayments = months.reduce(
+      const expectedPayment = activeMonths * amountToBePaid;
+      const totalPayments = paymentMonths.reduce(
         (sum, m) => sum + (parseFloat(rowData[m]) || 0),
         0
       );
@@ -857,11 +870,11 @@ const updatePayment = async (
         );
         if (prevRow) {
           const prevAmountToBePaid = parseFloat(prevRow.Amount_To_Be_Paid) || 0;
-          const prevActiveMonths = months.filter(
-            (m) => prevRow[m] && parseFloat(prevRow[m]) > 0
+          const prevActiveMonths = paymentMonths.filter(
+            (m) => prevRow[m] && prevRow[m] !== "" && prevRow[m] !== null && prevRow[m] !== undefined
           ).length;
-          const prevExpectedPayment = prevActiveMonths > 0 ? prevAmountToBePaid * prevActiveMonths : 0;
-          const prevTotalPayments = months.reduce(
+          const prevExpectedPayment = prevActiveMonths * prevAmountToBePaid;
+          const prevTotalPayments = paymentMonths.reduce(
             (sum, m) => sum + (parseFloat(prevRow[m]) || 0),
             0
           );
