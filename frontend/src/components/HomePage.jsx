@@ -1603,7 +1603,15 @@ const handleInputChange = useCallback(
           year={currentYear}
           sessionToken={sessionToken}
           onRemarkSaved={(newRemark) => {
-            // Update the local state to reflect the new remark
+            // Invalidate the payments cache to ensure fresh data
+            const paymentsCacheKey = getCacheKey('/get-payments-by-year', {
+              year: currentYear,
+              sessionToken,
+            });
+            delete apiCacheRef.current[paymentsCacheKey];
+            console.log(`HomePage.jsx: Invalidated cache for payments_${currentYear} after remark update`);
+            
+            // Update the local state to reflect the new remark immediately
             setPaymentsData((prev) => 
               prev.map((row) => {
                 if (row.Client_Name === remarkPopup.clientName && row.Type === remarkPopup.type) {
