@@ -291,9 +291,11 @@ const HomePage = ({
     });
   }, [paymentsData, searchQuery]);
 
-  // Debounced save function
+  // Debounced save function with better error handling and logging
   const debouncedSavePayment = useCallback(async (rowIndex, month, value) => {
     const key = `${rowIndex}-${month}`;
+    
+    console.log(`Attempting to save payment for ${key}:`, { rowIndex, month, value });
     
     // Use the current data ref to avoid stale closures
     const currentData = currentDataRef.current;
@@ -308,6 +310,14 @@ const HomePage = ({
     }
     
     try {
+      console.log('Making API call with data:', {
+        clientName: currentData[rowIndex].Client_Name,
+        type: currentData[rowIndex].Type,
+        month,
+        value,
+        year: currentYear
+      });
+      
       // Save to backend
       const response = await axios.post(
         `${BASE_URL}/save-payment`,
@@ -324,6 +334,8 @@ const HomePage = ({
         }
       );
 
+      console.log('API response received:', response.data);
+
       // Update the payments data with the response
       if (response.data.updatedRow) {
         setPaymentsData(prev => {
@@ -334,6 +346,7 @@ const HomePage = ({
               [month]: value,
               Due_Payment: response.data.updatedRow.Due_Payment
             };
+            console.log(`Updated row ${rowIndex} with Due_Payment: ${response.data.updatedRow.Due_Payment}`);
           }
           return newData;
         });
@@ -343,14 +356,16 @@ const HomePage = ({
       setPendingUpdates(prev => {
         const newPending = { ...prev };
         delete newPending[key];
+        console.log(`Cleared pending status for ${key}`);
         return newPending;
       });
 
     } catch (error) {
       console.error('Failed to save payment:', error);
+      console.error('Error details:', error.response?.data);
       setErrorMessage(error.response?.data?.error || 'Failed to save payment');
       
-      // Clear pending status
+      // Clear pending status even on error
       setPendingUpdates(prev => {
         const newPending = { ...prev };
         delete newPending[key];
@@ -361,13 +376,16 @@ const HomePage = ({
       if (currentData[rowIndex]) {
         const originalValue = currentData[rowIndex]?.[month] || "";
         setLocalInputValues(prev => ({ ...prev, [key]: originalValue }));
+        console.log(`Reverted ${key} to original value: ${originalValue}`);
       }
     }
   }, [sessionToken, currentYear, setPaymentsData, setErrorMessage]);
 
-  // Input change handler with proper debouncing
+  // Input change handler with reduced debouncing for faster saves
   const handleInputChange = useCallback((rowIndex, month, value) => {
     const key = `${rowIndex}-${month}`;
+
+    console.log(`Input changed for ${key}:`, value);
 
     // Update local input values immediately for responsive UI
     setLocalInputValues(prev => ({ ...prev, [key]: value }));
@@ -375,20 +393,23 @@ const HomePage = ({
     // Clear any existing timeout for this key
     if (saveTimeoutsRef.current[key]) {
       clearTimeout(saveTimeoutsRef.current[key]);
+      console.log(`Cleared existing timeout for ${key}`);
     }
     
     // Mark as pending immediately
     setPendingUpdates(prev => ({ ...prev, [key]: true }));
+    console.log(`Marked ${key} as pending`);
 
-    // Set new timeout for debounced save
+    // Set new timeout for debounced save - reduced delay for faster response
     saveTimeoutsRef.current[key] = setTimeout(() => {
       const trimmedValue = value.trim();
       if (mountedRef.current) {
+        console.log(`Triggering save for ${key} with value: ${trimmedValue}`);
         debouncedSavePayment(rowIndex, month, trimmedValue);
       }
       // Clean up the timeout reference
       delete saveTimeoutsRef.current[key];
-    }, 800); // 800ms delay for stability
+    }, 500); // Reduced to 500ms for faster saves
   }, [debouncedSavePayment]);
 
   // Simplified remark save handler
