@@ -185,6 +185,80 @@ async function connectMongo() {
   return mongoClient.db("payment_tracker");
 }
 
+// New Due Payment Calculation Function
+async function calculateNewDuePayment(updatedPayments, months, amountToBePaid, clientName, type, year, paymentsCollection) {
+  console.log('calculateNewDuePayment called with:', {
+    clientName, type, year, amountToBePaid,
+    updatedPayments: JSON.stringify(updatedPayments)
+  });
+
+  // Find the first non-empty month (start of payment sequence)
+  let startMonth = -1;
+  let endMonth = -1;
+  
+  for (let i = 0; i < months.length; i++) {
+    const monthValue = updatedPayments[months[i]];
+    const hasValue = monthValue !== "" && monthValue !== null && monthValue !== undefined;
+    
+    if (hasValue && startMonth === -1) {
+      startMonth = i;
+    }
+    if (hasValue) {
+      endMonth = i;
+    }
+  }
+
+  let currentYearDue = 0;
+  
+  if (startMonth !== -1) {
+    // Calculate due payment from start month to end month
+    let totalExpected = 0;
+    let totalPaid = 0;
+    
+    for (let i = startMonth; i <= endMonth; i++) {
+      totalExpected += amountToBePaid;
+      const monthValue = updatedPayments[months[i]];
+      const paidAmount = parseFloat(monthValue) || 0;
+      totalPaid += paidAmount;
+      
+      console.log(`Month ${months[i]} (${i}): Expected=${amountToBePaid}, Paid=${paidAmount}`);
+    }
+    
+    currentYearDue = Math.max(totalExpected - totalPaid, 0);
+    console.log(`Current year calculation: Expected=${totalExpected}, Paid=${totalPaid}, Due=${currentYearDue}`);
+  }
+  
+  // Get previous year's due payment for cumulative calculation
+  let previousYearDue = 0;
+  if (year > 2025) {
+    try {
+      const prevYearPayment = await paymentsCollection.findOne({
+        Client_Name: clientName,
+        Type: type,
+        Year: year - 1
+      });
+      previousYearDue = parseFloat(prevYearPayment?.Due_Payment) || 0;
+      console.log(`Previous year (${year - 1}) due payment: ${previousYearDue}`);
+    } catch (error) {
+      console.error('Error fetching previous year due payment:', error);
+      previousYearDue = 0;
+    }
+  }
+  
+  const cumulativeDue = currentYearDue + previousYearDue;
+  
+  console.log('Final calculation:', {
+    currentYearDue,
+    previousYearDue,
+    cumulativeDue
+  });
+  
+  return {
+    currentYearDue,
+    cumulativeDue
+  };
+}
+
 // Google Sign-In
 app.post("/api/google-signin", async (req, res) => {
   console.log("Received /api/google-signin request");
@@ -733,28 +807,46 @@ app.post("/api/save-payment", authenticateToken, paymentLimiter, async (req, res
       return res.status(404).json({ error: "Payment record not found" });
     }
 
-    const updatedPayments = { ...payment.Payments, [monthKey]: numericValue.toString() };
     const months = Object.keys(monthMap).map((key) => monthMap[key]);
     const amountToBePaid = parseFloat(payment.Amount_To_Be_Paid) || 0;
-
-    const totalPaymentsMade = months.reduce((sum, month) => {
-      const value = updatedPayments[month];
-      const parsedValue = parseFloat(value) || 0;
-      return sum + parsedValue;
-    }, 0);
-
-    const expectedPayment = amountToBePaid * 12;
-    const currentYearDuePayment = Math.max(expectedPayment - totalPaymentsMade, 0);
-    let prevYearCumulativeDue = 0;
-    if (parseInt(year) > 2025) {
-      const prevPayment = await paymentsCollection.findOne({
-        Client_Name: clientName,
-        Type: type,
-        Year: parseInt(year) - 1,
-      });
-      prevYearCumulativeDue = parseFloat(prevPayment?.Due_Payment) || 0;
+    
+    // Handle empty value (de-entering)
+    const finalValue = value === "" || value === null || value === undefined ? "" : numericValue.toString();
+    let updatedPayments = { ...payment.Payments, [monthKey]: finalValue };
+    
+    // Sequential month filling logic
+    if (finalValue !== "") {
+      // Find the index of the current month
+      const currentMonthIndex = months.indexOf(monthKey);
+      
+      // Check if any earlier months are empty and fill them with zeros
+      let hasStarted = false;
+      for (let i = 0; i < months.length; i++) {
+        const monthValue = updatedPayments[months[i]];
+        const hasValue = monthValue !== "" && monthValue !== null && monthValue !== undefined;
+        
+        if (hasValue || i === currentMonthIndex) {
+          hasStarted = true;
+        }
+        
+        // If we've started payments and this month is empty, fill with "0"
+        if (hasStarted && !hasValue && i < currentMonthIndex) {
+          updatedPayments[months[i]] = "0";
+        }
+      }
     }
-    const finalDuePayment = Math.round((currentYearDuePayment + prevYearCumulativeDue) * 100) / 100;
+    
+    // Calculate due payment with new logic
+    const { currentYearDue, cumulativeDue } = await calculateNewDuePayment(
+      updatedPayments, 
+      months, 
+      amountToBePaid, 
+      clientName, 
+      type, 
+      parseInt(year), 
+      paymentsCollection
+    );
+    const finalDuePayment = Math.round(cumulativeDue * 100) / 100;
 
     console.log("Due_Payment calculation:", {
       clientName,
@@ -763,10 +855,8 @@ app.post("/api/save-payment", authenticateToken, paymentLimiter, async (req, res
       month: monthKey,
       value: numericValue,
       amountToBePaid,
-      totalPaymentsMade,
-      expectedPayment,
-      currentYearDuePayment,
-      prevYearCumulativeDue,
+      currentYearDue,
+      cumulativeDue,
       finalDuePayment,
       updatedPayments: JSON.stringify(updatedPayments),
     });

@@ -309,7 +309,7 @@ const HomePage = ({
           clientName: paymentsData[rowIndex].Client_Name,
           type: paymentsData[rowIndex].Type,
           month,
-          value: trimmedValue === "" ? "0" : trimmedValue
+          value: trimmedValue // Send empty string as-is for de-entering values
         },
         {
           headers: { Authorization: `Bearer ${sessionToken}` },
