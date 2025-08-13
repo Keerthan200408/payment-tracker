@@ -51,6 +51,7 @@ const HomePage = ({
   // Refs
   const csvFileInputRef = useRef(null);
   const mountedRef = useRef(true);
+  const saveTimeoutsRef = useRef({});
 
   // Utility functions
   const getCacheKey = useCallback((endpoint, params) => {
@@ -290,17 +291,10 @@ const HomePage = ({
     });
   }, [paymentsData, searchQuery]);
 
-  // Simplified input change handler
-  const handleInputChange = useCallback(async (rowIndex, month, value) => {
-    const trimmedValue = value.trim();
+  // Debounced save function (extracted from handleInputChange)
+  const debouncedSavePayment = useCallback(async (rowIndex, month, value) => {
     const key = `${rowIndex}-${month}`;
-
-    // Update local input values immediately
-    setLocalInputValues(prev => ({ ...prev, [key]: trimmedValue }));
     
-    // Mark as pending
-    setPendingUpdates(prev => ({ ...prev, [key]: true }));
-
     try {
       // Save to backend
       const response = await axios.post(
@@ -309,7 +303,7 @@ const HomePage = ({
           clientName: paymentsData[rowIndex].Client_Name,
           type: paymentsData[rowIndex].Type,
           month,
-          value: trimmedValue // Send empty string as-is for de-entering values
+          value: value // Send empty string as-is for de-entering values
         },
         {
           headers: { Authorization: `Bearer ${sessionToken}` },
@@ -323,7 +317,7 @@ const HomePage = ({
           const newData = [...prev];
           newData[rowIndex] = {
             ...newData[rowIndex],
-            [month]: trimmedValue,
+            [month]: value,
             Due_Payment: response.data.updatedRow.Due_Payment
           };
           return newData;
@@ -347,8 +341,36 @@ const HomePage = ({
         delete newPending[key];
         return newPending;
       });
+      
+      // Revert the local input value on error
+      const originalValue = paymentsData[rowIndex]?.[month] || "";
+      setLocalInputValues(prev => ({ ...prev, [key]: originalValue }));
     }
   }, [paymentsData, sessionToken, currentYear, setPaymentsData, setErrorMessage]);
+
+  // Input change handler with debouncing
+  const handleInputChange = useCallback((rowIndex, month, value) => {
+    const key = `${rowIndex}-${month}`;
+
+    // Update local input values immediately for responsive UI
+    setLocalInputValues(prev => ({ ...prev, [key]: value })); // Use raw value for immediate feedback
+    
+    // Clear any existing timeout for this key
+    if (saveTimeoutsRef.current[key]) {
+      clearTimeout(saveTimeoutsRef.current[key]);
+    }
+    
+    // Mark as pending
+    setPendingUpdates(prev => ({ ...prev, [key]: true }));
+
+    // Set new timeout for debounced save
+    saveTimeoutsRef.current[key] = setTimeout(() => {
+      const trimmedValue = value.trim();
+      debouncedSavePayment(rowIndex, month, trimmedValue);
+      // Clean up the timeout reference
+      delete saveTimeoutsRef.current[key];
+    }, 500); // 500ms delay
+  }, [debouncedSavePayment]);
 
   // Simplified remark save handler
   const handleRemarkSaved = useCallback((newRemark) => {
@@ -394,21 +416,37 @@ const HomePage = ({
     }));
   }, [remarkPopup, setPaymentsData]);
 
-  // Initialize local input values when payments data changes
+  // Initialize local input values when payments data changes (but avoid conflicts with user input)
   useEffect(() => {
+    // Clear any pending timeouts when data changes
+    Object.keys(saveTimeoutsRef.current).forEach(key => {
+      clearTimeout(saveTimeoutsRef.current[key]);
+      delete saveTimeoutsRef.current[key];
+    });
+    
     const initialValues = {};
     paymentsData.forEach((row, rowIndex) => {
       months.forEach((month) => {
         const key = `${rowIndex}-${month}`;
-        // Always update values when paymentsData changes (including year changes)
-        initialValues[key] = row?.[month] || "";
+        // Only update if we don't have a local value already (to avoid overriding user input)
+        if (localInputValues[key] === undefined) {
+          initialValues[key] = row?.[month] || "";
+        } else {
+          // Keep existing local value during data updates
+          initialValues[key] = localInputValues[key];
+        }
       });
     });
-    // Reset all local input values when payments data changes (year change)
-    setLocalInputValues(initialValues);
     
-    // Also clear any pending updates when data changes
-    setPendingUpdates({});
+    // Only update if we have initial values to set
+    if (Object.keys(initialValues).length > 0) {
+      setLocalInputValues(initialValues);
+    }
+    
+    // Clear pending updates when data structure changes (like year change)
+    if (Object.keys(localInputValues).length === 0 || paymentsData.length === 0) {
+      setPendingUpdates({});
+    }
   }, [paymentsData, months]);
 
   // Fetch years when sessionToken is available
@@ -433,6 +471,11 @@ const HomePage = ({
   useEffect(() => {
     return () => {
       mountedRef.current = false;
+      // Clear all pending timeouts on unmount
+      Object.keys(saveTimeoutsRef.current).forEach(key => {
+        clearTimeout(saveTimeoutsRef.current[key]);
+        delete saveTimeoutsRef.current[key];
+      });
     };
   }, []);
 
