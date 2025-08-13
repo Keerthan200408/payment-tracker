@@ -84,6 +84,40 @@ const HomePage = ({
     });
   }, [paymentsData, searchQuery]);
 
+  // Calculate due payment according to the business logic
+  const calculateDuePayment = useCallback((row) => {
+    const monthlyPayment = parseFloat(row.Amount_To_Be_Paid) || 0;
+    if (monthlyPayment <= 0) return 0;
+
+    // Find first month with any payment (this is when client joined)
+    const firstActiveMonth = months.findIndex(month => {
+      const payment = parseFloat(row[month]) || 0;
+      return payment > 0;
+    });
+
+    // If no payments made, no due payment
+    if (firstActiveMonth === -1) return 0;
+
+    // Calculate from first active month onwards
+    let totalDue = 0;
+    let totalPaid = 0;
+
+    for (let i = firstActiveMonth; i < months.length; i++) {
+      const month = months[i];
+      const paidAmount = parseFloat(row[month]) || 0;
+      
+      totalDue += monthlyPayment; // Each month adds to expected payment
+      totalPaid += paidAmount;
+    }
+
+    const currentYearDue = Math.max(totalDue - totalPaid, 0);
+    
+    // Add previous year's due payment if it exists
+    const previousYearDue = parseFloat(row.Previous_Year_Due) || 0;
+    
+    return currentYearDue + previousYearDue;
+  }, [months]);
+
   // Simplified input change handler
   const handleInputChange = useCallback(async (rowIndex, month, value) => {
     const trimmedValue = value.trim();
@@ -91,6 +125,24 @@ const HomePage = ({
 
     // Update local input values immediately
     setLocalInputValues(prev => ({ ...prev, [key]: trimmedValue }));
+    
+    // Calculate and update due payment immediately for UI
+    const updatedRow = {
+      ...paymentsData[rowIndex],
+      [month]: trimmedValue === "" ? "0" : trimmedValue
+    };
+    const newDuePayment = calculateDuePayment(updatedRow);
+    
+    // Update payments data immediately for UI responsiveness
+    setPaymentsData(prev => {
+      const newData = [...prev];
+      newData[rowIndex] = {
+        ...newData[rowIndex],
+        [month]: trimmedValue,
+        Due_Payment: newDuePayment.toFixed(2)
+      };
+      return newData;
+    });
     
     // Mark as pending
     setPendingUpdates(prev => ({ ...prev, [key]: true }));
@@ -111,14 +163,14 @@ const HomePage = ({
         }
       );
 
-      // Update the payments data with the response
+      // Update with backend response (in case backend calculation differs)
       if (response.data.updatedRow) {
         setPaymentsData(prev => {
           const newData = [...prev];
           newData[rowIndex] = {
             ...newData[rowIndex],
             [month]: trimmedValue,
-            Due_Payment: response.data.updatedRow.Due_Payment
+            Due_Payment: response.data.updatedRow.Due_Payment || newDuePayment.toFixed(2)
           };
           return newData;
         });
@@ -142,7 +194,7 @@ const HomePage = ({
         return newPending;
       });
     }
-  }, [paymentsData, sessionToken, currentYear, setPaymentsData, setErrorMessage]);
+  }, [paymentsData, sessionToken, currentYear, setPaymentsData, setErrorMessage, calculateDuePayment, months]);
 
   // Simplified remark save handler
   const handleRemarkSaved = useCallback((newRemark) => {
