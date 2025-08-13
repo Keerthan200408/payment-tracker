@@ -78,9 +78,9 @@ export const usePaymentOperations = (apiCache, setErrorMessage) => {
         const months = ['january', 'february', 'march', 'april', 'may', 'june', 
                        'july', 'august', 'september', 'october', 'november', 'december'];
         const activeMonths = months.filter(
-          (m) => rowData[m] && rowData[m] !== "" && rowData[m] !== null && rowData[m] !== undefined
+          (m) => rowData[m] && parseFloat(rowData[m]) > 0
         ).length;
-        const expectedPayment = activeMonths * amountToBePaid;
+        const expectedPayment = activeMonths > 0 ? amountToBePaid * activeMonths : 0;
         const totalPayments = months.reduce(
           (sum, m) => sum + (parseFloat(rowData[m]) || 0),
           0
@@ -99,9 +99,9 @@ export const usePaymentOperations = (apiCache, setErrorMessage) => {
           if (prevRow) {
             const prevAmountToBePaid = parseFloat(prevRow.Amount_To_Be_Paid) || 0;
             const prevActiveMonths = months.filter(
-              (m) => prevRow[m] && prevRow[m] !== "" && prevRow[m] !== null && prevRow[m] !== undefined
+              (m) => prevRow[m] && parseFloat(prevRow[m]) > 0
             ).length;
-            const prevExpectedPayment = prevActiveMonths * prevAmountToBePaid;
+            const prevExpectedPayment = prevActiveMonths > 0 ? prevAmountToBePaid * prevActiveMonths : 0;
             const prevTotalPayments = months.reduce(
               (sum, m) => sum + (parseFloat(prevRow[m]) || 0),
               0

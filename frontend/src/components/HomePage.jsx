@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import RemarkPopup from './RemarkPopup';
-import { usePaymentOperations } from '../hooks/usePaymentOperations';
 
 const BASE_URL = "https://payment-tracker-aswa.onrender.com/api";
 
@@ -14,28 +13,13 @@ const HomePage = ({
   setMonthFilter = () => {},
   statusFilter = "",
   setStatusFilter = () => {},
-  updatePayment,
-  handleContextMenu,
-  contextMenu,
-  hideContextMenu,
-  deleteRow,
   sessionToken = "",
   currentYear = "2025",
   setCurrentYear = () => {},
-  handleYearChange,
   setPage = () => {},
-  importCsv,
-  isImporting = false,
   isReportsPage = false,
   currentUser = null,
-  setErrorMessage = () => {},
-  apiCacheRef = { current: {} },
-  fetchTypes,
-  csvFileInputRef,
-  refreshTrigger,
-  fetchPayments,
-  saveTimeouts,
-  onMount
+  setErrorMessage = () => {}
 }) => {
   // Simplified state management
   const [localInputValues, setLocalInputValues] = useState({});
@@ -100,41 +84,7 @@ const HomePage = ({
     });
   }, [paymentsData, searchQuery]);
 
-  // Calculate due payment according to the business logic
-  const calculateDuePayment = useCallback((row) => {
-    const monthlyPayment = parseFloat(row.Amount_To_Be_Paid) || 0;
-    if (monthlyPayment <= 0) return 0;
-
-    // Find first month with any payment (this is when client joined)
-    const firstActiveMonth = months.findIndex(month => {
-      const payment = parseFloat(row[month]) || 0;
-      return payment > 0;
-    });
-
-    // If no payments made, no due payment
-    if (firstActiveMonth === -1) return 0;
-
-    // Calculate from first active month onwards
-    let totalDue = 0;
-    let totalPaid = 0;
-
-    for (let i = firstActiveMonth; i < months.length; i++) {
-      const month = months[i];
-      const paidAmount = parseFloat(row[month]) || 0;
-      
-      totalDue += monthlyPayment; // Each month adds to expected payment
-      totalPaid += paidAmount;
-    }
-
-    const currentYearDue = Math.max(totalDue - totalPaid, 0);
-    
-    // Add previous year's due payment if it exists
-    const previousYearDue = parseFloat(row.Previous_Year_Due) || 0;
-    
-    return currentYearDue + previousYearDue;
-  }, [months]);
-
-  // Fixed input change handler that doesn't auto-fill zeros
+  // Simplified input change handler
   const handleInputChange = useCallback(async (rowIndex, month, value) => {
     const trimmedValue = value.trim();
     const key = `${rowIndex}-${month}`;
@@ -142,94 +92,57 @@ const HomePage = ({
     // Update local input values immediately
     setLocalInputValues(prev => ({ ...prev, [key]: trimmedValue }));
     
-    // Use the proper updatePayment function if available
-    if (updatePayment && typeof updatePayment === 'function') {
-      try {
-        await updatePayment(
-          rowIndex,
+    // Mark as pending
+    setPendingUpdates(prev => ({ ...prev, [key]: true }));
+
+    try {
+      // Save to backend
+      const response = await axios.post(
+        `${BASE_URL}/save-payment`,
+        {
+          clientName: paymentsData[rowIndex].Client_Name,
+          type: paymentsData[rowIndex].Type,
           month,
-          trimmedValue, // Don't convert empty to "0"
-          currentYear,
-          paymentsData,
-          setPaymentsData,
-          sessionToken,
-          saveTimeouts
-        );
-      } catch (error) {
-        console.error('Failed to save payment:', error);
-        setErrorMessage(error.response?.data?.error || 'Failed to save payment');
-      }
-    } else {
-      // Fallback to local save
-      const updatedRow = {
-        ...paymentsData[rowIndex],
-        [month]: trimmedValue // Keep empty as empty, don't convert to "0"
-      };
-      const newDuePayment = calculateDuePayment(updatedRow);
-      
-      // Update payments data immediately for UI responsiveness
-      setPaymentsData(prev => {
-        const newData = [...prev];
-        newData[rowIndex] = {
-          ...newData[rowIndex],
-          [month]: trimmedValue,
-          Due_Payment: newDuePayment.toFixed(2)
-        };
-        return newData;
-      });
-      
-      // Mark as pending
-      setPendingUpdates(prev => ({ ...prev, [key]: true }));
-
-      try {
-        // Save to backend
-        const response = await axios.post(
-          `${BASE_URL}/save-payment`,
-          {
-            clientName: paymentsData[rowIndex].Client_Name,
-            type: paymentsData[rowIndex].Type,
-            month,
-            value: trimmedValue // Send empty as empty, not as "0"
-          },
-          {
-            headers: { Authorization: `Bearer ${sessionToken}` },
-            params: { year: currentYear }
-          }
-        );
-
-        // Update with backend response (in case backend calculation differs)
-        if (response.data.updatedRow) {
-          setPaymentsData(prev => {
-            const newData = [...prev];
-            newData[rowIndex] = {
-              ...newData[rowIndex],
-              ...response.updatedRow,
-              [month]: trimmedValue
-            };
-            return newData;
-          });
+          value: trimmedValue === "" ? "0" : trimmedValue
+        },
+        {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+          params: { year: currentYear }
         }
+      );
 
-        // Clear pending status
-        setPendingUpdates(prev => {
-          const newPending = { ...prev };
-          delete newPending[key];
-          return newPending;
-        });
-
-      } catch (error) {
-        console.error('Failed to save payment:', error);
-        setErrorMessage(error.response?.data?.error || 'Failed to save payment');
-        
-        // Clear pending status
-        setPendingUpdates(prev => {
-          const newPending = { ...prev };
-          delete newPending[key];
-          return newPending;
+      // Update the payments data with the response
+      if (response.data.updatedRow) {
+        setPaymentsData(prev => {
+          const newData = [...prev];
+          newData[rowIndex] = {
+            ...newData[rowIndex],
+            [month]: trimmedValue,
+            Due_Payment: response.data.updatedRow.Due_Payment
+          };
+          return newData;
         });
       }
+
+      // Clear pending status
+      setPendingUpdates(prev => {
+        const newPending = { ...prev };
+        delete newPending[key];
+        return newPending;
+      });
+
+    } catch (error) {
+      console.error('Failed to save payment:', error);
+      setErrorMessage(error.response?.data?.error || 'Failed to save payment');
+      
+      // Clear pending status
+      setPendingUpdates(prev => {
+        const newPending = { ...prev };
+        delete newPending[key];
+        return newPending;
+      });
     }
-  }, [updatePayment, paymentsData, sessionToken, currentYear, setPaymentsData, setErrorMessage, calculateDuePayment, months, saveTimeouts]);
+  }, [paymentsData, sessionToken, currentYear, setPaymentsData, setErrorMessage]);
 
   // Simplified remark save handler
   const handleRemarkSaved = useCallback((newRemark) => {
@@ -300,103 +213,8 @@ const HomePage = ({
     currentPage * entriesPerPage
   );
 
-  // Use payment operations hook
-  const apiCache = {
-    getCachedData: (key) => apiCacheRef.current[key]?.data,
-    invalidateCache: (key) => delete apiCacheRef.current[key]
-  };
-  
-  const { updatePayment: useUpdatePayment, deleteRow: useDeleteRow, importCsv: useImportCsv } = 
-    usePaymentOperations(apiCache, setErrorMessage);
-
-  // Set up available years
-  useEffect(() => {
-    const years = [];
-    const currentYearNum = new Date().getFullYear();
-    for (let year = 2025; year <= Math.max(currentYearNum + 1, 2029); year++) {
-      years.push(year.toString());
-    }
-    setAvailableYears(years);
-  }, []);
-
-  // Call onMount if provided
-  useEffect(() => {
-    if (onMount && typeof onMount === 'function') {
-      onMount();
-    }
-  }, [onMount]);
-
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
-      {/* Action Buttons Section */}
-      {!isReportsPage && (
-        <div className="mb-6">
-          <div className="flex flex-col lg:flex-row gap-4 mb-6">
-            {/* Left side buttons */}
-            <div className="flex flex-col sm:flex-row gap-3 flex-1">
-              <button
-                onClick={() => setPage("addClient")}
-                className="flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <i className="fas fa-plus mr-2"></i>
-                Add Client
-              </button>
-              
-              <button
-                onClick={() => csvFileInputRef?.current?.click()}
-                disabled={isImporting}
-                className="flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <i className="fas fa-upload mr-2"></i>
-                {isImporting ? "Importing..." : "Bulk Import"}
-              </button>
-              
-              <input
-                type="file"
-                ref={csvFileInputRef}
-                onChange={importCsv}
-                accept=".csv"
-                style={{ display: "none" }}
-              />
-            </div>
-            
-            {/* Right side - Year selector */}
-            <div className="flex items-center space-x-3">
-              <label htmlFor="year-select" className="text-sm font-medium text-gray-700 whitespace-nowrap">
-                Year:
-              </label>
-              <select
-                id="year-select"
-                value={currentYear}
-                onChange={(e) => handleYearChange && handleYearChange(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white min-w-[100px]"
-              >
-                {availableYears.map((year) => (
-                  <option key={year} value={year}>
-                    {year}
-                  </option>
-                ))}
-              </select>
-              
-              <button
-                onClick={() => {
-                  const nextYear = (parseInt(currentYear) + 1).toString();
-                  if (!availableYears.includes(nextYear)) {
-                    setAvailableYears(prev => [...prev, nextYear].sort());
-                  }
-                  handleYearChange && handleYearChange(nextYear);
-                }}
-                className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm whitespace-nowrap"
-                title="Add New Year"
-              >
-                <i className="fas fa-plus mr-1"></i>
-                Add Year
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      
       {/* Search and filters */}
       <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 mb-6">
         <div className="relative flex-1">
@@ -409,31 +227,6 @@ const HomePage = ({
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
           />
         </div>
-        
-        {/* Month and Status Filters */}
-        <select
-          value={monthFilter}
-          onChange={(e) => setMonthFilter(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
-        >
-          <option value="">All Months</option>
-          {months.map((month) => (
-            <option key={month} value={month}>
-              {month.charAt(0).toUpperCase() + month.slice(1)}
-            </option>
-          ))}
-        </select>
-        
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
-        >
-          <option value="">All Status</option>
-          <option value="Paid">Paid</option>
-          <option value="PartiallyPaid">Partially Paid</option>
-          <option value="Unpaid">Unpaid</option>
-        </select>
       </div>
 
       {/* Main table */}
@@ -514,9 +307,8 @@ const HomePage = ({
                                     : row?.[month] || ""
                                 }
                                 onChange={(e) => handleInputChange(globalRowIndex, month, e.target.value)}
-                                onContextMenu={(e) => handleContextMenu && handleContextMenu(e, globalRowIndex)}
                                 className={`w-20 p-1 border border-gray-300 rounded text-right focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm ${getInputBackgroundColor(row, month, globalRowIndex)}`}
-                                placeholder=""
+                                placeholder="0.00"
                               />
                               <button
                                 onClick={(e) => {
@@ -566,34 +358,6 @@ const HomePage = ({
         sessionToken={sessionToken}
         onRemarkSaved={handleRemarkSaved}
       />
-
-      {/* Context Menu */}
-      {contextMenu && (
-        <div
-          className="fixed bg-white border border-gray-200 rounded-lg shadow-lg py-2 z-50"
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            onClick={() => {
-              deleteRow && deleteRow();
-              hideContextMenu && hideContextMenu();
-            }}
-            className="w-full px-4 py-2 text-left text-red-600 hover:bg-red-50 transition-colors flex items-center"
-          >
-            <i className="fas fa-trash mr-2"></i>
-            Delete Row
-          </button>
-        </div>
-      )}
-
-      {/* Click outside to hide context menu */}
-      {contextMenu && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => hideContextMenu && hideContextMenu()}
-        />
-      )}
 
       {/* Pagination */}
       {paginatedData.length > 0 && (
