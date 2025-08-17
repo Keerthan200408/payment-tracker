@@ -450,12 +450,6 @@ const HomePage = ({
 
   // Initialize local input values when payments data changes (smart reset)
   useEffect(() => {
-    // Clear any pending timeouts when data changes
-    Object.keys(saveTimeoutsRef.current).forEach(key => {
-      clearTimeout(saveTimeoutsRef.current[key]);
-      delete saveTimeoutsRef.current[key];
-    });
-    
     // Only reset if it's a major change (like year change) or initial load
     const isInitialLoad = Object.keys(localInputValues).length === 0;
     const isYearChange = paymentsData.length > 0 && Object.keys(localInputValues).length > 0 && 
@@ -464,7 +458,16 @@ const HomePage = ({
         return parseInt(rowIdx) < paymentsData.length;
       });
     
+    // For initial load or year change, reset everything
     if (isInitialLoad || isYearChange) {
+      console.log(`HomePage.jsx: ${isInitialLoad ? 'Initial load' : 'Year change'} detected, resetting localInputValues`);
+      
+      // Clear any pending timeouts when doing a full reset
+      Object.keys(saveTimeoutsRef.current).forEach(key => {
+        clearTimeout(saveTimeoutsRef.current[key]);
+        delete saveTimeoutsRef.current[key];
+      });
+      
       const initialValues = {};
       paymentsData.forEach((row, arrayIndex) => {
         // Use the same logic as in the table render
@@ -479,24 +482,37 @@ const HomePage = ({
       setLocalInputValues(initialValues);
       setPendingUpdates({});
     } else {
-      // For normal data updates (like due payment updates), preserve user input
+      // For normal data updates (like successful saves), only update specific fields
+      // but preserve any pending user input
       const updatedValues = { ...localInputValues };
       let hasChanges = false;
       
       paymentsData.forEach((row, arrayIndex) => {
-        // Use consistent globalRowIndex calculation
         const globalRowIndex = paymentsData.findIndex((r) => r.Client_Name === row.Client_Name && r.Type === row.Type);
         
         months.forEach((month) => {
           const key = `${globalRowIndex}-${month}`;
-          // Only update if we don't have a pending update for this field
-          if (!pendingUpdates[key] && updatedValues[key] !== undefined) {
+          const hasPendingUpdate = pendingUpdates[key];
+          const hasActiveTimeout = saveTimeoutsRef.current[key];
+          
+          // Skip updates if:
+          // 1. There's a pending update (user is actively typing)
+          // 2. There's an active timeout (save is in progress)
+          if (hasPendingUpdate || hasActiveTimeout) {
+            console.log(`Skipping update for ${key} - pending: ${hasPendingUpdate}, timeout: ${!!hasActiveTimeout}`);
+            return;
+          }
+          
+          // Only update if the field exists and the value is different
+          if (updatedValues[key] !== undefined) {
             const newValue = row?.[month] || "";
             if (updatedValues[key] !== newValue) {
+              console.log(`Updating ${key} from server data: "${updatedValues[key]}" -> "${newValue}"`);
               updatedValues[key] = newValue;
               hasChanges = true;
             }
-          } else if (updatedValues[key] === undefined) {
+          } else {
+            // Initialize missing keys
             updatedValues[key] = row?.[month] || "";
             hasChanges = true;
           }
@@ -504,10 +520,11 @@ const HomePage = ({
       });
       
       if (hasChanges) {
+        console.log('Applying server updates to localInputValues');
         setLocalInputValues(updatedValues);
       }
     }
-  }, [paymentsData, months]);
+  }, [paymentsData, months, pendingUpdates]);
 
   // Fetch years when sessionToken is available
   useEffect(() => {
