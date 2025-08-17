@@ -35,14 +35,26 @@ const AddClientPage = ({
   }, [sessionToken, currentUser, types, fetchTypes]);
 
   useEffect(() => {
-    if (editClient) {
-      setClientName(editClient.Client_Name || '');
-      setEmail(editClient.Email || '');
-      setPhoneNumber(editClient.Phone_Number || '');
-      setType(editClient.Type || '');
-      setMonthlyPayment(editClient.Amount_To_Be_Paid?.toString() || '');
+  if (editClient) {
+    // Store original data for API calls
+    if (!editClient.originalData) {
+      editClient.originalData = { ...editClient };
     }
-  }, [editClient]);
+    
+    setClientName(editClient.Client_Name || editClient.clientName || '');
+    setEmail(editClient.Email || editClient.email || '');
+    setPhoneNumber(editClient.Phone_Number || editClient.phoneNumber || editClient.phone_number || '');
+    setType(editClient.Type || editClient.type || '');
+    setMonthlyPayment((editClient.Amount_To_Be_Paid || editClient.monthlyPayment || editClient.amount_to_be_paid)?.toString() || '');
+  } else {
+    // Clear form when not editing
+    setClientName('');
+    setEmail('');
+    setPhoneNumber('');
+    setType('');
+    setMonthlyPayment('');
+  }
+}, [editClient]);
 
   const pinClient = (clientNameVal, typeVal) => {
     try {
@@ -68,120 +80,129 @@ const AddClientPage = ({
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+const handleSubmit = async (e) => {
+  e.preventDefault();
 
-    if (isSubmitting) return;
-    setIsSubmitting(true);
+  if (isSubmitting) return;
+  setIsSubmitting(true);
 
-    setError('');
-    setSuccess('');
+  setError('');
+  setSuccess('');
 
-    await new Promise((resolve) => setTimeout(resolve, 150));
+  await new Promise((resolve) => setTimeout(resolve, 150));
 
-    // Try to read the actual input value if any formatting libs change it
-    const monthlyPaymentInput = document.querySelector('input[inputMode="decimal"]');
-    const actualMonthlyPayment = monthlyPaymentInput ? monthlyPaymentInput.value : monthlyPayment;
-    const finalMonthlyPayment = actualMonthlyPayment || monthlyPayment;
+  // Try to read the actual input value if any formatting libs change it
+  const monthlyPaymentInput = document.querySelector('input[inputMode="decimal"]');
+  const actualMonthlyPayment = monthlyPaymentInput ? monthlyPaymentInput.value : monthlyPayment;
+  const finalMonthlyPayment = actualMonthlyPayment || monthlyPayment;
 
-    // Validate
-    if (!clientName || !type || !finalMonthlyPayment) {
-      setError('Client name, type, and monthly payment are required.');
-      setIsSubmitting(false);
-      return;
+  // Validate
+  if (!clientName || !type || !finalMonthlyPayment) {
+    setError('Client name, type, and monthly payment are required.');
+    setIsSubmitting(false);
+    return;
+  }
+  if (clientName.length > 100) {
+    setError('Client name must be 100 characters or less.');
+    setIsSubmitting(false);
+    return;
+  }
+  if (!types.includes(type)) {
+    setError(`Type must be one of: ${types.join(', ')}`);
+    setIsSubmitting(false);
+    return;
+  }
+
+  const paymentValue = parseFloat(finalMonthlyPayment);
+  if (isNaN(paymentValue) || paymentValue <= 0) {
+    setError('Monthly payment must be a positive number.');
+    setIsSubmitting(false);
+    return;
+  }
+  if (paymentValue > 1000000) {
+    setError('Monthly payment exceeds maximum limit of 1,000,000.');
+    setIsSubmitting(false);
+    return;
+  }
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    setError('Please enter a valid email address.');
+    setIsSubmitting(false);
+    return;
+  }
+  if (phoneNumber && !/^\+?[\d\s-]{10,15}$/.test(phoneNumber)) {
+    setError('Please enter a valid phone number (10-15 digits, optional + or -).');
+    setIsSubmitting(false);
+    return;
+  }
+
+  try {
+    if (editClient) {
+      // Update existing client - prepare payload according to your API structure
+      const payload = {
+        oldClientName: editClient.originalData?.Client_Name || editClient.Client_Name || editClient.clientName,
+        oldType: editClient.originalData?.Type || editClient.Type || editClient.type,
+        clientName: clientName.trim(),
+        type: type.trim(),
+        monthlyPayment: paymentValue,
+        email: email.trim() || '',
+        phoneNumber: phoneNumber.trim() || '',
+      };
+
+      console.log('Update payload being sent:', payload); // Debug log
+
+      await clientsAPI.updateClient(payload);
+      
+      setSuccess('Client updated successfully! Redirecting to clients page...');
+    } else {
+      // Add new client (manual add) — pin this client so it remains at top
+      const payload = {
+        clientName: clientName.trim(),
+        email: email.trim() || '',
+        type: type.trim(),
+        monthlyPayment: paymentValue,
+        phoneNumber: phoneNumber.trim() || '',
+      };
+
+      console.log('Add payload being sent:', payload); // Debug log
+      
+      await clientsAPI.addClient(payload);
+
+      // Pin only for manual adds (not for CSV import)
+      pinClient(clientName, type);
+
+      setSuccess('Client added successfully! Redirecting to clients page...');
     }
-    if (clientName.length > 100) {
-      setError('Client name must be 100 characters or less.');
-      setIsSubmitting(false);
-      return;
-    }
-    if (!types.includes(type)) {
-      setError(`Type must be one of: ${types.join(', ')}`);
-      setIsSubmitting(false);
-      return;
-    }
 
-    const paymentValue = parseFloat(finalMonthlyPayment);
-    if (isNaN(paymentValue) || paymentValue <= 0) {
-      setError('Monthly payment must be a positive number.');
-      setIsSubmitting(false);
-      return;
-    }
-    if (paymentValue > 1000000) {
-      setError('Monthly payment exceeds maximum limit of 1,000,000.');
-      setIsSubmitting(false);
-      return;
-    }
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError('Please enter a valid email address.');
-      setIsSubmitting(false);
-      return;
-    }
-    if (phoneNumber && !/^\+?[\d\s-]{10,15}$/.test(phoneNumber)) {
-      setError('Please enter a valid phone number (10-15 digits, optional + or -).');
-      setIsSubmitting(false);
-      return;
+    // Clear cache for clients and payments (use the project's cache key patterns)
+    const sessionToken = localStorage.getItem('sessionToken');
+    const clientsCacheKey = `clients_${currentUser}_${sessionToken}`;
+    const paymentsCacheKey = `payments_${new Date().getFullYear()}_${sessionToken}`;
+    if (apiCacheRef && apiCacheRef.current) {
+      delete apiCacheRef.current[clientsCacheKey];
+      delete apiCacheRef.current[paymentsCacheKey];
     }
 
-    try {
-      if (editClient) {
-        // Update existing client
-        const payload = {
-          oldClientName: editClient.Client_Name,
-          oldType: editClient.Type,
-          clientName,
-          type,
-          monthlyPayment: paymentValue,
-          email: email || '',
-          phoneNumber: phoneNumber || '',
-        };
-        await clientsAPI.updateClient(payload);
-        setSuccess('Client updated successfully! Redirecting to clients page...');
-      } else {
-        // Add new client (manual add) — pin this client so it remains at top
-        const payload = {
-          clientName,
-          email: email || '',
-          type,
-          monthlyPayment: paymentValue,
-          phoneNumber: phoneNumber || '',
-        };
-        await clientsAPI.addClient(payload);
+    // Refresh clients + payments, force refresh so parent updates state
+    await Promise.all([
+      fetchClients(sessionToken, true),
+      fetchPayments(sessionToken, new Date().getFullYear().toString(), true),
+    ]);
 
-        // Pin only for manual adds (not for CSV import)
-        pinClient(clientName, type);
+    // Trigger anything listening for refresh
+    setRefreshTrigger(Date.now());
 
-        setSuccess('Client added successfully! Redirecting to clients page...');
-      }
+    // Short wait so UI shows success briefly
+    await new Promise((resolve) => setTimeout(resolve, 350));
 
-      // Clear cache for clients and payments (use the project's cache key patterns)
-      const clientsCacheKey = `clients_${currentUser}_${localStorage.getItem('sessionToken')}`;
-      const paymentsCacheKey = `payments_${new Date().getFullYear()}_${localStorage.getItem('sessionToken')}`;
-      if (apiCacheRef && apiCacheRef.current) {
-        delete apiCacheRef.current[clientsCacheKey];
-        delete apiCacheRef.current[paymentsCacheKey];
-      }
-
-      // Refresh clients + payments, force refresh so parent updates state
-      await Promise.all([
-        fetchClients(localStorage.getItem('sessionToken'), true),
-        fetchPayments(localStorage.getItem('sessionToken'), new Date().getFullYear().toString(), true),
-      ]);
-
-      // Trigger anything listening for refresh
-      setRefreshTrigger(Date.now());
-
-      // Short wait so UI shows success briefly
-      await new Promise((resolve) => setTimeout(resolve, 350));
-
-      setEditClient(null);
-      setPage('clients');
-    } catch (err) {
-      handleAPIError(err, setError);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+    setEditClient(null);
+    setPage('clients');
+  } catch (err) {
+    console.error('Submit error:', err);
+    handleAPIError(err, setError);
+  } finally {
+    setIsSubmitting(false);
+  }
+};
 
   const handleMonthlyPaymentChange = (e) => {
     const value = e.target.value;

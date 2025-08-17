@@ -70,8 +70,23 @@ export const authAPI = {
 export const clientsAPI = {
   getClients: () => api.get("/get-clients"),
   addClient: (clientData) => api.post("/add-client", clientData),
-  updateClient: (clientData) => api.put("/update-client", clientData),
-  deleteClient: (clientData) => api.delete("/delete-client", { data: clientData }),
+  
+  updateClient: (clientData) => {
+    console.log('Update client payload:', clientData);
+    return api.put("/update-client", clientData);
+  },
+  
+  // FIXED: Use DELETE method instead of POST
+  deleteClient: (clientData) => {
+    console.log('Delete client payload:', clientData);
+    return api.delete("/delete-client", { data: clientData });
+  },
+  
+  // Backup method if your backend actually expects POST for delete
+  deleteClientPost: (clientData) => {
+    console.log('Delete client POST payload:', clientData);
+    return api.post("/delete-client", clientData);
+  }
 };
 
 export const paymentsAPI = {
