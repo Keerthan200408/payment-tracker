@@ -291,41 +291,24 @@ const HomePage = ({
     });
   }, [paymentsData, searchQuery]);
 
-  // Debounced save function with better error handling and logging
-  const debouncedSavePayment = useCallback(async (rowIndex, month, value) => {
+  // Simplified save function with direct client/type reference instead of row indices
+  const savePayment = useCallback(async (clientName, type, month, value, rowIndex) => {
     const key = `${rowIndex}-${month}`;
     
-    console.log(`Attempting to save payment for ${key}:`, { rowIndex, month, value });
-    
-    // Use the current data ref to avoid stale closures
-    const currentData = currentDataRef.current;
-    if (!currentData[rowIndex]) {
-      console.warn('Payment data no longer available for index:', rowIndex);
-      setPendingUpdates(prev => {
-        const newPending = { ...prev };
-        delete newPending[key];
-        return newPending;
-      });
-      return;
-    }
+    console.log(`Attempting to save payment for ${clientName} (${type}), ${month}:`, { value });
     
     try {
-      console.log('Making API call with data:', {
-        clientName: currentData[rowIndex].Client_Name,
-        type: currentData[rowIndex].Type,
-        month,
-        value,
-        year: currentYear
-      });
+      // Mark as pending immediately
+      setPendingUpdates(prev => ({ ...prev, [key]: true }));
       
-      // Save to backend
+      // Save to backend using client name and type directly (not row index)
       const response = await axios.post(
         `${BASE_URL}/save-payment`,
         {
-          clientName: currentData[rowIndex].Client_Name,
-          type: currentData[rowIndex].Type,
+          clientName: clientName,
+          type: type,
           month,
-          value: value // Send the trimmed value
+          value: value.trim() // Always trim value
         },
         {
           headers: { Authorization: `Bearer ${sessionToken}` },
@@ -339,17 +322,19 @@ const HomePage = ({
       // Update the payments data with the response
       if (response.data.updatedRow) {
         setPaymentsData(prev => {
-          const newData = [...prev];
-          if (newData[rowIndex]) {
-            newData[rowIndex] = {
-              ...newData[rowIndex],
-              [month]: value,
-              Due_Payment: response.data.updatedRow.Due_Payment
-            };
-            console.log(`Updated row ${rowIndex} with Due_Payment: ${response.data.updatedRow.Due_Payment}`);
-          }
-          return newData;
+          return prev.map(row => {
+            // Match by client name and type instead of index
+            if (row.Client_Name === clientName && row.Type === type) {
+              return {
+                ...row,
+                [month]: value,
+                Due_Payment: response.data.updatedRow.Due_Payment
+              };
+            }
+            return row;
+          });
         });
+        console.log(`Updated ${clientName} (${type}) with Due_Payment: ${response.data.updatedRow.Due_Payment}`);
       }
 
       // Clear pending status
@@ -372,16 +357,17 @@ const HomePage = ({
         return newPending;
       });
       
-      // Revert the local input value on error
-      if (currentData[rowIndex]) {
-        const originalValue = currentData[rowIndex]?.[month] || "";
+      // Revert the local input value on error by finding the row with matching client/type
+      const matchingRow = paymentsData.find(row => row.Client_Name === clientName && row.Type === type);
+      if (matchingRow) {
+        const originalValue = matchingRow[month] || "";
         setLocalInputValues(prev => ({ ...prev, [key]: originalValue }));
         console.log(`Reverted ${key} to original value: ${originalValue}`);
       }
     }
-  }, [sessionToken, currentYear, setPaymentsData, setErrorMessage]);
+  }, [sessionToken, currentYear, setPaymentsData, setErrorMessage, paymentsData]);
 
-  // Input change handler with reduced debouncing for faster saves
+  // Simplified input change handler with immediate save after timeout
   const handleInputChange = useCallback((rowIndex, month, value) => {
     const key = `${rowIndex}-${month}`;
 
@@ -396,21 +382,22 @@ const HomePage = ({
       console.log(`Cleared existing timeout for ${key}`);
     }
     
-    // Mark as pending immediately
-    setPendingUpdates(prev => ({ ...prev, [key]: true }));
-    console.log(`Marked ${key} as pending`);
-
     // Set new timeout for debounced save - reduced delay for faster response
     saveTimeoutsRef.current[key] = setTimeout(() => {
-      const trimmedValue = value.trim();
       if (mountedRef.current) {
-        console.log(`Triggering save for ${key} with value: ${trimmedValue}`);
-        debouncedSavePayment(rowIndex, month, trimmedValue);
+        // Find the client name and type for this row index
+        const currentRow = paymentsData[rowIndex];
+        if (currentRow) {
+          console.log(`Triggering save for ${key} with value: ${value.trim()}`);
+          savePayment(currentRow.Client_Name, currentRow.Type, month, value, rowIndex);
+        } else {
+          console.warn(`No row found at index ${rowIndex}`);
+        }
       }
       // Clean up the timeout reference
       delete saveTimeoutsRef.current[key];
-    }, 500); // Reduced to 500ms for faster saves
-  }, [debouncedSavePayment]);
+    }, 1000); // Increased to 1 second to avoid too frequent API calls
+  }, [savePayment, paymentsData]);
 
   // Simplified remark save handler
   const handleRemarkSaved = useCallback((newRemark) => {

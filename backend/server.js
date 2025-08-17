@@ -780,10 +780,14 @@ app.post("/api/save-payment", authenticateToken, paymentLimiter, async (req, res
     return res.status(400).json({ error: "Client name, type, and month are required" });
   }
 
-  const numericValue = value !== "" && value !== null && value !== undefined ? parseFloat(value) : 0;
-  if (isNaN(numericValue) || numericValue < 0) {
-    console.error("Invalid payment value:", value);
-    return res.status(400).json({ error: "Invalid payment value" });
+  // Allow empty values for "de-entering" payments
+  let numericValue = 0;
+  if (value !== "" && value !== null && value !== undefined) {
+    numericValue = parseFloat(value);
+    if (isNaN(numericValue) || numericValue < 0) {
+      console.error("Invalid payment value:", value);
+      return res.status(400).json({ error: "Invalid payment value must be a non-negative number" });
+    }
   }
 
   const monthMap = {
