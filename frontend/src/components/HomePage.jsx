@@ -730,7 +730,7 @@ const HomePage = ({
                 </tr>
               ) : (
                 paginatedData.map((row, localRowIndex) => {
-                  const globalRowIndex = paymentsData.findIndex((r) => r.Client_Name === row.Client_Name);
+                  const globalRowIndex = paymentsData.findIndex((r) => r.Client_Name === row.Client_Name && r.Type === row.Type);
                   return (
                     <tr key={`${row?.Client_Name || "unknown"}-${localRowIndex}`} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap flex items-center text-sm text-gray-900">
