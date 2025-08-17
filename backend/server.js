@@ -30,7 +30,7 @@ app.use(
     ],
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
     exposedHeaders: ["Content-Type"],
     preflightContinue: false,
     optionsSuccessStatus: 204,
@@ -41,13 +41,9 @@ app.options("*", cors());
 
 // COOP/COEP headers for Google Sign-In
 app.use((req, res, next) => {
-  if (req.path === "/api/google-signin" || req.path === "/api/google-signup") {
-    res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
-    res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
-  } else {
-    res.setHeader("Cross-Origin-Opener-Policy", "unsafe-none");
-    res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
-  }
+  // Set permissive COOP/COEP headers for Google Sign-In compatibility
+  res.setHeader("Cross-Origin-Opener-Policy", "unsafe-none");
+  res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
   next();
 });
 

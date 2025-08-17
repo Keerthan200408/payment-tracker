@@ -196,7 +196,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
         auto_select: false,
         cancel_on_tap_outside: true,
         context: "signin",
-        ux_mode: "popup", // Use popup mode to avoid cross-origin issues
+        ux_mode: "popup",
       });
       window.google.accounts.id.renderButton(buttonRef.current, {
         theme: "outline",
