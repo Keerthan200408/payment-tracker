@@ -479,9 +479,13 @@ const HomePage = ({
     
     if (isInitialLoad || isYearChange) {
       const initialValues = {};
-      paymentsData.forEach((row, rowIndex) => {
+      paymentsData.forEach((row, arrayIndex) => {
+        // Use the same logic as in the table render
+        const globalRowIndex = paymentsData.findIndex((r) => r.Client_Name === row.Client_Name && r.Type === row.Type);
+        console.log(`UseEffect initializing values for ${row.Client_Name} (${row.Type}): arrayIndex=${arrayIndex}, globalRowIndex=${globalRowIndex}`);
+        
         months.forEach((month) => {
-          const key = `${rowIndex}-${month}`;
+          const key = `${globalRowIndex}-${month}`;
           initialValues[key] = row?.[month] || "";
         });
       });
@@ -492,9 +496,12 @@ const HomePage = ({
       const updatedValues = { ...localInputValues };
       let hasChanges = false;
       
-      paymentsData.forEach((row, rowIndex) => {
+      paymentsData.forEach((row, arrayIndex) => {
+        // Use consistent globalRowIndex calculation
+        const globalRowIndex = paymentsData.findIndex((r) => r.Client_Name === row.Client_Name && r.Type === row.Type);
+        
         months.forEach((month) => {
-          const key = `${rowIndex}-${month}`;
+          const key = `${globalRowIndex}-${month}`;
           // Only update if we don't have a pending update for this field
           if (!pendingUpdates[key] && updatedValues[key] !== undefined) {
             const newValue = row?.[month] || "";
@@ -731,6 +738,16 @@ const HomePage = ({
               ) : (
                 paginatedData.map((row, localRowIndex) => {
                   const globalRowIndex = paymentsData.findIndex((r) => r.Client_Name === row.Client_Name && r.Type === row.Type);
+                  
+                  // Debug logging
+                  console.log(`Row mapping debug:`, {
+                    localRowIndex,
+                    globalRowIndex,
+                    clientName: row.Client_Name,
+                    type: row.Type,
+                    paymentsDataLength: paymentsData.length
+                  });
+                  
                   return (
                     <tr key={`${row?.Client_Name || "unknown"}-${localRowIndex}`} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap flex items-center text-sm text-gray-900">
