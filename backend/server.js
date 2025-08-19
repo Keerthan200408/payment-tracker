@@ -1,14 +1,21 @@
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
-const rateLimit = require("express-rate-limit");
 const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
-const sanitizeHtml = require("sanitize-html");
 const { OAuth2Client } = require("google-auth-library");
 const nodemailer = require("nodemailer");
 const axios = require("axios");
 const { MongoClient } = require("mongodb");
+
+// Import centralized utilities and middleware
+const config = require("./config");
+const { authenticateToken, generateToken, setTokenCookie, clearTokenCookie } = require("./middleware/auth");
+const { errorHandler, asyncHandler, AppError, ValidationError } = require("./middleware/errorHandler");
+const coopCoepMiddleware = require("./middleware/coopCoep");
+const { globalLimiter, paymentLimiter, whatsappLimiter, authLimiter } = require("./middleware/rateLimiter");
+const { sanitizeInput, sanitizeEmail, sanitizeUsername, sanitizeClientName, sanitizeType, validatePaymentAmount } = require("./utils/sanitize");
+const { calculateDuePaymentWithPreviousYear, processPaymentUpdate, createPaymentDocument, getMonthKey } = require("./utils/paymentCalculations");
+const { retryWithBackoff } = require("./utils/retryWithBackoff");
 
 require("dotenv").config();
 
@@ -21,13 +28,10 @@ const mongoClient = new MongoClient(process.env.MONGODB_URI, {
 
 app.set("trust proxy", 1);
 
-// CORS configuration
+// CORS configuration using centralized config
 app.use(
   cors({
-    origin: [
-      "https://reliable-eclair-abf03c.netlify.app",
-      "http://localhost:5173",
-    ],
+    origin: config.CORS_ORIGINS,
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
@@ -39,38 +43,18 @@ app.use(
 
 app.options("*", cors());
 
-// COOP/COEP headers for Google Sign-In
-app.use((req, res, next) => {
-  // Set permissive COOP/COEP headers for Google Sign-In compatibility
-  res.setHeader("Cross-Origin-Opener-Policy", "unsafe-none");
-  res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
-  next();
-});
+// Use centralized COOP/COEP middleware
+app.use(coopCoepMiddleware);
 
-// Rate limiting
-const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-const paymentLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 100,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-const whatsappLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
+// Use centralized rate limiting
 app.use(globalLimiter);
 app.use("/api/save-payment", paymentLimiter);
 app.use("/api/batch-save-payments", paymentLimiter);
 app.use("/api/send-whatsapp", whatsappLimiter);
+app.use("/api/google-signin", authLimiter);
+app.use("/api/google-signup", authLimiter);
+app.use("/api/login", authLimiter);
+app.use("/api/signup", authLimiter);
 
 // Cookie parser and JSON parsing
 app.use(cookieParser());
@@ -106,72 +90,13 @@ app.get("/", (req, res) => {
   res.json({ message: "Payment Tracker Backend is running!" });
 });
 
-// Helper: Retry with backoff (for UltraMsg API or MongoDB transient errors)
-const retryWithBackoff = async (fn, retries = 3, delay = 500) => {
-  for (let i = 0; i < retries; i++) {
-    try {
-      return await fn();
-    } catch (error) {
-      if (error.response?.status === 429 && i < retries - 1) {
-        console.log(`Rate limit hit, retrying in ${delay}ms...`);
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        delay *= 2;
-      } else {
-        throw error;
-      }
-    }
+// MongoDB connection helper
+async function connectMongo() {
+  if (!mongoClient.topology || !mongoClient.topology.isConnected()) {
+    await mongoClient.connect();
   }
-};
-
-// Sanitization options
-const sanitizeOptions = {
-  allowedTags: [
-    "div", "h1", "h2", "p", "table", "thead", "tbody", "tr", "th", "td",
-    "strong", "em", "ul", "ol", "li", "a", "span", "br", "style",
-  ],
-  allowedAttributes: {
-    "*": ["style", "class", "href", "target"],
-  },
-  allowedStyles: {
-    "*": {
-      color: [/^#(0x)?[0-9a-f]+$/i, /^rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)$/],
-      "background-color": [/^#(0x)?[0-9a-f]+$/i, /^rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)$/],
-      "font-size": [/^\d+(?:px|em|rem|%)$/],
-      "font-family": [/^[\w\s,'"-]+$/],
-      "text-align": [/^left$/, /^right$/, /^center$/, /^justify$/],
-      padding: [/^\d+(?:px|em|rem)$/],
-      margin: [/^\d+(?:px|em|rem)$/],
-      border: [/^\d+px\s+(solid|dashed|dotted)\s+#(0x)?[0-9a-f]+$/i],
-    },
-  },
-};
-
-function sanitizeInput(input) {
-  return sanitizeHtml(input, sanitizeOptions);
+  return mongoClient.db("payment_tracker");
 }
-
-// Middleware: Verify JWT
-const authenticateToken = (req, res, next) => {
-  let token = req.cookies?.sessionToken;
-  if (!token && req.headers.authorization) {
-    const authHeader = req.headers.authorization;
-    if (authHeader.startsWith("Bearer ")) {
-      token = authHeader.substring(7);
-    }
-  }
-  if (!token) {
-    console.log("No session token provided");
-    return res.status(401).json({ error: "Access denied: No token provided" });
-  }
-  try {
-    const user = jwt.verify(token, process.env.SECRET_KEY);
-    req.user = user;
-    next();
-  } catch (err) {
-    console.log("Invalid token:", err.message);
-    res.status(403).json({ error: "Invalid token" });
-  }
-};
 
 // MongoDB connection helper
 async function connectMongo() {
@@ -181,7 +106,8 @@ async function connectMongo() {
   return mongoClient.db("payment_tracker");
 }
 
-// New Due Payment Calculation Function
+// DEPRECATED: Use utils/paymentCalculations.js instead
+// This function is kept temporarily for compatibility
 async function calculateNewDuePayment(updatedPayments, months, amountToBePaid, clientName, type, year, paymentsCollection) {
   console.log('calculateNewDuePayment called with:', {
     clientName, type, year, amountToBePaid,
