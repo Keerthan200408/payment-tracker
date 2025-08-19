@@ -182,44 +182,46 @@ async function calculateNewDuePayment(updatedPayments, months, amountToBePaid, c
 }
 
 // Google Sign-In
-app.post("/api/google-signin", async (req, res) => {
+app.post("/api/google-signin", asyncHandler(async (req, res) => {
   console.log("Received /api/google-signin request");
+  console.log("Request body:", req.body);
+  console.log("Google Client ID:", config.GOOGLE_CLIENT_ID ? "Present" : "Missing");
+  
   const { googleToken } = req.body;
+  
   if (!googleToken) {
-    return res.status(400).json({ error: "Google token is required" });
+    throw new ValidationError("Google token is required");
   }
+  
   try {
     const ticket = await googleClient.verifyIdToken({
       idToken: googleToken,
-      audience: process.env.GOOGLE_CLIENT_ID,
+      audience: config.GOOGLE_CLIENT_ID,
     });
+    
     const payload = ticket.getPayload();
     const email = payload.email;
+    console.log("Google token verified for email:", email);
 
     const db = await connectMongo();
     const users = db.collection("users");
     const user = await users.findOne({ $or: [{ GoogleEmail: email }, { Username: email }] });
+    
     if (user) {
       const username = user.Username;
-      const sessionToken = jwt.sign({ username }, process.env.SECRET_KEY, {
-        expiresIn: "8h",
-      });
-      res.cookie("sessionToken", sessionToken, {
-        httpOnly: true,
-        secure: true,
-        maxAge: 28800000,
-        sameSite: "None",
-        path: "/",
-      });
+      const sessionToken = generateToken({ username });
+      setTokenCookie(res, sessionToken);
+      console.log("User found, returning session for:", username);
       return res.json({ username, sessionToken });
     } else {
+      console.log("User not found, needs username for:", email);
       return res.json({ needsUsername: true });
     }
   } catch (error) {
-    console.error("Google sign-in error:", error.message);
-    res.status(401).json({ error: "Invalid Google token" });
+    console.error("Google token verification failed:", error);
+    throw new AppError("Invalid Google token", config.statusCodes.UNAUTHORIZED);
   }
-});
+}));
 
 // Google Signup
 app.post("/api/google-signup", async (req, res) => {
