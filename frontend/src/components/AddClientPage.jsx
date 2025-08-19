@@ -96,18 +96,54 @@ const AddClientPage = ({
         { type: newType.trim() },
         { headers: { Authorization: `Bearer ${sessionToken}` } }
       );
-      alert(response.data.message || "Type added successfully!");
+      
+      // Clear the cache for types
+    if (apiCacheRef?.current) {
+      const typesCacheKey = `types_${currentUser}_${sessionToken}`;
+      delete apiCacheRef.current[typesCacheKey];
+    }
+
+    const updatedTypes = await fetchTypes(sessionToken);
+
       setIsTypeModalOpen(false);
       setNewType("");
       setTypeError("");
+      alert(response.data.message || "Type added successfully!");
       // Refresh types immediately to update dropdowns
-      if (fetchTypes) {
-        await fetchTypes(sessionToken);
-      }
+      
     } catch (error) {
       setTypeError(error.response?.data?.error || "Failed to add type.");
     }
   };
+
+  // Add a useEffect to monitor types changes
+useEffect(() => {
+  const loadTypes = async () => {
+    if (sessionToken && currentUser) {
+      try {
+        await fetchTypes(sessionToken);
+      } catch (error) {
+        console.error('Error fetching types:', error);
+      }
+    }
+  };
+
+  loadTypes();
+}, [sessionToken, currentUser, fetchTypes]);
+
+// Add another useEffect to refresh types when modal closes
+useEffect(() => {
+  if (!isTypeModalOpen && sessionToken) {
+    const refreshTypes = async () => {
+      try {
+        await fetchTypes(sessionToken);
+      } catch (error) {
+        console.error('Error refreshing types:', error);
+      }
+    };
+    refreshTypes();
+  }
+}, [isTypeModalOpen, sessionToken, fetchTypes]);
 
 const handleSubmit = async (e) => {
   e.preventDefault();
