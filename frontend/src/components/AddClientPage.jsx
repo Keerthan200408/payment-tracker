@@ -219,16 +219,7 @@ const handleSubmit = async (e) => {
 
       console.log('Update client payload:', payload);
 
-      const response = await axios.put(
-        `${BASE_URL}/edit-client`,
-        payload,
-        {
-          headers: { 
-            Authorization: `Bearer ${sessionToken}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
+      const response = await clientsAPI.updateClient(payload);
 
       if (response.data.success || response.data.message) {
         setSuccess('Client updated successfully! Redirecting to clients page...');
