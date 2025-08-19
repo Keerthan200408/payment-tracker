@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { clientsAPI, handleAPIError } from '../utils/api';
+import axios from 'axios';
 
+const BASE_URL = "https://payment-tracker-aswa.onrender.com/api";
 const PINNED_KEY = 'pinned_clients_manual'; // localStorage key for manual-added clients
 
 const AddClientPage = ({
@@ -24,6 +26,9 @@ const AddClientPage = ({
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false); // Add loading state
+  const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
+  const [newType, setNewType] = useState("");
+  const [typeError, setTypeError] = useState("");
 
   useEffect(() => {
     if (sessionToken && currentUser) {
@@ -77,6 +82,30 @@ const AddClientPage = ({
       localStorage.setItem(PINNED_KEY, JSON.stringify(arr));
     } catch (err) {
       console.warn('Pin client failed', err);
+    }
+  };
+
+  const handleAddType = async () => {
+    if (!newType.trim()) {
+      setTypeError("Type cannot be empty.");
+      return;
+    }
+    try {
+      const response = await axios.post(
+        `${BASE_URL}/add-type`,
+        { type: newType.trim() },
+        { headers: { Authorization: `Bearer ${sessionToken}` } }
+      );
+      alert(response.data.message || "Type added successfully!");
+      setIsTypeModalOpen(false);
+      setNewType("");
+      setTypeError("");
+      // Refresh types immediately to update dropdowns
+      if (fetchTypes) {
+        await fetchTypes(sessionToken);
+      }
+    } catch (error) {
+      setTypeError(error.response?.data?.error || "Failed to add type.");
     }
   };
 
@@ -254,7 +283,17 @@ const handleSubmit = async (e) => {
             />
           </div>
           <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-medium mb-2">Type</label>
+            <div className="flex justify-between items-center mb-2">
+              <label className="block text-gray-700 text-sm font-medium">Type</label>
+              <button
+                type="button"
+                onClick={() => setIsTypeModalOpen(true)}
+                className="bg-gray-800 text-white px-2 py-1 rounded text-xs hover:bg-gray-700 transition duration-200 flex items-center"
+                disabled={isSubmitting}
+              >
+                <i className="fas fa-plus mr-1"></i> Add Type
+              </button>
+            </div>
             <select
               value={type}
               onChange={(e) => setType(e.target.value)}
@@ -313,6 +352,46 @@ const handleSubmit = async (e) => {
             </button>
           </div>
         </form>
+
+        {/* Add Type Modal */}
+        {isTypeModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
+            <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-sm">
+              <h2 className="text-lg font-semibold mb-4 flex items-center">
+                <i className="fas fa-plus mr-2 text-gray-800"></i>
+                Add New Type
+              </h2>
+              <input
+                type="text"
+                value={newType}
+                onChange={e => {
+                  setNewType(e.target.value);
+                  setTypeError("");
+                }}
+                placeholder="Enter type (e.g. GST, IT RETURN)"
+                className="w-full p-2 border border-gray-300 rounded mb-2"
+                maxLength={50}
+              />
+              {typeError && (
+                <div className="text-sm text-red-600 mb-2">{typeError}</div>
+              )}
+              <div className="flex justify-end gap-2 mt-2">
+                <button
+                  onClick={() => setIsTypeModalOpen(false)}
+                  className="px-4 py-2 rounded bg-gray-200 text-gray-700 hover:bg-gray-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAddType}
+                  className="px-4 py-2 rounded bg-gray-800 text-white hover:bg-gray-700"
+                >
+                  Add Type
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -153,7 +153,10 @@ const HomePage = ({
       setIsTypeModalOpen(false);
       setNewType("");
       setTypeError("");
-      if (fetchTypes) fetchTypes(); // Refresh types if needed
+      // Refresh types immediately to update dropdowns
+      if (fetchTypes) {
+        await fetchTypes(sessionToken);
+      }
     } catch (error) {
       setTypeError(error.response?.data?.error || "Failed to add type.");
     }
@@ -643,9 +646,9 @@ const HomePage = ({
           </button>
           <button
             onClick={() => setIsTypeModalOpen(true)}
-            className="bg-indigo-700 text-white px-4 py-2 rounded-lg hover:bg-indigo-600 transition duration-200 flex items-center"
+            className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition duration-200 flex items-center"
           >
-            <i className="fas fa-tags mr-2"></i> Add Type
+            <i className="fas fa-plus mr-2"></i> Add Type
           </button>
           <input
             type="file"
@@ -720,7 +723,7 @@ const HomePage = ({
               </button>
               <button
                 onClick={handleAddType}
-                className="px-4 py-2 rounded bg-indigo-700 text-white hover:bg-indigo-800"
+                className="px-4 py-2 rounded bg-gray-800 text-white hover:bg-gray-700"
               >
                 Add Type
               </button>

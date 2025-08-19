@@ -52,9 +52,6 @@ const SessionTimer = () => {
     }`}>
       <div className="flex items-center space-x-2">
         <i className={`fas ${showWarning ? 'fa-exclamation-triangle' : 'fa-clock'} text-sm`}></i>
-        <div className="text-sm font-medium">
-          Session expires in: {formatTime(hours)}:{formatTime(minutes)}:{formatTime(seconds)}
-        </div>
       </div>
       {showWarning && (
         <div className="text-xs mt-1 text-red-600">
