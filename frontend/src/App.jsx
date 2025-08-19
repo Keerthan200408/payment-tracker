@@ -6,6 +6,7 @@ import AddClientPage from "./components/AddClientPage.jsx";
 import ClientsPage from "./components/ClientsPage.jsx";
 import PaymentsPage from "./components/PaymentsPage.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
+import SessionTimer from "./components/SessionTimer";
 
 const BASE_URL = "https://payment-tracker-aswa.onrender.com/api";
 
@@ -910,7 +911,7 @@ const updatePayment = async (
 
   return (
     <ErrorBoundary>
-      
+      <SessionTimer />
       <div className="min-h-screen bg-gray-50">
         {page === "signIn" && (
           <SignInPage

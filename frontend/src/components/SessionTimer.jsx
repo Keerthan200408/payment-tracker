@@ -1,19 +1,28 @@
 import { useState, useEffect } from 'react';
+import { useAuth } from '../hooks/useAuth';
 
-const SessionTimer = ({ sessionToken, currentUser, resetLogoutTimer }) => {
-  const [timeLeft, setTimeLeft] = useState(4 * 60 * 60); // 4 hours in seconds
+const SESSION_DURATION = 8 * 60 * 60; // 8 hours in seconds
+
+const SessionTimer = () => {
+  const { sessionToken, currentUser, logout } = useAuth();
+  const [timeLeft, setTimeLeft] = useState(SESSION_DURATION);
   const [showWarning, setShowWarning] = useState(false);
 
   useEffect(() => {
     if (!sessionToken || !currentUser) {
-      setTimeLeft(4 * 60 * 60);
+      setTimeLeft(SESSION_DURATION);
       setShowWarning(false);
       return;
     }
 
+    setTimeLeft(SESSION_DURATION); // Reset timer on login
+
     const interval = setInterval(() => {
       setTimeLeft(prev => {
-        if (prev <= 0) {
+        if (prev <= 1) {
+          clearInterval(interval);
+          logout();
+          window.location.href = "/"; // Redirect to login
           return 0;
         }
         return prev - 1;
@@ -21,19 +30,11 @@ const SessionTimer = ({ sessionToken, currentUser, resetLogoutTimer }) => {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [sessionToken, currentUser]);
+  }, [sessionToken, currentUser, logout]);
 
   useEffect(() => {
-    // Show warning when less than 30 minutes left
-    setShowWarning(timeLeft <= 30 * 60);
+    setShowWarning(timeLeft <= 30 * 60); // Show warning at 30 min
   }, [timeLeft]);
-
-  useEffect(() => {
-    // Reset timer when resetLogoutTimer is called
-    if (sessionToken && currentUser) {
-      setTimeLeft(4 * 60 * 60);
-    }
-  }, [sessionToken, currentUser, resetLogoutTimer]);
 
   if (!sessionToken || !currentUser) return null;
 

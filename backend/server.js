@@ -276,12 +276,12 @@ app.post("/api/google-signin", async (req, res) => {
     if (user) {
       const username = user.Username;
       const sessionToken = jwt.sign({ username }, process.env.SECRET_KEY, {
-        expiresIn: "24h",
+        expiresIn: "8h",
       });
       res.cookie("sessionToken", sessionToken, {
         httpOnly: true,
         secure: true,
-        maxAge: 86400000,
+        maxAge: 28800000,
         sameSite: "None",
         path: "/",
       });
@@ -318,12 +318,12 @@ app.post("/api/google-signup", async (req, res) => {
     }
     await users.insertOne({ Username: username, Password: null, GoogleEmail: email });
     const sessionToken = jwt.sign({ username }, process.env.SECRET_KEY, {
-      expiresIn: "24h",
+      expiresIn: "8h",
     });
     res.cookie("sessionToken", sessionToken, {
       httpOnly: true,
       secure: true,
-      maxAge: 86400000,
+      maxAge: 28800000,
       sameSite: "None",
       path: "/",
     });
@@ -378,12 +378,12 @@ app.post("/api/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
     const sessionToken = jwt.sign({ username }, process.env.SECRET_KEY, {
-      expiresIn: "24h",
+      expiresIn: "8h",
     });
     res.cookie("sessionToken", sessionToken, {
       httpOnly: true,
       secure: true,
-      maxAge: 86400000,
+      maxAge: 28800000,
       sameSite: "None",
       path: "/",
     });
@@ -434,12 +434,12 @@ app.post("/api/refresh-token", async (req, res) => {
       return res.status(403).json({ error: "User not found" });
     }
     const newToken = jwt.sign({ username: decoded.username }, process.env.SECRET_KEY, {
-      expiresIn: "24h",
+      expiresIn: "8h",
     });
     res.cookie("sessionToken", newToken, {
       httpOnly: true,
       secure: true,
-      maxAge: 86400000,
+      maxAge: 28800000,
       sameSite: "None",
       path: "/",
     });
