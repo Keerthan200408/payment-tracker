@@ -48,6 +48,10 @@ const HomePage = ({
     month: '',
     currentRemark: 'N/A'
   });
+  const [notificationQueue, setNotificationQueue] = useState([]);
+  const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
+  const [messageTemplate, setMessageTemplate] = useState('');
+  const [isSendingNotifications, setIsSendingNotifications] = useState(false);
 
   // Refs
   const csvFileInputRef = useRef(null);
@@ -360,6 +364,27 @@ const HomePage = ({
           });
         });
         console.log(`Updated ${clientName} (${type}) with Due_Payment: ${response.data.updatedRow.Due_Payment}`);
+        
+        // Add to notification queue instead of sending immediately
+        const notificationData = {
+          id: `${clientName}-${type}-${month}-${Date.now()}`,
+          clientName,
+          type,
+          month,
+          value,
+          duePayment: response.data.updatedRow.Due_Payment,
+          timestamp: new Date().toISOString(),
+          email: response.data.updatedRow.Email || '',
+          phone: response.data.updatedRow.Phone_Number || ''
+        };
+        
+        setNotificationQueue(prev => {
+          // Remove any existing notification for the same client/type/month
+          const filtered = prev.filter(n => 
+            !(n.clientName === clientName && n.type === type && n.month === month)
+          );
+          return [...filtered, notificationData];
+        });
       }
 
       // Clear pending status
@@ -472,6 +497,124 @@ const HomePage = ({
   useEffect(() => {
     currentDataRef.current = paymentsData;
   }, [paymentsData]);
+
+  // Initialize default message template
+  useEffect(() => {
+    if (!messageTemplate) {
+      setMessageTemplate(`Dear {clientName},
+
+This is a payment reminder for your {type} service.
+
+Payment Details:
+- Service Type: {type}
+- Month: {month}
+- Amount Paid: ₹{paidAmount}
+- Total Due Payment: ₹{duePayment}
+
+Thank you for your business!
+
+Best regards,
+Payment Tracker Team`);
+    }
+  }, [messageTemplate]);
+
+  // Handle sending notifications
+  const handleSendNotifications = async (template) => {
+    setIsSendingNotifications(true);
+    let successCount = 0;
+    let errorCount = 0;
+    const errors = [];
+
+    try {
+      for (const notification of notificationQueue) {
+        try {
+          // Replace template variables
+          const personalizedMessage = template
+            .replace(/{clientName}/g, notification.clientName)
+            .replace(/{type}/g, notification.type)
+            .replace(/{month}/g, notification.month.charAt(0).toUpperCase() + notification.month.slice(1))
+            .replace(/{paidAmount}/g, notification.value || '0.00')
+            .replace(/{duePayment}/g, notification.duePayment || '0.00');
+
+          let notificationSent = false;
+
+          // Try WhatsApp first if phone number exists
+          if (notification.phone && notification.phone.trim()) {
+            try {
+              const whatsappResponse = await axios.post(
+                `${BASE_URL}/send-whatsapp`,
+                {
+                  to: notification.phone,
+                  message: personalizedMessage
+                },
+                {
+                  headers: { Authorization: `Bearer ${sessionToken}` },
+                  timeout: 10000
+                }
+              );
+              console.log(`WhatsApp sent to ${notification.clientName}:`, whatsappResponse.data);
+              notificationSent = true;
+              successCount++;
+            } catch (whatsappError) {
+              console.log(`WhatsApp failed for ${notification.clientName}, trying email...`);
+            }
+          }
+
+          // Try Email if WhatsApp failed or no phone number
+          if (!notificationSent && notification.email && notification.email.trim()) {
+            try {
+              const emailResponse = await axios.post(
+                `${BASE_URL}/send-email`,
+                {
+                  to: notification.email,
+                  subject: `Payment Reminder - ${notification.type}`,
+                  html: personalizedMessage.replace(/\n/g, '<br>')
+                },
+                {
+                  headers: { Authorization: `Bearer ${sessionToken}` },
+                  timeout: 10000
+                }
+              );
+              console.log(`Email sent to ${notification.clientName}:`, emailResponse.data);
+              notificationSent = true;
+              successCount++;
+            } catch (emailError) {
+              console.log(`Email failed for ${notification.clientName}`);
+            }
+          }
+
+          if (!notificationSent) {
+            errorCount++;
+            errors.push(`${notification.clientName}: No valid contact method available`);
+          }
+
+          // Small delay between notifications to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (error) {
+          errorCount++;
+          errors.push(`${notification.clientName}: ${error.message}`);
+        }
+      }
+
+      // Clear notification queue after sending
+      setNotificationQueue([]);
+      setIsNotificationModalOpen(false);
+
+      // Show results
+      if (successCount > 0) {
+        setLocalErrorMessage(`Successfully sent ${successCount} notifications. ${errorCount > 0 ? `${errorCount} failed.` : ''}`);
+      }
+      if (errors.length > 0) {
+        console.log('Notification errors:', errors);
+      }
+
+    } catch (error) {
+      console.error('Error sending notifications:', error);
+      setLocalErrorMessage('Failed to send notifications: ' + error.message);
+    } finally {
+      setIsSendingNotifications(false);
+    }
+  };
 
   // Initialize local input values when payments data changes (smart reset)
   useEffect(() => {
@@ -677,6 +820,22 @@ const HomePage = ({
           >
             <i className="fas fa-calendar-plus mr-2"></i>
             {isLoadingYears ? "Loading..." : "Add New Year"}
+          </button>
+        </div>
+        <div className="flex items-center gap-3">
+          {notificationQueue.length > 0 && (
+            <div className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm flex items-center">
+              <i className="fas fa-bell mr-1"></i>
+              {notificationQueue.length} pending
+            </div>
+          )}
+          <button
+            onClick={() => setIsNotificationModalOpen(true)}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition duration-200 flex items-center"
+            disabled={notificationQueue.length === 0}
+          >
+            <i className="fas fa-paper-plane mr-2"></i>
+            Send Messages ({notificationQueue.length})
           </button>
         </div>
         <select
@@ -908,6 +1067,99 @@ const HomePage = ({
         sessionToken={sessionToken}
         onRemarkSaved={handleRemarkSaved}
       />
+
+      {/* Notification Modal */}
+      {isNotificationModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-semibold mb-4 flex items-center">
+              <i className="fas fa-paper-plane mr-2 text-green-600"></i>
+              Send Notifications ({notificationQueue.length} pending)
+            </h2>
+            
+            {/* Notification List */}
+            <div className="mb-6">
+              <h3 className="text-lg font-medium mb-3">Pending Notifications:</h3>
+              <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg">
+                {notificationQueue.map((notification, index) => (
+                  <div key={notification.id} className="p-3 border-b border-gray-100 last:border-b-0 flex justify-between items-center">
+                    <div>
+                      <div className="font-medium">{notification.clientName}</div>
+                      <div className="text-sm text-gray-600">
+                        {notification.type} - {notification.month.charAt(0).toUpperCase() + notification.month.slice(1)} 
+                        - Paid: ₹{notification.value} - Due: ₹{notification.duePayment}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {notification.phone ? `📱 ${notification.phone}` : ''} 
+                        {notification.email ? ` 📧 ${notification.email}` : ''}
+                        {!notification.phone && !notification.email ? '❌ No contact info' : ''}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setNotificationQueue(prev => prev.filter(n => n.id !== notification.id));
+                      }}
+                      className="text-red-500 hover:text-red-700 p-1"
+                      title="Remove from queue"
+                    >
+                      <i className="fas fa-times"></i>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Message Template */}
+            <div className="mb-6">
+              <h3 className="text-lg font-medium mb-3">Message Template:</h3>
+              <div className="text-sm text-gray-600 mb-2">
+                Available variables: {'{clientName}'}, {'{type}'}, {'{month}'}, {'{paidAmount}'}, {'{duePayment}'}
+              </div>
+              <textarea
+                value={messageTemplate}
+                onChange={(e) => setMessageTemplate(e.target.value)}
+                className="w-full h-48 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                placeholder="Enter your message template..."
+              />
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setIsNotificationModalOpen(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition duration-200"
+                disabled={isSendingNotifications}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => setNotificationQueue([])}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition duration-200"
+                disabled={isSendingNotifications || notificationQueue.length === 0}
+              >
+                Clear Queue
+              </button>
+              <button
+                onClick={() => handleSendNotifications(messageTemplate)}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition duration-200 flex items-center"
+                disabled={isSendingNotifications || notificationQueue.length === 0 || !messageTemplate.trim()}
+              >
+                {isSendingNotifications ? (
+                  <>
+                    <i className="fas fa-spinner fa-spin mr-2"></i>
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <i className="fas fa-paper-plane mr-2"></i>
+                    Send All Notifications
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Pagination */}
       {paginatedData.length > 0 && (
