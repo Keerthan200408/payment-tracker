@@ -202,11 +202,13 @@ const handleSubmit = async (e) => {
 
   try {
     if (editClient) {
-      // Update existing client - prepare payload with correct structure
+      // Update existing client
       const payload = {
-        oldClientName: editClient.originalData?.Client_Name || editClient.Client_Name,
-        oldType: editClient.originalData?.Type || editClient.Type,
-        newClientData: {
+        oldClient: {
+          Client_Name: editClient.originalData?.Client_Name || editClient.Client_Name,
+          Type: editClient.originalData?.Type || editClient.Type
+        },
+        newClient: {
           Client_Name: clientName.trim(),
           Type: type.trim(),
           Amount_To_Be_Paid: parseFloat(monthlyPayment),
@@ -217,8 +219,8 @@ const handleSubmit = async (e) => {
 
       console.log('Update client payload:', payload);
 
-      const response = await axios.post(
-        `${BASE_URL}/update-client`,
+      const response = await axios.put(
+        `${BASE_URL}/edit-client`,
         payload,
         {
           headers: { 
@@ -228,10 +230,29 @@ const handleSubmit = async (e) => {
         }
       );
 
-      if (response.data.success) {
+      if (response.data.success || response.data.message) {
         setSuccess('Client updated successfully! Redirecting to clients page...');
-      } else {
-        throw new Error(response.data.error || 'Update failed');
+        
+        // Clear caches and refresh data
+        if (apiCacheRef?.current) {
+          const clientsCacheKey = `clients_${currentUser}_${sessionToken}`;
+          const paymentsCacheKey = `payments_${new Date().getFullYear()}_${sessionToken}`;
+          delete apiCacheRef.current[clientsCacheKey];
+          delete apiCacheRef.current[paymentsCacheKey];
+        }
+
+        await Promise.all([
+          fetchClients(sessionToken, true),
+          fetchPayments(sessionToken, new Date().getFullYear().toString(), true)
+        ]);
+
+        setRefreshTrigger(Date.now());
+        
+        // Wait briefly to show success message
+        await new Promise(resolve => setTimeout(resolve, 350));
+        
+        setEditClient(null);
+        setPage('clients');
       }
     } else {
       // Add new client code remains same

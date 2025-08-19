@@ -495,7 +495,7 @@ app.post("/api/add-client", authenticateToken, async (req, res) => {
 });
 
 // Update Client
-app.put("/api/update-client", authenticateToken, async (req, res) => {
+app.put("/api/edit-client", authenticateToken, async (req, res) => {
   const { oldClient, newClient } = req.body;
   const username = req.user.username;
   if (!oldClient || !newClient || !oldClient.Client_Name || !oldClient.Type || !newClient.Client_Name || !newClient.Type || !newClient.Amount_To_Be_Paid) {

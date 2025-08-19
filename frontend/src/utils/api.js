@@ -71,10 +71,7 @@ export const clientsAPI = {
   getClients: () => api.get("/get-clients"),
   addClient: (clientData) => api.post("/add-client", clientData),
   
-  updateClient: (clientData) => {
-    console.log('Update client payload:', clientData);
-    return api.put("/update-client", clientData);
-  },
+  updateClient: (clientData) => api.put("/edit-client", clientData),
   
   // FIXED: Use DELETE method instead of POST
   deleteClient: (clientData) => {
