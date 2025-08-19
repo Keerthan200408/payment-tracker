@@ -387,10 +387,15 @@ app.get("/api/get-payments-by-year", authenticateToken, asyncHandler(async (req,
       payment.Previous_Year_Due ? { Due_Payment: payment.Previous_Year_Due } : null
     );
     
+    // Find client data
+    const client = clients.find(c => c.Client_Name === payment.Client_Name);
+    
     return {
       Client_Name: payment.Client_Name || "",
       Type: payment.Type || "",
       Amount_To_Be_Paid: amountToBePaid,
+      Email: client?.Email || "",
+      Phone_Number: client?.Phone_Number || "",
       january: payment.Payments.January || "",
       february: payment.Payments.February || "",
       march: payment.Payments.March || "",
@@ -443,11 +448,18 @@ app.post("/api/save-payment", authenticateToken, asyncHandler(async (req, res) =
 
   const db = await connectMongo();
   const paymentsCollection = db.collection(`payments_${username}`);
-  const payment = await paymentsCollection.findOne({ 
-    Client_Name: clientName, 
-    Type: type, 
-    Year: parseInt(year) 
-  });
+  const clientsCollection = db.collection(`clients_${username}`);
+  
+  const [payment, client] = await Promise.all([
+    paymentsCollection.findOne({ 
+      Client_Name: clientName, 
+      Type: type, 
+      Year: parseInt(year) 
+    }),
+    clientsCollection.findOne({ 
+      Client_Name: clientName
+    })
+  ]);
   
   if (!payment) {
     throw new AppError("Payment record not found", config.statusCodes.NOT_FOUND);
@@ -515,6 +527,8 @@ app.post("/api/save-payment", authenticateToken, asyncHandler(async (req, res) =
     november: updatedPayments.November || "",
     december: updatedPayments.December || "",
     Due_Payment: updatedPayment.Due_Payment,
+    Email: client?.Email || "",
+    Phone_Number: client?.Phone_Number || ""
   };
 
   console.log("Payment saved successfully:", updatedRow);
