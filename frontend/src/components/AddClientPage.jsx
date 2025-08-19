@@ -202,68 +202,78 @@ const handleSubmit = async (e) => {
 
   try {
     if (editClient) {
-      // Update existing client - prepare payload according to your API structure
+      // Update existing client - prepare payload with correct structure
       const payload = {
-        oldClientName: editClient.originalData?.Client_Name || editClient.Client_Name || editClient.clientName,
-        oldType: editClient.originalData?.Type || editClient.Type || editClient.type,
-        clientName: clientName.trim(),
-        type: type.trim(),
-        monthlyPayment: paymentValue,
-        email: email.trim() || '',
-        phoneNumber: phoneNumber.trim() || '',
+        oldClientName: editClient.originalData?.Client_Name || editClient.Client_Name,
+        oldType: editClient.originalData?.Type || editClient.Type,
+        newClientData: {
+          Client_Name: clientName.trim(),
+          Type: type.trim(),
+          Amount_To_Be_Paid: parseFloat(monthlyPayment),
+          Email: email.trim() || '',
+          Phone_Number: phoneNumber.trim() || ''
+        }
       };
 
-      console.log('Update payload being sent:', payload); // Debug log
+      console.log('Update client payload:', payload);
 
-      await clientsAPI.updateClient(payload);
-      
-      setSuccess('Client updated successfully! Redirecting to clients page...');
+      const response = await axios.post(
+        `${BASE_URL}/update-client`,
+        payload,
+        {
+          headers: { 
+            Authorization: `Bearer ${sessionToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (response.data.success) {
+        setSuccess('Client updated successfully! Redirecting to clients page...');
+      } else {
+        throw new Error(response.data.error || 'Update failed');
+      }
     } else {
-      // Add new client (manual add) — pin this client so it remains at top
+      // Add new client code remains same
       const payload = {
         clientName: clientName.trim(),
         email: email.trim() || '',
         type: type.trim(),
-        monthlyPayment: paymentValue,
+        monthlyPayment: parseFloat(monthlyPayment),
         phoneNumber: phoneNumber.trim() || '',
       };
 
-      console.log('Add payload being sent:', payload); // Debug log
-      
       await clientsAPI.addClient(payload);
-
-      // Pin only for manual adds (not for CSV import)
       pinClient(clientName, type);
-
       setSuccess('Client added successfully! Redirecting to clients page...');
     }
 
-    // Clear cache for clients and payments (use the project's cache key patterns)
-    const sessionToken = localStorage.getItem('sessionToken');
-    const clientsCacheKey = `clients_${currentUser}_${sessionToken}`;
-    const paymentsCacheKey = `payments_${new Date().getFullYear()}_${sessionToken}`;
-    if (apiCacheRef && apiCacheRef.current) {
+    // Clear caches and refresh data
+    if (apiCacheRef?.current) {
+      const clientsCacheKey = `clients_${currentUser}_${sessionToken}`;
+      const paymentsCacheKey = `payments_${new Date().getFullYear()}_${sessionToken}`;
       delete apiCacheRef.current[clientsCacheKey];
       delete apiCacheRef.current[paymentsCacheKey];
     }
 
-    // Refresh clients + payments, force refresh so parent updates state
+    // Force refresh data
     await Promise.all([
       fetchClients(sessionToken, true),
-      fetchPayments(sessionToken, new Date().getFullYear().toString(), true),
+      fetchPayments(sessionToken, new Date().getFullYear().toString(), true)
     ]);
 
-    // Trigger anything listening for refresh
     setRefreshTrigger(Date.now());
 
-    // Short wait so UI shows success briefly
-    await new Promise((resolve) => setTimeout(resolve, 350));
-
+    // Wait briefly to show success message
+    await new Promise(resolve => setTimeout(resolve, 350));
+    
     setEditClient(null);
     setPage('clients');
+
   } catch (err) {
     console.error('Submit error:', err);
-    handleAPIError(err, setError);
+    const errorMessage = err.response?.data?.error || err.message || 'Failed to update client';
+    setError(errorMessage);
   } finally {
     setIsSubmitting(false);
   }
