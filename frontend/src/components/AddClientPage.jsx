@@ -103,7 +103,7 @@ const AddClientPage = ({
       delete apiCacheRef.current[typesCacheKey];
     }
 
-    const updatedTypes = await fetchTypes(sessionToken);
+    await fetchTypes(sessionToken, true);
 
       setIsTypeModalOpen(false);
       setNewType("");

@@ -99,17 +99,23 @@ const sortDataByCreatedAt = (data, sortOrder = 'desc') => {
   }
 };
 
-const fetchTypes = async (token) => {
+const fetchTypes = useCallback(async (token, forceRefresh = false) => {
   if (!token || !currentUser) return;
   
   const cacheKey = `types_${currentUser}_${token}`;
   
-  // Check cache first
-  if (apiCacheRef.current[cacheKey] && 
+  // Force refresh by clearing cache if needed
+  if (forceRefresh) {
+    console.log(`App.jsx: Force refreshing types for ${currentUser}`);
+    delete apiCacheRef.current[cacheKey];
+  }
+  
+  // Check cache only if not forcing refresh
+  if (!forceRefresh && apiCacheRef.current[cacheKey] && 
       Date.now() - apiCacheRef.current[cacheKey].timestamp < CACHE_DURATION) {
     console.log(`App.jsx: Using cached types for ${currentUser}`);
     setTypes(apiCacheRef.current[cacheKey].data);
-    return;
+    return apiCacheRef.current[cacheKey].data;
   }
   
   // Check if request is already in progress
@@ -122,7 +128,7 @@ const fetchTypes = async (token) => {
   // Mark request as in progress
   const requestPromise = (async () => {
     try {
-      console.log(`App.jsx: Fetching types for ${currentUser} with token:`, token?.substring(0, 10) + "...");
+      console.log(`App.jsx: Fetching fresh types for ${currentUser}`);
       
       const response = await axios.get(`${BASE_URL}/get-types`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -130,9 +136,11 @@ const fetchTypes = async (token) => {
       });
       
       const typesData = Array.isArray(response.data) ? response.data : [];
-      console.log(`App.jsx: Types fetched for ${currentUser}:`, typesData);
+      console.log(`App.jsx: Fresh types fetched for ${currentUser}:`, typesData);
       
       setTypes(typesData);
+      
+      // Update cache with fresh data
       apiCacheRef.current[cacheKey] = {
         data: typesData,
         timestamp: Date.now(),
@@ -154,7 +162,7 @@ const fetchTypes = async (token) => {
   apiCacheRef.current[requestKey] = requestPromise;
   
   return requestPromise;
-};
+}, [currentUser, handleSessionError]);
 
   useEffect(() => {
   const timeoutId = setTimeout(() => {
