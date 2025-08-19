@@ -39,6 +39,7 @@ const HomePage = ({
   const [isLoadingYears, setIsLoadingYears] = useState(false);
   const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
   const [newType, setNewType] = useState("");
+  const [typeError, setTypeError] = useState("");
   const [errorMessage, setLocalErrorMessage] = useState("");
   const [remarkPopup, setRemarkPopup] = useState({
     isOpen: false,
@@ -136,6 +137,27 @@ const HomePage = ({
     debounce((signal) => searchUserYears(signal), 300),
     [searchUserYears]
   );
+
+    const handleAddType = async () => {
+    if (!newType.trim()) {
+      setTypeError("Type cannot be empty.");
+      return;
+    }
+    try {
+      const response = await axios.post(
+        `${BASE_URL}/add-type`,
+        { type: newType.trim() },
+        { headers: { Authorization: `Bearer ${sessionToken}` } }
+      );
+      alert(response.data.message || "Type added successfully!");
+      setIsTypeModalOpen(false);
+      setNewType("");
+      setTypeError("");
+      if (fetchTypes) fetchTypes(); // Refresh types if needed
+    } catch (error) {
+      setTypeError(error.response?.data?.error || "Failed to add type.");
+    }
+  };
 
   // Handle Add New Year
   const handleAddNewYear = useCallback(async () => {
@@ -619,6 +641,12 @@ const HomePage = ({
           >
             <i className="fas fa-plus mr-2"></i> Add Client
           </button>
+          <button
+            onClick={() => setIsTypeModalOpen(true)}
+            className="bg-indigo-700 text-white px-4 py-2 rounded-lg hover:bg-indigo-600 transition duration-200 flex items-center"
+          >
+            <i className="fas fa-tags mr-2"></i> Add Type
+          </button>
           <input
             type="file"
             accept=".csv"
@@ -661,6 +689,45 @@ const HomePage = ({
           ))}
         </select>
       </div>
+
+      {isTypeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-sm">
+            <h2 className="text-lg font-semibold mb-4 flex items-center">
+              <i className="fas fa-tags mr-2 text-indigo-700"></i>
+              Add New Type
+            </h2>
+            <input
+              type="text"
+              value={newType}
+              onChange={e => {
+                setNewType(e.target.value);
+                setTypeError("");
+              }}
+              placeholder="Enter type (e.g. GST, IT RETURN)"
+              className="w-full p-2 border border-gray-300 rounded mb-2"
+              maxLength={50}
+            />
+            {typeError && (
+              <div className="text-sm text-red-600 mb-2">{typeError}</div>
+            )}
+            <div className="flex justify-end gap-2 mt-2">
+              <button
+                onClick={() => setIsTypeModalOpen(false)}
+                className="px-4 py-2 rounded bg-gray-200 text-gray-700 hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddType}
+                className="px-4 py-2 rounded bg-indigo-700 text-white hover:bg-indigo-800"
+              >
+                Add Type
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Search and filters */}
       <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 mb-6">
