@@ -457,9 +457,38 @@ app.post("/api/save-payment", authenticateToken, asyncHandler(async (req, res) =
       Year: parseInt(year) 
     }),
     clientsCollection.findOne({ 
-      Client_Name: clientName
+      Client_Name: clientName,
+      Type: type
     })
   ]);
+  
+  console.log("DEBUG - Client data found:", {
+    clientName,
+    type,
+    clientExists: !!client,
+    clientEmail: client?.Email,
+    clientPhone: client?.Phone_Number,
+    fullClient: client
+  });
+
+  // If client not found with type, try without type as fallback
+  if (!client) {
+    console.log("DEBUG - Client not found with type, trying fallback lookup...");
+    const fallbackClient = await clientsCollection.findOne({ 
+      Client_Name: clientName
+    });
+    
+    if (fallbackClient) {
+      console.log("DEBUG - Fallback client found:", {
+        clientName: fallbackClient.Client_Name,
+        clientType: fallbackClient.Type,
+        email: fallbackClient.Email,
+        phone: fallbackClient.Phone_Number
+      });
+      // Use fallback client if found
+      client = fallbackClient;
+    }
+  }
   
   if (!payment) {
     throw new AppError("Payment record not found", config.statusCodes.NOT_FOUND);
@@ -531,7 +560,15 @@ app.post("/api/save-payment", authenticateToken, asyncHandler(async (req, res) =
     Phone_Number: client?.Phone_Number || ""
   };
 
-  console.log("Payment saved successfully:", updatedRow);
+  console.log("DEBUG - Final response being sent:", {
+    clientName: updatedRow.Client_Name,
+    email: updatedRow.Email,
+    phone: updatedRow.Phone_Number,
+    emailLength: updatedRow.Email?.length,
+    phoneLength: updatedRow.Phone_Number?.length,
+    fullResponse: updatedRow
+  });
+  
   res.json(updatedRow);
 }));
 

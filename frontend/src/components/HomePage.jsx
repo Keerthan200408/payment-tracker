@@ -378,10 +378,16 @@ const HomePage = ({
           phone: response.data.Phone_Number || ''
         };
         
-        console.log('Notification data created:', {
+        console.log('DEBUG - Notification data created:', {
           clientName,
           email: notificationData.email,
           phone: notificationData.phone,
+          emailLength: notificationData.email?.length,
+          phoneLength: notificationData.phone?.length,
+          emailTrimmed: notificationData.email?.trim(),
+          phoneTrimmed: notificationData.phone?.trim(),
+          responseEmail: response.data.Email,
+          responsePhone: response.data.Phone_Number,
           fullResponse: response.data
         });
         
@@ -1097,9 +1103,30 @@ Payment Tracker Team`);
                         - Paid: ₹{notification.value} - Due: ₹{notification.duePayment}
                       </div>
                       <div className="text-xs text-gray-500">
-                        {notification.phone && notification.phone.trim() ? `📱 ${notification.phone.trim()}` : ''} 
-                        {notification.email && notification.email.trim() ? ` 📧 ${notification.email.trim()}` : ''}
-                        {(!notification.phone || !notification.phone.trim()) && (!notification.email || !notification.email.trim()) ? '❌ No contact info' : ''}
+                        {(() => {
+                          console.log('DEBUG - Modal contact info check:', {
+                            clientName: notification.clientName,
+                            phone: notification.phone,
+                            email: notification.email,
+                            phoneType: typeof notification.phone,
+                            emailType: typeof notification.email,
+                            phoneTrim: notification.phone?.trim(),
+                            emailTrim: notification.email?.trim(),
+                            phoneLength: notification.phone?.length,
+                            emailLength: notification.email?.length
+                          });
+                          
+                          const hasPhone = notification.phone && notification.phone.trim();
+                          const hasEmail = notification.email && notification.email.trim();
+                          
+                          return (
+                            <>
+                              {hasPhone ? `📱 ${notification.phone.trim()}` : ''} 
+                              {hasEmail ? ` 📧 ${notification.email.trim()}` : ''}
+                              {!hasPhone && !hasEmail ? '❌ No contact info' : ''}
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
                     <button
