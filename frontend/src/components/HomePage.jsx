@@ -347,6 +347,11 @@ const HomePage = ({
       );
 
       console.log('API response received:', response.data);
+      console.log('Contact info from backend:', {
+        email: response.data.updatedRow?.Email,
+        phone: response.data.updatedRow?.Phone_Number,
+        hasUpdatedRow: !!response.data.updatedRow
+      });
 
       // Update the payments data with the response
       if (response.data.updatedRow) {
