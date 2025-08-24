@@ -457,41 +457,9 @@ app.post("/api/save-payment", authenticateToken, asyncHandler(async (req, res) =
       Year: parseInt(year) 
     }),
     clientsCollection.findOne({ 
-      Client_Name: clientName,
-      Type: type
+      Client_Name: clientName
     })
   ]);
-  
-  console.log("DEBUG - Client data found:", {
-    clientName,
-    type,
-    clientExists: !!client,
-    clientEmail: client?.Email,
-    clientPhone: client?.Phone_Number,
-    emailLength: client?.Email?.length || 0,
-    phoneLength: client?.Phone_Number?.length || 0,
-    clientKeys: client ? Object.keys(client) : [],
-    fullClient: client
-  });
-
-  // If client not found with type, try without type as fallback
-  if (!client) {
-    console.log("DEBUG - Client not found with type, trying fallback lookup...");
-    const fallbackClient = await clientsCollection.findOne({ 
-      Client_Name: clientName
-    });
-    
-    if (fallbackClient) {
-      console.log("DEBUG - Fallback client found:", {
-        clientName: fallbackClient.Client_Name,
-        clientType: fallbackClient.Type,
-        email: fallbackClient.Email,
-        phone: fallbackClient.Phone_Number
-      });
-      // Use fallback client if found
-      client = fallbackClient;
-    }
-  }
   
   if (!payment) {
     throw new AppError("Payment record not found", config.statusCodes.NOT_FOUND);
@@ -563,53 +531,8 @@ app.post("/api/save-payment", authenticateToken, asyncHandler(async (req, res) =
     Phone_Number: client?.Phone_Number || ""
   };
 
-  console.log("DEBUG - Final response being sent:", {
-    clientName: updatedRow.Client_Name,
-    email: updatedRow.Email,
-    phone: updatedRow.Phone_Number,
-    emailLength: updatedRow.Email?.length,
-    phoneLength: updatedRow.Phone_Number?.length,
-    fullResponse: updatedRow
-  });
-  
+  console.log("Payment saved successfully:", updatedRow);
   res.json(updatedRow);
-}));
-
-// Debug endpoint to check client data
-app.get("/api/debug-client/:clientName", authenticateToken, asyncHandler(async (req, res) => {
-  const { clientName } = req.params;
-  const username = req.user.username;
-  
-  const db = await connectMongo();
-  const clientsCollection = db.collection(`clients_${username}`);
-  
-  // Find all clients with this name
-  const clients = await clientsCollection.find({ Client_Name: clientName }).toArray();
-  
-  console.log(`DEBUG - Found ${clients.length} clients with name "${clientName}"`);
-  clients.forEach((client, index) => {
-    console.log(`Client ${index + 1}:`, {
-      name: client.Client_Name,
-      type: client.Type,
-      email: client.Email,
-      phone: client.Phone_Number,
-      emailLength: client.Email?.length || 0,
-      phoneLength: client.Phone_Number?.length || 0
-    });
-  });
-  
-  res.json({
-    clientName,
-    found: clients.length,
-    clients: clients.map(c => ({
-      Client_Name: c.Client_Name,
-      Type: c.Type,
-      Email: c.Email || '',
-      Phone_Number: c.Phone_Number || '',
-      emailLength: c.Email?.length || 0,
-      phoneLength: c.Phone_Number?.length || 0
-    }))
-  });
 }));
 
 // Global error handler
