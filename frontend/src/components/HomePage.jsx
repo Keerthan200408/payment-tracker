@@ -378,6 +378,31 @@ const HomePage = ({
         });
         console.log(`Updated ${clientName} (${type}) with Due_Payment: ${response.data.updatedRow.Due_Payment}`);
         
+        // Fetch client contact info separately since save-payment doesn't include it
+        let clientEmail = '';
+        let clientPhone = '';
+        
+        try {
+          const clientResponse = await axios.get(`${BASE_URL}/get-clients`, {
+            headers: { Authorization: `Bearer ${sessionToken}` },
+            timeout: 5000
+          });
+          
+          const clientData = clientResponse.data.find(client => 
+            client.Client_Name === clientName
+          );
+          
+          if (clientData) {
+            clientEmail = clientData.Email || '';
+            clientPhone = clientData.Phone_Number || '';
+            console.log('Found client contact info:', { clientName, email: clientEmail, phone: clientPhone });
+          } else {
+            console.log('Client not found in clients data:', clientName);
+          }
+        } catch (clientError) {
+          console.error('Failed to fetch client contact info:', clientError);
+        }
+        
         // Add to notification queue instead of sending immediately
         const notificationData = {
           id: `${clientName}-${type}-${month}-${Date.now()}`,
@@ -387,8 +412,8 @@ const HomePage = ({
           value,
           duePayment: response.data.updatedRow.Due_Payment,
           timestamp: new Date().toISOString(),
-          email: response.data.updatedRow.Email || '',
-          phone: response.data.updatedRow.Phone_Number || ''
+          email: clientEmail,
+          phone: clientPhone
         };
         
         setNotificationQueue(prev => {
