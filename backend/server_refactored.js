@@ -2,6 +2,11 @@ const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const bcrypt = require("bcryptjs");
+const authRoutes = require('./routes/auth');
+const clientsRoutes = require('./routes/clients');
+const paymentsRoutes = require('./routes/payments');
+const reportsRoutes = require('./routes/reports');
+const notificationsRoutes = require('./routes/notifications');
 const jwt = require("jsonwebtoken");
 const { OAuth2Client } = require("google-auth-library");
 const nodemailer = require("nodemailer");
@@ -550,6 +555,13 @@ app.post("/api/save-payment", authenticateToken, asyncHandler(async (req, res) =
   console.log("Payment saved successfully:", updatedRow);
   res.json({ updatedRow });
 }));
+
+// Mount notification routes
+app.use('/api/notifications', notificationsRoutes);
+
+// Initialize WhatsApp service on server start
+const whatsappService = require('./services/whatsappService');
+whatsappService.initialize().catch(console.error);
 
 // Global error handler
 app.use(errorHandler);

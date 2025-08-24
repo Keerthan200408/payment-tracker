@@ -403,7 +403,7 @@ const HomePage = ({
           console.error('Failed to fetch client contact info:', clientError);
         }
         
-        // Add to notification queue instead of sending immediately
+        // Add to notification queue and persist to database
         const notificationData = {
           id: `${clientName}-${type}-${month}-${Date.now()}`,
           clientName,
@@ -415,6 +415,17 @@ const HomePage = ({
           email: clientEmail,
           phone: clientPhone
         };
+        
+        // Save to database
+        try {
+          await axios.post(`${BASE_URL}/notifications/queue`, notificationData, {
+            headers: { Authorization: `Bearer ${sessionToken}` },
+            timeout: 5000
+          });
+          console.log("Notification saved to database:", notificationData);
+        } catch (dbError) {
+          console.error('Failed to save notification to database:', dbError);
+        }
         
         setNotificationQueue(prev => {
           // Remove any existing notification for the same client/type/month
@@ -537,6 +548,55 @@ const HomePage = ({
     currentDataRef.current = paymentsData;
   }, [paymentsData]);
 
+  // Handle sending notifications using new backend system
+  const handleSendNotifications = async (template) => {
+    setIsSendingNotifications(true);
+
+    try {
+      const response = await axios.post(
+        `${BASE_URL}/notifications/send-all`,
+        { template },
+        {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+          timeout: 30000 // Increased timeout for bulk operations
+        }
+      );
+
+      console.log('Bulk send response:', response.data);
+      
+      // Clear notification queue from database
+      try {
+        await axios.delete(`${BASE_URL}/notifications/queue`, {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+          timeout: 5000
+        });
+        console.log('Cleared notification queue from database');
+      } catch (clearError) {
+        console.error('Failed to clear notification queue from database:', clearError);
+      }
+
+      // Clear local notification queue and close modal
+      setNotificationQueue([]);
+      setIsNotificationModalOpen(false);
+
+      // Show results
+      const { successCount, errorCount, errors } = response.data;
+      const message = `Notifications sent: ${successCount} successful, ${errorCount} failed`;
+      
+      if (errors && errors.length > 0) {
+        console.error('Notification errors:', errors);
+        alert(`${message}\n\nErrors:\n${errors.join('\n')}`);
+      } else {
+        alert(message);
+      }
+    } catch (error) {
+      console.error('Failed to send notifications:', error);
+      alert('Failed to send notifications: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setIsSendingNotifications(false);
+    }
+  };
+
   // Initialize default message template
   useEffect(() => {
     if (!messageTemplate) {
@@ -550,110 +610,9 @@ Payment Details:
 - Amount Paid: ₹{paidAmount}
 - Total Due Payment: ₹{duePayment}
 
-Thank you for your business!
-
-Best regards,
-Payment Tracker Team`);
+Thank you for your business!`);
     }
   }, [messageTemplate]);
-
-  // Handle sending notifications
-  const handleSendNotifications = async (template) => {
-    setIsSendingNotifications(true);
-    let successCount = 0;
-    let errorCount = 0;
-    const errors = [];
-
-    try {
-      for (const notification of notificationQueue) {
-        try {
-          // Replace template variables
-          const personalizedMessage = template
-            .replace(/{clientName}/g, notification.clientName)
-            .replace(/{type}/g, notification.type)
-            .replace(/{month}/g, notification.month.charAt(0).toUpperCase() + notification.month.slice(1))
-            .replace(/{paidAmount}/g, notification.value || '0.00')
-            .replace(/{duePayment}/g, notification.duePayment || '0.00');
-
-          let notificationSent = false;
-
-          // Try WhatsApp first if phone number exists
-          if (notification.phone && notification.phone.trim()) {
-            try {
-              const whatsappResponse = await axios.post(
-                `${BASE_URL}/send-whatsapp`,
-                {
-                  to: notification.phone,
-                  message: personalizedMessage
-                },
-                {
-                  headers: { Authorization: `Bearer ${sessionToken}` },
-                  timeout: 10000
-                }
-              );
-              console.log(`WhatsApp sent to ${notification.clientName}:`, whatsappResponse.data);
-              notificationSent = true;
-              successCount++;
-            } catch (whatsappError) {
-              console.log(`WhatsApp failed for ${notification.clientName}, trying email...`);
-            }
-          }
-
-          // Try Email if WhatsApp failed or no phone number
-          if (!notificationSent && notification.email && notification.email.trim()) {
-            try {
-              const emailResponse = await axios.post(
-                `${BASE_URL}/send-email`,
-                {
-                  to: notification.email,
-                  subject: `Payment Reminder - ${notification.type}`,
-                  html: personalizedMessage.replace(/\n/g, '<br>')
-                },
-                {
-                  headers: { Authorization: `Bearer ${sessionToken}` },
-                  timeout: 10000
-                }
-              );
-              console.log(`Email sent to ${notification.clientName}:`, emailResponse.data);
-              notificationSent = true;
-              successCount++;
-            } catch (emailError) {
-              console.log(`Email failed for ${notification.clientName}`);
-            }
-          }
-
-          if (!notificationSent) {
-            errorCount++;
-            errors.push(`${notification.clientName}: No valid contact method available`);
-          }
-
-          // Small delay between notifications to avoid rate limiting
-          await new Promise(resolve => setTimeout(resolve, 500));
-        } catch (error) {
-          errorCount++;
-          errors.push(`${notification.clientName}: ${error.message}`);
-        }
-      }
-
-      // Clear notification queue after sending
-      setNotificationQueue([]);
-      setIsNotificationModalOpen(false);
-
-      // Show results
-      if (successCount > 0) {
-        setLocalErrorMessage(`Successfully sent ${successCount} notifications. ${errorCount > 0 ? `${errorCount} failed.` : ''}`);
-      }
-      if (errors.length > 0) {
-        console.log('Notification errors:', errors);
-      }
-
-    } catch (error) {
-      console.error('Error sending notifications:', error);
-      setLocalErrorMessage('Failed to send notifications: ' + error.message);
-    } finally {
-      setIsSendingNotifications(false);
-    }
-  };
 
   // Initialize local input values when payments data changes (smart reset)
   useEffect(() => {
@@ -732,6 +691,29 @@ Payment Tracker Team`);
       }
     }
   }, [paymentsData, months, pendingUpdates]);
+
+  // Load notification queue from database on initialization
+  useEffect(() => {
+    const loadNotificationQueue = async () => {
+      if (!sessionToken) return;
+      
+      try {
+        const response = await axios.get(`${BASE_URL}/notifications/queue`, {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+          timeout: 5000
+        });
+        
+        if (response.data && response.data.length > 0) {
+          console.log('Loaded notification queue from database:', response.data);
+          setNotificationQueue(response.data);
+        }
+      } catch (error) {
+        console.error('Failed to load notification queue:', error);
+      }
+    };
+
+    loadNotificationQueue();
+  }, [sessionToken]);
 
   // Fetch years when sessionToken is available
   useEffect(() => {
