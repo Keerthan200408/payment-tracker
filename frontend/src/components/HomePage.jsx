@@ -349,7 +349,7 @@ const HomePage = ({
       console.log('API response received:', response.data);
 
       // Update the payments data with the response
-      if (response.data) {
+      if (response.data.updatedRow) {
         setPaymentsData(prev => {
           return prev.map(row => {
             // Match by client name and type instead of index
@@ -357,13 +357,13 @@ const HomePage = ({
               return {
                 ...row,
                 [month]: value,
-                Due_Payment: response.data.Due_Payment
+                Due_Payment: response.data.updatedRow.Due_Payment
               };
             }
             return row;
           });
         });
-        console.log(`Updated ${clientName} (${type}) with Due_Payment: ${response.data.Due_Payment}`);
+        console.log(`Updated ${clientName} (${type}) with Due_Payment: ${response.data.updatedRow.Due_Payment}`);
         
         // Add to notification queue instead of sending immediately
         const notificationData = {
@@ -372,10 +372,10 @@ const HomePage = ({
           type,
           month,
           value,
-          duePayment: response.data.Due_Payment,
+          duePayment: response.data.updatedRow.Due_Payment,
           timestamp: new Date().toISOString(),
-          email: response.data.Email || '',
-          phone: response.data.Phone_Number || ''
+          email: response.data.updatedRow.Email || '',
+          phone: response.data.updatedRow.Phone_Number || ''
         };
         
         setNotificationQueue(prev => {

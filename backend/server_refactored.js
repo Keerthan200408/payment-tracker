@@ -532,7 +532,7 @@ app.post("/api/save-payment", authenticateToken, asyncHandler(async (req, res) =
   };
 
   console.log("Payment saved successfully:", updatedRow);
-  res.json(updatedRow);
+  res.json({ updatedRow });
 }));
 
 // Global error handler
