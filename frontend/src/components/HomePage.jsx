@@ -352,10 +352,13 @@ const HomePage = ({
       );
 
       console.log('API response received:', response.data);
+      console.log('Full response structure:', JSON.stringify(response.data, null, 2));
       console.log('Contact info from backend:', {
         email: response.data.updatedRow?.Email,
         phone: response.data.updatedRow?.Phone_Number,
-        hasUpdatedRow: !!response.data.updatedRow
+        hasUpdatedRow: !!response.data.updatedRow,
+        responseKeys: Object.keys(response.data),
+        updatedRowKeys: response.data.updatedRow ? Object.keys(response.data.updatedRow) : 'No updatedRow'
       });
 
       // Update the payments data with the response
