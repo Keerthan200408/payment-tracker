@@ -346,7 +346,14 @@ const HomePage = ({
         }
       );
 
-      console.log('API response received:', response.data);
+      console.log('DEBUG - API response received:', {
+        clientName,
+        type,
+        responseData: response.data,
+        responseEmail: response.data.Email,
+        responsePhone: response.data.Phone_Number,
+        responseKeys: Object.keys(response.data)
+      });
 
       // Update the payments data with the response
       if (response.data) {
@@ -388,8 +395,22 @@ const HomePage = ({
           phoneTrimmed: notificationData.phone?.trim(),
           responseEmail: response.data.Email,
           responsePhone: response.data.Phone_Number,
+          responseEmailType: typeof response.data.Email,
+          responsePhoneType: typeof response.data.Phone_Number,
+          responseEmailIsEmpty: response.data.Email === '',
+          responsePhoneIsEmpty: response.data.Phone_Number === '',
           fullResponse: response.data
         });
+
+        // Also make a direct API call to check client data
+        try {
+          const debugResponse = await axios.get(`${BASE_URL}/debug-client/${clientName}`, {
+            headers: { Authorization: `Bearer ${sessionToken}` }
+          });
+          console.log('DEBUG - Direct client lookup:', debugResponse.data);
+        } catch (debugError) {
+          console.log('DEBUG - Client lookup failed:', debugError);
+        }
         
         setNotificationQueue(prev => {
           // Remove any existing notification for the same client/type/month

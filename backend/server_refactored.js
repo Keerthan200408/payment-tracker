@@ -468,6 +468,9 @@ app.post("/api/save-payment", authenticateToken, asyncHandler(async (req, res) =
     clientExists: !!client,
     clientEmail: client?.Email,
     clientPhone: client?.Phone_Number,
+    emailLength: client?.Email?.length || 0,
+    phoneLength: client?.Phone_Number?.length || 0,
+    clientKeys: client ? Object.keys(client) : [],
     fullClient: client
   });
 
@@ -570,6 +573,43 @@ app.post("/api/save-payment", authenticateToken, asyncHandler(async (req, res) =
   });
   
   res.json(updatedRow);
+}));
+
+// Debug endpoint to check client data
+app.get("/api/debug-client/:clientName", authenticateToken, asyncHandler(async (req, res) => {
+  const { clientName } = req.params;
+  const username = req.user.username;
+  
+  const db = await connectMongo();
+  const clientsCollection = db.collection(`clients_${username}`);
+  
+  // Find all clients with this name
+  const clients = await clientsCollection.find({ Client_Name: clientName }).toArray();
+  
+  console.log(`DEBUG - Found ${clients.length} clients with name "${clientName}"`);
+  clients.forEach((client, index) => {
+    console.log(`Client ${index + 1}:`, {
+      name: client.Client_Name,
+      type: client.Type,
+      email: client.Email,
+      phone: client.Phone_Number,
+      emailLength: client.Email?.length || 0,
+      phoneLength: client.Phone_Number?.length || 0
+    });
+  });
+  
+  res.json({
+    clientName,
+    found: clients.length,
+    clients: clients.map(c => ({
+      Client_Name: c.Client_Name,
+      Type: c.Type,
+      Email: c.Email || '',
+      Phone_Number: c.Phone_Number || '',
+      emailLength: c.Email?.length || 0,
+      phoneLength: c.Phone_Number?.length || 0
+    }))
+  });
 }));
 
 // Global error handler
