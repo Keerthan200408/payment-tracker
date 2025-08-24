@@ -383,6 +383,7 @@ const HomePage = ({
           const filtered = prev.filter(n => 
             !(n.clientName === clientName && n.type === type && n.month === month)
           );
+          console.log("Notification queue updated:", notificationData);
           return [...filtered, notificationData];
         });
       }
