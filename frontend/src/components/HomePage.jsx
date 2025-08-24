@@ -349,7 +349,7 @@ const HomePage = ({
       console.log('API response received:', response.data);
 
       // Update the payments data with the response
-      if (response.data.updatedRow) {
+      if (response.data) {
         setPaymentsData(prev => {
           return prev.map(row => {
             // Match by client name and type instead of index
@@ -357,13 +357,13 @@ const HomePage = ({
               return {
                 ...row,
                 [month]: value,
-                Due_Payment: response.data.updatedRow.Due_Payment
+                Due_Payment: response.data.Due_Payment
               };
             }
             return row;
           });
         });
-        console.log(`Updated ${clientName} (${type}) with Due_Payment: ${response.data.updatedRow.Due_Payment}`);
+        console.log(`Updated ${clientName} (${type}) with Due_Payment: ${response.data.Due_Payment}`);
         
         // Add to notification queue instead of sending immediately
         const notificationData = {
@@ -372,11 +372,18 @@ const HomePage = ({
           type,
           month,
           value,
-          duePayment: response.data.updatedRow.Due_Payment,
+          duePayment: response.data.Due_Payment,
           timestamp: new Date().toISOString(),
-          email: response.data.updatedRow.Email || '',
-          phone: response.data.updatedRow.Phone_Number || ''
+          email: response.data.Email || '',
+          phone: response.data.Phone_Number || ''
         };
+        
+        console.log('Notification data created:', {
+          clientName,
+          email: notificationData.email,
+          phone: notificationData.phone,
+          fullResponse: response.data
+        });
         
         setNotificationQueue(prev => {
           // Remove any existing notification for the same client/type/month
@@ -1090,9 +1097,9 @@ Payment Tracker Team`);
                         - Paid: ₹{notification.value} - Due: ₹{notification.duePayment}
                       </div>
                       <div className="text-xs text-gray-500">
-                        {notification.phone ? `📱 ${notification.phone}` : ''} 
-                        {notification.email ? ` 📧 ${notification.email}` : ''}
-                        {!notification.phone && !notification.email ? '❌ No contact info' : ''}
+                        {notification.phone && notification.phone.trim() ? `📱 ${notification.phone.trim()}` : ''} 
+                        {notification.email && notification.email.trim() ? ` 📧 ${notification.email.trim()}` : ''}
+                        {(!notification.phone || !notification.phone.trim()) && (!notification.email || !notification.email.trim()) ? '❌ No contact info' : ''}
                       </div>
                     </div>
                     <button
