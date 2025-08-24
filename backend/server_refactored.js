@@ -461,6 +461,14 @@ app.post("/api/save-payment", authenticateToken, asyncHandler(async (req, res) =
     })
   ]);
   
+  console.log("Client lookup result:", {
+    clientName,
+    clientFound: !!client,
+    clientData: client,
+    email: client?.Email,
+    phone: client?.Phone_Number
+  });
+  
   if (!payment) {
     throw new AppError("Payment record not found", config.statusCodes.NOT_FOUND);
   }
@@ -531,6 +539,13 @@ app.post("/api/save-payment", authenticateToken, asyncHandler(async (req, res) =
     Phone_Number: client?.Phone_Number || ""
   };
 
+  console.log("Final response being sent:", {
+    hasClient: !!client,
+    email: client?.Email,
+    phone: client?.Phone_Number,
+    updatedRowEmail: updatedRow.Email,
+    updatedRowPhone: updatedRow.Phone_Number
+  });
   console.log("Payment saved successfully:", updatedRow);
   res.json({ updatedRow });
 }));
