@@ -327,6 +327,11 @@ const HomePage = ({
     console.log(`Attempting to save payment for ${clientName} (${type}), ${month}:`, { value });
     
     try {
+      console.log("=== SENDING PAYMENT SAVE REQUEST ===");
+      console.log("Request data:", { clientName, type, month, value: value.trim() });
+      console.log("BASE_URL:", BASE_URL);
+      console.log("Session token exists:", !!sessionToken);
+      
       // Mark as pending immediately
       setPendingUpdates(prev => ({ ...prev, [key]: true }));
       

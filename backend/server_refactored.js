@@ -422,6 +422,7 @@ app.get("/api/get-payments-by-year", authenticateToken, asyncHandler(async (req,
 
 // Save Payment
 app.post("/api/save-payment", authenticateToken, asyncHandler(async (req, res) => {
+  console.log("=== SAVE PAYMENT ENDPOINT HIT ===");
   const { clientName, type, month, value } = req.body;
   const year = req.query.year || new Date().getFullYear().toString();
   const username = req.user.username;
