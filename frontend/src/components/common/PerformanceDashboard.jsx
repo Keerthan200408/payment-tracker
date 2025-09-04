@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import apiCacheManager from '../../utils/apiCache';
+import apiService from '../../api';
 
 const PerformanceDashboard = ({ isVisible = false, onClose }) => {
   const [stats, setStats] = useState(null);
@@ -9,7 +9,7 @@ const PerformanceDashboard = ({ isVisible = false, onClose }) => {
     if (!isVisible) return;
 
     const updateStats = () => {
-      const cacheStats = apiCacheManager.getStats();
+      const cacheStats = apiService.getStats();
       setStats(cacheStats);
     };
 
@@ -121,8 +121,8 @@ const PerformanceDashboard = ({ isVisible = false, onClose }) => {
               <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={() => {
-                    apiCacheManager.clear();
-                    setStats(apiCacheManager.getStats());
+                    apiService.clear();
+                    setStats(apiService.getStats());
                   }}
                   className="px-3 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
                 >
@@ -130,8 +130,8 @@ const PerformanceDashboard = ({ isVisible = false, onClose }) => {
                 </button>
                 <button
                   onClick={() => {
-                    apiCacheManager.cleanup();
-                    setStats(apiCacheManager.getStats());
+                    apiService.cleanup();
+                    setStats(apiService.getStats());
                   }}
                   className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
                 >

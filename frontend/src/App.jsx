@@ -2,14 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { useData } from './contexts/DataContext';
 
-// Import Pages
+// ASSUMPTION: These page components exist in the 'src/pages/' directory.
 import SignInPage from './pages/SignInPage';
 import DashboardPage from './pages/DashboardPage';
 import AddClientPage from './pages/AddClientPage';
 import ClientsPage from './pages/ClientsPage';
 import PaymentsPage from './pages/PaymentsPage';
 
-// Import Common Components
+// ASSUMPTION: These common components exist in 'src/components/common/'.
 import LoadingSkeleton from './components/common/LoadingSkeleton';
 import SessionTimer from './components/common/SessionTimer';
 
@@ -17,14 +17,14 @@ const App = () => {
     const { sessionToken, currentUser, isInitialized, logout } = useAuth();
     const { fetchClients, fetchTypes } = useData();
 
-    // UI State
+    // UI State for navigation and editing
     const [page, setPage] = useState(() => localStorage.getItem("currentPage") || "home");
-    const [editClient, setEditClient] = useState(null); // State for editing a specific client
+    const [editClient, setEditClient] = useState(null);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
     const profileMenuRef = useRef(null);
 
-    // Initial data fetch when user logs in
+    // Initial data fetch when a user is authenticated
     useEffect(() => {
         if (sessionToken && currentUser) {
             fetchTypes();
@@ -32,14 +32,14 @@ const App = () => {
         }
     }, [sessionToken, currentUser, fetchTypes, fetchClients]);
 
-    // Persist current page to local storage for better user experience
+    // Persist the current page to local storage
     useEffect(() => {
         if (page !== 'signIn') {
             localStorage.setItem("currentPage", page);
         }
     }, [page]);
 
-    // Effect to handle clicks outside the profile menu to close it
+    // Effect to close profile menu when clicking outside of it
     useEffect(() => {
         const handleClickOutside = (e) => {
             if (profileMenuRef.current && !profileMenuRef.current.contains(e.target)) {
@@ -60,7 +60,7 @@ const App = () => {
         return <SignInPage />;
     }
 
-    // Page Router Logic
+    // Simple router to render the correct page component
     const renderPage = () => {
         switch (page) {
             case "clients":

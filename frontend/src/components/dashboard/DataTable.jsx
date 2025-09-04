@@ -1,22 +1,12 @@
 import React, { memo, useCallback, useMemo, useState } from 'react';
 import { formatCurrency } from '../../utils/formatters';
-import RemarkPopup from './RemarkPopup';
+import RemarkPopup from '../shared/RemarkPopup';
 
 const DataTable = memo(({ 
-  data, 
-  months, 
-  onCellEdit, 
-  onContextMenu, 
-  isLoading,
-  currentYear,
-  showToast,
-  localInputValues = {},
-  handleInputChange,
-  getInputBackgroundColor,
-  pendingUpdates = {},
-  isReportsPage = false,
-  sessionToken,
-  onRemarkSaved
+    data, months, currentYear,
+    handleInputChange, getInputBackgroundColor,
+    localInputValues, pendingUpdates,
+    onRemarkSaved, onRemarkButtonClick
 }) => {
   const [remarkPopup, setRemarkPopup] = useState({
     isOpen: false,
