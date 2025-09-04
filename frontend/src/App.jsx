@@ -15,7 +15,7 @@ import SessionTimer from './components/common/SessionTimer';
 
 const App = () => {
     const { sessionToken, setSessionToken, currentUser, setCurrentUser, isInitialized, logout } = useAuth();
-    const { fetchClients, fetchTypes } = useData();
+    const { fetchClients, fetchPayments, fetchTypes } = useData();
 
     // UI State for navigation and editing
     const [page, setPage] = useState(() => localStorage.getItem("currentPage") || "home");
