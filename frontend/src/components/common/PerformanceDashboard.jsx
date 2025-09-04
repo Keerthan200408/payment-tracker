@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import apiCacheManager from '../utils/apiCache';
+import apiCacheManager from '../../utils/apiCache';
 
 const PerformanceDashboard = ({ isVisible = false, onClose }) => {
   const [stats, setStats] = useState(null);

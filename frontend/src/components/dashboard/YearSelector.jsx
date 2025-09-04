@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { yearsAPI } from '../utils/api';
+import { yearsAPI } from '../../utils/api';
 
 const YearSelector = ({ 
   currentYear, 

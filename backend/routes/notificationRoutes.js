@@ -5,18 +5,18 @@ const {
   getNotificationQueue,
   saveNotificationQueue,
   clearNotificationQueue
-} = require('../controllers/notificationController');
+} = require('../controllers/notificationController'); // This line connects to your controller
 
-// Apply authentication middleware to all notification routes
+// Apply authentication to all routes in this file
 router.use(authenticateToken);
 
-// Get notification queue
+// GET /api/notifications/queue
 router.get('/queue', getNotificationQueue);
 
-// Save notification queue
+// POST /api/notifications/queue
 router.post('/queue', saveNotificationQueue);
 
-// Clear notification queue
+// DELETE /api/notifications/queue
 router.delete('/queue', clearNotificationQueue);
 
 module.exports = router;
