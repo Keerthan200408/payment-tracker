@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App.jsx'; // Corrected: Import App instead of AppContent
+import App from './App.jsx'; // Corrected: Import App
 import { AuthProvider } from './contexts/AuthContext';
 import { DataProvider } from './contexts/DataContext';
 import ErrorBoundary from './components/common/ErrorBoundary';
@@ -11,7 +11,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <ErrorBoundary>
       <AuthProvider>
         <DataProvider>
-          <App /> {/* Corrected: Render App here */}
+          <App /> {/* Corrected: Render App here instead of AppContent */}
         </DataProvider>
       </AuthProvider>
     </ErrorBoundary>

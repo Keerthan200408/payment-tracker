@@ -2,11 +2,18 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
 import api from '../api';
+import { debounce } from 'lodash';
+
+// ASSUMPTION: These components exist in the specified paths.
 import DataTable from '../components/dashboard/DataTable';
 import YearSelector from '../components/dashboard/YearSelector';
 import NotificationModal from '../components/dashboard/NotificationModal';
-import { debounce } from 'lodash';
-import { months as monthList } from '../config'; // Assuming months are exported from config
+
+// CORRECTED: Define months array directly in the frontend. Do not import from backend.
+const months = [
+    "january", "february", "march", "april", "may", "june",
+    "july", "august", "september", "october", "november", "december"
+];
 
 const DashboardPage = ({ setPage }) => {
     const { sessionToken, currentUser } = useAuth();
@@ -20,7 +27,7 @@ const DashboardPage = ({ setPage }) => {
         setErrorMessage
     } = useData();
     
-    // Page-specific state
+    // Page-specific state from original HomePage.jsx
     const [currentYear, setCurrentYear] = useState(() => localStorage.getItem("currentYear") || new Date().getFullYear().toString());
     const [availableYears, setAvailableYears] = useState([currentYear]);
     const [isLoadingYears, setIsLoadingYears] = useState(false);
@@ -32,8 +39,11 @@ const DashboardPage = ({ setPage }) => {
     const saveTimeoutsRef = useRef({});
     const csvFileInputRef = useRef(null);
     const [isImporting, setIsImporting] = useState(false);
+    const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
+    const [newType, setNewType] = useState("");
+    const [typeError, setTypeError] = useState("");
 
-    // Notification Queue State & Logic
+    // --- Notification Queue State & Logic ---
     const [notificationQueue, setNotificationQueue] = useState([]);
     const notificationQueueRef = useRef([]);
     const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
@@ -75,12 +85,14 @@ const DashboardPage = ({ setPage }) => {
         } catch (error) { console.error("Failed to clear DB queue", error); }
     };
     
+    // --- All Functions from original HomePage.jsx ---
+    
     const handleYearChange = (year) => {
         setCurrentYear(year);
-        fetchPayments(year);
+        localStorage.setItem("currentYear", year);
+        fetchPayments(year, true); // Force refresh on year change
     };
 
-    // All handlers from original HomePage.jsx go here, adapted to new structure
     const handleRemarkSaved = (clientName, type, month, newRemark) => {
          setPaymentsData(prevData => {
             return prevData.map(row => {
@@ -93,8 +105,57 @@ const DashboardPage = ({ setPage }) => {
             });
         });
     };
+    
+    const savePayment = useCallback(async (rowIndex, month, value) => {
+        const row = paymentsData[rowIndex];
+        if (!row) return;
 
-    const handleInputChange = (rowIndex, month, value) => {
+        setPendingUpdates(prev => ({ ...prev, [`${rowIndex}-${month}`]: true }));
+
+        try {
+            const response = await api.payments.savePayment({
+                clientName: row.Client_Name,
+                type: row.Type,
+                month,
+                value
+            }, currentYear);
+            
+            if (response.data.updatedRow) {
+                const updatedRowFromServer = response.data.updatedRow;
+                
+                // Update local state with confirmed data
+                setPaymentsData(prev => prev.map((item, idx) => 
+                    idx === rowIndex 
+                        ? { ...item, [month]: value, Due_Payment: updatedRowFromServer.Due_Payment } 
+                        : item
+                ));
+
+                // Add to notification queue
+                setNotificationQueue(prev => {
+                    const filtered = prev.filter(n => !(n.clientName === row.Client_Name && n.type === row.Type && n.month === month));
+                    return [...filtered, {
+                        id: `${row.Client_Name}-${row.Type}-${month}-${Date.now()}`,
+                        clientName: row.Client_Name, type: row.Type, month, value,
+                        duePayment: updatedRowFromServer.Due_Payment,
+                        email: updatedRowFromServer.Email, phone: updatedRowFromServer.Phone_Number,
+                    }];
+                });
+            }
+
+        } catch (error) {
+            handleApiError(error);
+            // Revert optimistic update on failure
+            setLocalInputValues(prev => ({...prev, [`${rowIndex}-${month}`]: row[month] || ''}));
+        } finally {
+            setPendingUpdates(prev => {
+                const newPending = { ...prev };
+                delete newPending[`${rowIndex}-${month}`];
+                return newPending;
+            });
+        }
+    }, [paymentsData, currentYear, setPaymentsData, handleApiError]);
+    
+    const handleInputChange = useCallback((rowIndex, month, value) => {
         const key = `${rowIndex}-${month}`;
         setLocalInputValues(prev => ({ ...prev, [key]: value }));
 
@@ -109,57 +170,23 @@ const DashboardPage = ({ setPage }) => {
             }
             delete saveTimeoutsRef.current[key];
         }, 1000);
-    };
-    
-    const savePayment = async (rowIndex, month, value) => {
-        const row = paymentsData[rowIndex];
-        if (!row) return;
+    }, [paymentsData, savePayment]);
 
-        setPendingUpdates(prev => ({ ...prev, [`${rowIndex}-${month}`]: true }));
+    const getInputBackgroundColor = useCallback((row, month, rowIndex) => {
+        const key = `${rowIndex}-${month}`;
+        const currentValue = localInputValues[key] !== undefined ? localInputValues[key] : (row?.[month] || "");
+        const amountToBePaid = parseFloat(row?.Amount_To_Be_Paid || 0);
+        const paidInMonth = parseFloat(currentValue) || 0;
 
-        try {
-            const response = await api.payments.savePayment({
-                clientName: row.Client_Name,
-                type: row.Type,
-                month,
-                value
-            }, currentYear);
+        let status;
+        if (paidInMonth === 0) status = "Unpaid";
+        else if (paidInMonth >= amountToBePaid) status = "Paid";
+        else status = "PartiallyPaid";
 
-            if (response.data.updatedRow) {
-                const updatedRowFromServer = response.data.updatedRow;
-                // Add to notification queue
-                const notificationData = {
-                    id: `${row.Client_Name}-${row.Type}-${month}-${Date.now()}`,
-                    clientName: row.Client_Name,
-                    type: row.Type,
-                    month, value,
-                    duePayment: updatedRowFromServer.Due_Payment,
-                    email: updatedRowFromServer.Email,
-                    phone: updatedRowFromServer.Phone_Number,
-                };
-                setNotificationQueue(prev => {
-                    const filtered = prev.filter(n => !(n.clientName === row.Client_Name && n.type === row.Type && n.month === month));
-                    return [...filtered, notificationData];
-                });
-                
-                // Update local state with confirmed data from server
-                 setPaymentsData(prev => prev.map((item, idx) => idx === rowIndex ? {...item, [month]: value, Due_Payment: updatedRowFromServer.Due_Payment} : item));
-            }
-
-        } catch (error) {
-            handleApiError(error);
-            // Revert optimistic update on failure
-            setLocalInputValues(prev => ({...prev, [`${rowIndex}-${month}`]: row[month] || ''}));
-        } finally {
-            setPendingUpdates(prev => {
-                const newPending = { ...prev };
-                delete newPending[`${rowIndex}-${month}`];
-                return newPending;
-            });
-        }
-    };
-    
-    // ... Implement other handlers like addNewYear, importCsv, getInputBackgroundColor
+        const isPending = pendingUpdates[key];
+        const baseColor = status === "Unpaid" ? "bg-red-200/50" : status === "PartiallyPaid" ? "bg-yellow-200/50" : "bg-green-200/50";
+        return isPending ? `${baseColor} ring-2 ring-blue-300` : baseColor;
+    }, [localInputValues, pendingUpdates]);
     
     const filteredData = useMemo(() => {
         return (paymentsData || []).filter((row) => {
@@ -171,7 +198,7 @@ const DashboardPage = ({ setPage }) => {
     
     return (
         <div>
-            {/* The complete JSX from your original HomePage.jsx goes here */}
+            {/* --- The complete JSX from your original HomePage.jsx --- */}
             <YearSelector 
                 currentYear={currentYear}
                 availableYears={availableYears}
@@ -210,13 +237,13 @@ const DashboardPage = ({ setPage }) => {
             <div className="bg-white rounded-lg shadow-sm overflow-hidden">
                 <DataTable 
                     data={filteredData} 
-                    months={monthList.map(m => m.toLowerCase())}
+                    months={months}
                     currentYear={currentYear}
                     onRemarkSaved={handleRemarkSaved}
                     handleInputChange={handleInputChange}
                     localInputValues={localInputValues}
                     pendingUpdates={pendingUpdates}
-                    // getInputBackgroundColor={...}
+                    getInputBackgroundColor={getInputBackgroundColor}
                 />
             </div>
         </div>
