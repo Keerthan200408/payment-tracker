@@ -15,15 +15,7 @@ const DataTable = memo(({
     month: '',
     currentRemark: 'N/A'
   });
-  const handleCellClick = useCallback((rowIndex, month) => {
-    if (isLoading) return;
-    onCellEdit(rowIndex, month);
-  }, [isLoading, onCellEdit]);
-
-  const handleContextMenu = useCallback((e, rowIndex) => {
-    e.preventDefault();
-    onContextMenu(e, rowIndex);
-  }, [onContextMenu]);
+  
 
   const memoizedData = useMemo(() => {
     if (!Array.isArray(data)) return [];
