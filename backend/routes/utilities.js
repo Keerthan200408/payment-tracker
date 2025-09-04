@@ -1,11 +1,16 @@
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../middleware/auth');
+const auth = require('../middleware/auth');
 const mongoose = require('mongoose');
 
 // Get all payment types
 router.get('/get-types', auth, async (req, res) => {
     try {
+        // Ensure MongoDB connection is ready
+        if (!mongoose.connection || !mongoose.connection.readyState) {
+            throw new Error('MongoDB connection not ready');
+        }
+        
         // Get distinct types from the payments collection
         const types = await mongoose.connection.db
             .collection('payments')
