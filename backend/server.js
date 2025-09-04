@@ -1,3 +1,5 @@
+const { sanitizeMongoQuery, createSafeQuery, sanitizeUpdateObject } = require('./utils/mongoSanitizer');
+
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
@@ -182,6 +184,44 @@ async function calculateNewDuePayment(updatedPayments, months, amountToBePaid, c
   };
 }
 
+function validateAndSanitizeInputs(clientName, type, year) {
+  // Validate required fields
+  if (!clientName || typeof clientName !== 'string') {
+    throw new ValidationError('Valid client name is required');
+  }
+  
+  if (!type || typeof type !== 'string') {
+    throw new ValidationError('Valid type is required');
+  }
+  
+  // Sanitize inputs
+  const sanitizedClientName = sanitizeInput(clientName.trim());
+  const sanitizedType = sanitizeInput(type.trim().toUpperCase());
+  
+  if (!sanitizedClientName || sanitizedClientName.length === 0) {
+    throw new ValidationError('Client name cannot be empty after sanitization');
+  }
+  
+  if (!sanitizedType || sanitizedType.length === 0) {
+    throw new ValidationError('Type cannot be empty after sanitization');
+  }
+  
+  let sanitizedYear = null;
+  if (year !== undefined && year !== null) {
+    const yearInt = parseInt(year);
+    if (isNaN(yearInt) || yearInt < 2020 || yearInt > 2050) {
+      throw new ValidationError('Invalid year provided');
+    }
+    sanitizedYear = yearInt;
+  }
+  
+  return { 
+    clientName: sanitizedClientName, 
+    type: sanitizedType, 
+    year: sanitizedYear 
+  };
+}
+
 // Google Sign-In
 app.post("/api/google-signin", asyncHandler(async (req, res) => {
   console.log("Received /api/google-signin request");
@@ -206,7 +246,12 @@ app.post("/api/google-signin", asyncHandler(async (req, res) => {
 
     const db = await connectMongo();
     const users = db.collection("users");
-    const user = await users.findOne({ $or: [{ GoogleEmail: email }, { Username: email }] });
+    const user = await users.findOne({ 
+      $or: [
+        { GoogleEmail: { $eq: String(email) } }, 
+        { Username: { $eq: String(email) } }
+      ] 
+    });
     
     if (user) {
       const username = user.Username;
@@ -302,7 +347,7 @@ app.post("/api/login", async (req, res) => {
   try {
     const db = await connectMongo();
     const users = db.collection("users");
-    const user = await users.findOne({ Username: username });
+    const user = await users.findOne({ Username: { $eq: String(username) } });
     if (!user || !user.Password || !(await bcrypt.compare(password, user.Password))) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
@@ -445,7 +490,7 @@ app.post("/api/add-client", authenticateToken, async (req, res) => {
     const clientsCollection = db.collection(`clients_${username}`);
     const paymentsCollection = db.collection(`payments_${username}`);
     
-    const existingClient = await clientsCollection.findOne({ Client_Name: clientName, Type: type });
+    const existingClient = await clientsCollection.findOne(createSafeQuery(clientName, type));
     if (existingClient) {
       return res.status(400).json({ error: "Client with this name and type already exists" });
     }
@@ -461,7 +506,7 @@ app.post("/api/add-client", authenticateToken, async (req, res) => {
     });
     
     // Get all existing years
-    const existingYears = await paymentsCollection.distinct("Year");
+    const existingYears = await paymentsCollection.distinct("Year", {});
     const yearsToCreate = existingYears.length > 0 ? existingYears : [2025];
     
     // FIXED: Create payment records with proper initial due payment
@@ -601,7 +646,7 @@ app.post("/api/delete-client", authenticateToken, async (req, res) => {
     if (!client) {
       return res.status(404).json({ error: "Client not found" });
     }
-    await clientsCollection.deleteOne({ Client_Name, Type });
+    await clientsCollection.deleteOne(createSafeQuery(Client_Name, Type));
     await paymentsCollection.deleteMany({ Client_Name, Type });
     res.json({ message: "Client deleted successfully" });
   } catch (error) {
@@ -738,11 +783,9 @@ app.post("/api/save-payment", authenticateToken, paymentLimiter, async (req, res
 if (isNaN(yearInt)) {
   throw new ValidationError("Invalid year parameter");
 }
-const payment = await paymentsCollection.findOne({ 
-  Client_Name: { $eq: clientName }, 
-  Type: { $eq: type }, 
-  Year: { $eq: yearInt } 
-});
+const payment = await paymentsCollection.findOne(
+  createSafeQuery(clientName, type, parseInt(year))
+);
     if (!payment) {
       console.error("Payment record not found:", { user: username, clientName, type, year });
       return res.status(404).json({ error: "Payment record not found" });
@@ -803,12 +846,14 @@ const payment = await paymentsCollection.findOne({
     });
 
     await paymentsCollection.updateOne(
-      { 
-        Client_Name: { $eq: clientName }, 
-        Type: { $eq: type }, 
-        Year: { $eq: parseInt(year) } 
-      },
-      { $set: { Payments: updatedPayments, Due_Payment: finalDuePayment, Last_Updated: new Date() } }
+      createSafeQuery(clientName, type, parseInt(year)),
+      sanitizeUpdateObject({ 
+        $set: { 
+          Payments: updatedPayments, 
+          Due_Payment: finalDuePayment,
+          Last_Updated: new Date()
+        } 
+      })
     );
 
     const updatedRow = {
@@ -971,11 +1016,7 @@ app.post("/api/batch-save-payments", authenticateToken, paymentLimiter, async (r
     const yearInt = parseInt(year);
     const pipeline = [
       {
-        $match: {
-          Client_Name: { $eq: clientName },
-      Type: { $eq: type },
-      Year: { $eq: yearInt },
-        },
+        $match: createSafeQuery(clientName, type, yearInt),
       },
       {
         $lookup: {
@@ -1236,7 +1277,7 @@ if (isNaN(yearInt)) {
 }
 const existingPayments = await paymentsCollection.find({ Year: { $eq: yearInt } }).toArray();
     if (existingPayments.length > 0) {
-      await paymentsCollection.deleteMany({ Year: parseInt(year) });
+      await paymentsCollection.deleteMany({ Year: { $eq: parseInt(year) } });
       console.log(`Deleted ${existingPayments.length} existing payments for year ${year}`);
     }
     const paymentDocs = clients.map(client => ({
@@ -1299,7 +1340,7 @@ app.post("/api/import-csv", authenticateToken, async (req, res) => {
     console.log("Available user types:", userTypes);
 
     // Get all existing years for this user
-    const existingYears = await paymentsCollection.distinct("Year");
+    const existingYears = await paymentsCollection.distinct("Year", {});
     const yearsToCreate = existingYears.length > 0 ? existingYears : [2025];
     console.log(`Will create payment records for years: ${yearsToCreate.join(', ')}`);
 

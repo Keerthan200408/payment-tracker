@@ -1,3 +1,5 @@
+const { sanitizeMongoQuery, createSafeQuery, sanitizeUpdateObject } = require('./utils/mongoSanitizer');
+
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
@@ -523,13 +525,15 @@ app.post("/api/save-payment", authenticateToken, asyncHandler(async (req, res) =
   const updatedPayment = processPaymentUpdate(payment, updatedPayments, parseInt(year), prevYearPayment);
   
   await paymentsCollection.updateOne(
-    { Client_Name: clientName, Type: type, Year: parseInt(year) },
-    { $set: { 
-      Payments: updatedPayment.Payments, 
-      Due_Payment: updatedPayment.Due_Payment, 
-      Last_Updated: updatedPayment.Last_Updated 
-    }}
-  );
+  createSafeQuery(clientName, type, parseInt(year)),
+  sanitizeUpdateObject({ 
+    $set: { 
+      Payments: updatedPayments, 
+      Due_Payment: finalDuePayment,
+      Last_Updated: new Date()
+    } 
+  })
+);
 
   const updatedRow = {
     Client_Name: payment.Client_Name,
