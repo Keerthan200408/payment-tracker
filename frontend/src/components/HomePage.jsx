@@ -538,22 +538,33 @@ const HomePage = ({
     currentDataRef.current = paymentsData;
   }, [paymentsData]);
 
-  // Load notification queue from database on component mount
+  // Load notification queue from database on component mount and when session token changes
   useEffect(() => {
     const loadNotificationQueue = async () => {
       if (!sessionToken) return;
       
       try {
+        console.log('Loading notification queue...');
         const response = await axios.get(`${BASE_URL}/notifications/queue`, {
-          headers: { Authorization: `Bearer ${sessionToken}` }
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${sessionToken}`
+          },
+          withCredentials: true
         });
+        
+        console.log('Notification queue response:', response.data);
         
         if (response.data && response.data.queue) {
           setNotificationQueue(response.data.queue);
           notificationQueueRef.current = response.data.queue;
         }
       } catch (error) {
-        console.error('Error loading notification queue:', error);
+        console.error('Error loading notification queue:', {
+          message: error.message,
+          response: error.response?.data,
+          status: error.response?.status
+        });
         setLocalErrorMessage('Failed to load notification queue');
       }
     };
@@ -567,13 +578,25 @@ const HomePage = ({
       if (!sessionToken || notificationQueue.length === 0) return;
       
       try {
+        console.log('Saving notification queue:', notificationQueue);
         await axios.post(
           `${BASE_URL}/notifications/queue`,
           { queue: notificationQueue },
-          { headers: { Authorization: `Bearer ${sessionToken}` } }
+          { 
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${sessionToken}`
+            },
+            withCredentials: true
+          }
         );
+        console.log('Successfully saved notification queue');
       } catch (error) {
-        console.error('Error saving notification queue:', error);
+        console.error('Error saving notification queue:', {
+          message: error.message,
+          response: error.response?.data,
+          status: error.response?.status
+        });
         setLocalErrorMessage('Failed to save notification queue');
       }
     };
@@ -610,13 +633,23 @@ Payment Tracker Team`);
     if (!sessionToken) return;
     
     try {
+      console.log('Clearing notification queue...');
       await axios.delete(`${BASE_URL}/notifications/queue`, {
-        headers: { Authorization: `Bearer ${sessionToken}` }
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionToken}`
+        },
+        withCredentials: true
       });
+      console.log('Successfully cleared notification queue');
       setNotificationQueue([]);
       notificationQueueRef.current = [];
     } catch (error) {
-      console.error('Error clearing notification queue:', error);
+      console.error('Error clearing notification queue:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
       setLocalErrorMessage('Failed to clear notification queue');
     }
   };

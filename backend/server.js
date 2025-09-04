@@ -1,4 +1,5 @@
 const { sanitizeMongoQuery, createSafeQuery, sanitizeUpdateObject } = require('./utils/mongoSanitizer');
+const notificationRoutes = require('./routes/notificationRoutes');
 
 const express = require("express");
 const cors = require("cors");
@@ -58,6 +59,13 @@ app.use("/api/google-signin", authLimiter);
 app.use("/api/google-signup", authLimiter);
 app.use("/api/login", authLimiter);
 app.use("/api/signup", authLimiter);
+
+// Routes
+app.use("/api/auth", require("./routes/auth"));
+app.use("/api/clients", require("./routes/clients"));
+app.use("/api/payments", require("./routes/payments"));
+app.use("/api/utilities", require("./routes/utilities"));
+app.use("/api/notifications", notificationRoutes);
 
 // Cookie parser and JSON parsing
 app.use(cookieParser());
