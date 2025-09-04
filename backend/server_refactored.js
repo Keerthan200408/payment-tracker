@@ -128,7 +128,7 @@ app.post("/api/google-signin", asyncHandler(async (req, res) => {
 
   const db = await connectMongo();
   const users = db.collection("users");
-  const user = await users.findOne({ $or: [{ GoogleEmail: email }, { Username: email }] });
+  const user = await users.findOne(sanitizeMongoQuery({ $or: [{ GoogleEmail: email }, { Username: email }] }));
   
   if (user) {
     const username = user.Username;

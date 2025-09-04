@@ -909,7 +909,7 @@ app.post("/api/save-remark", authenticateToken, async (req, res) => {
   try {
     const db = await connectMongo();
     const paymentsCollection = db.collection(`payments_${username}`);
-    const payment = await paymentsCollection.findOne({ Client_Name: clientName, Type: type, Year: parseInt(year) });
+const payment = await paymentsCollection.findOne(createSafeQuery(clientName, type, parseInt(year)));
     
     if (!payment) {
       console.error("Payment record not found:", { user: username, clientName, type, year });
@@ -920,12 +920,8 @@ app.post("/api/save-remark", authenticateToken, async (req, res) => {
     const updatedRemarks = { ...payment.Remarks, [monthKey]: remark || "N/A" };
 
     await paymentsCollection.updateOne(
-      { 
-        Client_Name: { $eq: clientName }, 
-        Type: { $eq: type }, 
-        Year: { $eq: parseInt(year) } 
-      },
-      { $set: { Remarks: updatedRemarks, Last_Updated: new Date() } }
+      createSafeQuery(clientName, type, parseInt(year)),
+      sanitizeUpdateObject({ $set: { Remarks: updatedRemarks, Last_Updated: new Date() } })
     );
 
     console.log("Remark saved successfully for:", clientName, monthKey, remark);
