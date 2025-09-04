@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const auth = require('../middleware/auth');
+const { authenticateToken } = require('../middleware/auth');
 const mongoose = require('mongoose');
 
 // Get all payment types
-router.get('/get-types', auth, async (req, res) => {
+router.get('/get-types', authenticateToken, async (req, res) => {
     try {
         // Ensure MongoDB connection is ready
         if (!mongoose.connection || !mongoose.connection.readyState) {
