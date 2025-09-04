@@ -326,7 +326,7 @@ app.post("/api/add-client", authenticateToken, asyncHandler(async (req, res) => 
   const clientsCollection = db.collection(`clients_${username}`);
   const paymentsCollection = db.collection(`payments_${username}`);
   
-  const existingClient = await clientsCollection.findOne({ Client_Name: clientName, Type: type });
+  const existingClient = await clientsCollection.findOne(createSafeQuery(clientName, type, parseInt(year)));
   if (existingClient) {
     throw new ValidationError("Client with this name and type already exists");
   }
@@ -466,11 +466,7 @@ app.post("/api/save-payment", authenticateToken, asyncHandler(async (req, res) =
   const clientsCollection = db.collection(`clients_${username}`);
   
   const [payment, client] = await Promise.all([
-    paymentsCollection.findOne({ 
-      Client_Name: clientName, 
-      Type: type, 
-      Year: parseInt(year) 
-    }),
+    paymentsCollection.findOne(createSafeQuery(clientName, type, parseInt(year))),
     clientsCollection.findOne({ 
       Client_Name: clientName
     })
@@ -514,26 +510,20 @@ app.post("/api/save-payment", authenticateToken, asyncHandler(async (req, res) =
   // Get previous year payment for due calculation
   let prevYearPayment = null;
   if (parseInt(year) > 2025) {
-    prevYearPayment = await paymentsCollection.findOne({
-      Client_Name: clientName,
-      Type: type,
-      Year: parseInt(year) - 1
-    });
+    prevYearPayment = await paymentsCollection.findOne(createSafeQuery(clientName, type, parseInt(year)) - 1);
   }
   
   // Use centralized payment processing
   const updatedPayment = processPaymentUpdate(payment, updatedPayments, parseInt(year), prevYearPayment);
   
   await paymentsCollection.updateOne(
-  createSafeQuery(clientName, type, parseInt(year)),
-  sanitizeUpdateObject({ 
-    $set: { 
-      Payments: updatedPayments, 
-      Due_Payment: finalDuePayment,
-      Last_Updated: new Date()
-    } 
-  })
-);
+    createSafeQuery(clientName, type, parseInt(year)),
+    { $set: { 
+      Payments: updatedPayment.Payments, 
+      Due_Payment: updatedPayment.Due_Payment, 
+      Last_Updated: updatedPayment.Last_Updated 
+    }}
+  );
 
   const updatedRow = {
     Client_Name: payment.Client_Name,
