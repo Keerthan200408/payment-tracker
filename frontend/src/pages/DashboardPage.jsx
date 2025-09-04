@@ -36,14 +36,7 @@ const DashboardPage = ({ setPage }) => {
     const [localInputValues, setLocalInputValues] = useState({});
     const [pendingUpdates, setPendingUpdates] = useState({});
     const [searchQuery, setSearchQuery] = useState("");
-    const [monthFilter, setMonthFilter] = useState("");
-    const [statusFilter, setStatusFilter] = useState("");
     const saveTimeoutsRef = useRef({});
-    const csvFileInputRef = useRef(null);
-    const [isImporting, setIsImporting] = useState(false);
-    const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
-    const [newType, setNewType] = useState("");
-    const [typeError, setTypeError] = useState("");
     const [remarkPopup, setRemarkPopup] = useState({ isOpen: false });
 
     // --- Notification Queue Logic (This is correct) ---
@@ -52,12 +45,32 @@ const DashboardPage = ({ setPage }) => {
     const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
 
     useEffect(() => {
+        const fetchUserYears = async () => {
+            if (sessionToken) {
+                setIsLoadingYears(true);
+                try {
+                    // This assumes you have a `getUserYears` method in your payments API service
+                    const yearsData = await api.payments.getUserYears(); 
+                    setAvailableYears(yearsData.length > 0 ? yearsData : [currentYear]);
+                } catch (error) {
+                    handleApiError(error);
+                    setAvailableYears([currentYear]); // Fallback
+                } finally {
+                    setIsLoadingYears(false);
+                }
+            }
+        };
+        fetchUserYears();
+    }, [sessionToken, handleApiError]);
+
+    useEffect(() => {
         const loadQueue = async () => {
             if (sessionToken) {
                 try {
                     const response = await api.notifications.getQueue();
-                    setNotificationQueue(response.data.queue || []);
-                    notificationQueueRef.current = response.data.queue || [];
+                    const queue = response.data.queue || [];
+                    setNotificationQueue(queue);
+                    notificationQueueRef.current = queue;
                 } catch (error) { handleApiError(error); }
             }
         };
@@ -85,6 +98,30 @@ const DashboardPage = ({ setPage }) => {
         } catch (error) { handleApiError(error); }
     };
 
+    const handleYearChange = (year) => {
+        setCurrentYear(year);
+        localStorage.setItem("currentYear", year);
+        fetchPayments(year, true);
+    };
+
+    const handleAddNewYear = async () => {
+        const latestYear = availableYears.sort((a,b) => b-a)[0] || currentYear;
+        const newYear = (parseInt(latestYear) + 1).toString();
+        setIsLoadingYears(true);
+        try {
+            await api.payments.addNewYear(newYear);
+            const updatedYears = await api.payments.getUserYears(true); // force refresh years
+            setAvailableYears(updatedYears);
+            handleYearChange(newYear);
+            alert(`Year ${newYear} added successfully!`);
+        } catch (error) {
+            handleApiError(error);
+            alert(error.response?.data?.error || `Failed to add year ${newYear}.`);
+        } finally {
+            setIsLoadingYears(false);
+        }
+    };
+
     // --- All Functions from original HomePage.jsx, now complete ---
     
     useEffect(() => {
@@ -102,12 +139,7 @@ const DashboardPage = ({ setPage }) => {
         setLocalInputValues(prev => ({ ...prev, ...initialValues }));
     }, [paymentsData]);
 
-
-    const handleYearChange = (year) => {
-        setCurrentYear(year);
-        localStorage.setItem("currentYear", year);
-        fetchPayments(year, true);
-    };
+    
 
     const handleRemarkSaved = (clientName, type, month, newRemark) => {
         setPaymentsData(prevData => prevData.map(row => {
@@ -188,23 +220,6 @@ const DashboardPage = ({ setPage }) => {
                 row?.Type?.toLowerCase().includes(searchQuery.toLowerCase());
         });
     }, [paymentsData, searchQuery]);
-
-    const handleAddNewYear = async () => {
-        const nextYear = (parseInt(availableYears[availableYears.length - 1] || currentYear) + 1).toString();
-        setIsLoadingYears(true);
-        try {
-            await api.payments.addNewYear(nextYear);
-            const years = await api.payments.getUserYears(true); // force refresh years
-            setAvailableYears(years);
-            handleYearChange(nextYear);
-            alert(`Year ${nextYear} added successfully!`);
-        } catch (error) {
-            handleApiError(error);
-            alert(error.response?.data?.error || `Failed to add year ${nextYear}.`);
-        } finally {
-            setIsLoadingYears(false);
-        }
-    };
 
     // ADDED: Logic for Add Type Modal
     const handleAddType = async () => {
