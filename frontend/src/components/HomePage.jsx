@@ -52,6 +52,7 @@ const HomePage = ({
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
   const [messageTemplate, setMessageTemplate] = useState('');
   const [isSendingNotifications, setIsSendingNotifications] = useState(false);
+  const notificationQueueRef = useRef([]);
 
   // Refs
   const csvFileInputRef = useRef(null);
@@ -537,6 +538,53 @@ const HomePage = ({
     currentDataRef.current = paymentsData;
   }, [paymentsData]);
 
+  // Load notification queue from database on component mount
+  useEffect(() => {
+    const loadNotificationQueue = async () => {
+      if (!sessionToken) return;
+      
+      try {
+        const response = await axios.get(`${BASE_URL}/notifications/queue`, {
+          headers: { Authorization: `Bearer ${sessionToken}` }
+        });
+        
+        if (response.data && response.data.queue) {
+          setNotificationQueue(response.data.queue);
+          notificationQueueRef.current = response.data.queue;
+        }
+      } catch (error) {
+        console.error('Error loading notification queue:', error);
+        setLocalErrorMessage('Failed to load notification queue');
+      }
+    };
+    
+    loadNotificationQueue();
+  }, [sessionToken]);
+  
+  // Save notification queue to database whenever it changes
+  useEffect(() => {
+    const saveNotificationQueue = async () => {
+      if (!sessionToken || notificationQueue.length === 0) return;
+      
+      try {
+        await axios.post(
+          `${BASE_URL}/notifications/queue`,
+          { queue: notificationQueue },
+          { headers: { Authorization: `Bearer ${sessionToken}` } }
+        );
+      } catch (error) {
+        console.error('Error saving notification queue:', error);
+        setLocalErrorMessage('Failed to save notification queue');
+      }
+    };
+    
+    // Only save if the queue has changed
+    if (JSON.stringify(notificationQueue) !== JSON.stringify(notificationQueueRef.current)) {
+      saveNotificationQueue();
+      notificationQueueRef.current = [...notificationQueue];
+    }
+  }, [notificationQueue, sessionToken]);
+
   // Initialize default message template
   useEffect(() => {
     if (!messageTemplate) {
@@ -557,8 +605,24 @@ Payment Tracker Team`);
     }
   }, [messageTemplate]);
 
+  // Clear notification queue after successful sending
+  const clearNotificationQueue = async () => {
+    if (!sessionToken) return;
+    
+    try {
+      await axios.delete(`${BASE_URL}/notifications/queue`, {
+        headers: { Authorization: `Bearer ${sessionToken}` }
+      });
+      setNotificationQueue([]);
+      notificationQueueRef.current = [];
+    } catch (error) {
+      console.error('Error clearing notification queue:', error);
+      setLocalErrorMessage('Failed to clear notification queue');
+    }
+  };
+
   // Handle sending notifications
-const handleSendNotifications = async (template) => {
+  const handleSendNotifications = async (template) => {
   setIsSendingNotifications(true);
   let successCount = 0;
   let errorCount = 0;
@@ -638,6 +702,10 @@ const handleSendNotifications = async (template) => {
     console.error('Error in notification loop:', error);
   } finally {
     setIsSendingNotifications(false);
+    // Clear the notification queue after sending
+    if (successCount > 0) {
+      await clearNotificationQueue();
+    }
   }
 };
 
