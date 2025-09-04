@@ -310,15 +310,16 @@ const [typeError, setTypeError] = useState("");
             
             <div className="bg-white rounded-lg shadow-sm overflow-hidden">
                 <DataTable 
-                    data={filteredData} 
+                    data={filteredData}
                     months={months}
                     currentYear={currentYear}
                     isLoading={isLoadingYears}
-                    onRemarkSaved={handleRemarkSaved}
+                    sessionToken={sessionToken}
                     handleInputChange={handleInputChange}
+                    getInputBackgroundColor={getInputBackgroundColor}
                     localInputValues={localInputValues}
                     pendingUpdates={pendingUpdates}
-                    getInputBackgroundColor={getInputBackgroundColor}
+                    onRemarkSaved={handleRemarkSaved}
                     onRemarkButtonClick={(remarkInfo) => setRemarkPopup({ ...remarkInfo, isOpen: true })}
                 />
             </div>
