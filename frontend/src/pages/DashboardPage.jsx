@@ -17,6 +17,7 @@ const months = [
 ];
 
 const DashboardPage = ({ setPage }) => {
+    const csvFileInputRef = useRef(null);
     const { sessionToken } = useAuth();
     const { 
         paymentsData, 

@@ -19,7 +19,7 @@ const clientRoutes = require("./routes/clients");
 const paymentRoutes = require("./routes/payments");
 const notificationRoutes = require("./routes/notificationRoutes");
 const messageRoutes = require("./routes/messageRoutes");
-// Note: You might need to create a utilities route as well if you have one
+const utilitiesRoutes = require("./routes/utilities");
 
 // =================================================================
 // INITIALIZATION
@@ -45,6 +45,7 @@ app.use("/api/clients", clientRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/messages", messageRoutes);
+app.use("/api/utilities", utilitiesRoutes);
 
 // =================================================================
 // SERVER HEALTH CHECK & 404 HANDLER
