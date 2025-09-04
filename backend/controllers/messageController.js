@@ -1,5 +1,5 @@
 const { sendEmail, testEmailConfig } = require('../utils/email');
-const { sendWhatsApp, verifyContact } = require('../utils/whatsapp'); // We will create this utility next
+const { sendWhatsApp, verifyContact } = require(require('path').join(__dirname, '../utils/whatsapp'));
 const { ValidationError } = require("../middleware/errorHandler");
 
 /**
