@@ -375,7 +375,11 @@ app.get("/api/get-payments-by-year", authenticateToken, asyncHandler(async (req,
   const clientPhoneMap = new Map(clients.map(c => [`${c.Client_Name}_${c.Type}`, c.Phone_Number || ""]));
   
   // Get payments for the year
-  let payments = await paymentsCollection.find({ Year: parseInt(year) }).toArray();
+  const yearInt = parseInt(year);
+if (isNaN(yearInt)) {
+  throw new ValidationError("Invalid year parameter");
+}
+let payments = await paymentsCollection.find({ Year: yearInt }).toArray();
   
   // Handle previous year due payments
   if (parseInt(year) > 2025) {

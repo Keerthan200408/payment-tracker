@@ -535,7 +535,11 @@ app.put("/api/edit-client", authenticateToken, async (req, res) => {
     }
     // Preserve createdAt from existing client
     await clientsCollection.updateOne(
-      { Client_Name: oldClientName, Type: oldType },
+      { 
+        Client_Name: { $eq: clientName }, 
+        Type: { $eq: type }, 
+        Year: { $eq: parseInt(year) } 
+      },
       { $set: { Client_Name, Type, Monthly_Payment: paymentValue, Email, Phone_Number, createdAt: client.createdAt } }
     );
     const paymentDocs = await paymentsCollection.find({ Client_Name: oldClientName, Type: oldType }).toArray();
@@ -730,7 +734,15 @@ app.post("/api/save-payment", authenticateToken, paymentLimiter, async (req, res
   try {
     const db = await connectMongo();
     const paymentsCollection = db.collection(`payments_${username}`);
-    const payment = await paymentsCollection.findOne({ Client_Name: clientName, Type: type, Year: parseInt(year) });
+    const yearInt = parseInt(year);
+if (isNaN(yearInt)) {
+  throw new ValidationError("Invalid year parameter");
+}
+const payment = await paymentsCollection.findOne({ 
+  Client_Name: { $eq: clientName }, 
+  Type: { $eq: type }, 
+  Year: { $eq: yearInt } 
+});
     if (!payment) {
       console.error("Payment record not found:", { user: username, clientName, type, year });
       return res.status(404).json({ error: "Payment record not found" });
@@ -791,7 +803,11 @@ app.post("/api/save-payment", authenticateToken, paymentLimiter, async (req, res
     });
 
     await paymentsCollection.updateOne(
-      { Client_Name: clientName, Type: type, Year: parseInt(year) },
+      { 
+        Client_Name: { $eq: clientName }, 
+        Type: { $eq: type }, 
+        Year: { $eq: parseInt(year) } 
+      },
       { $set: { Payments: updatedPayments, Due_Payment: finalDuePayment, Last_Updated: new Date() } }
     );
 
@@ -870,7 +886,11 @@ app.post("/api/save-remark", authenticateToken, async (req, res) => {
     const updatedRemarks = { ...payment.Remarks, [monthKey]: remark || "N/A" };
 
     await paymentsCollection.updateOne(
-      { Client_Name: clientName, Type: type, Year: parseInt(year) },
+      { 
+        Client_Name: { $eq: clientName }, 
+        Type: { $eq: type }, 
+        Year: { $eq: parseInt(year) } 
+      },
       { $set: { Remarks: updatedRemarks, Last_Updated: new Date() } }
     );
 
@@ -952,9 +972,9 @@ app.post("/api/batch-save-payments", authenticateToken, paymentLimiter, async (r
     const pipeline = [
       {
         $match: {
-          Client_Name: clientName,
-          Type: type,
-          Year: yearInt,
+          Client_Name: { $eq: clientName },
+      Type: { $eq: type },
+      Year: { $eq: yearInt },
         },
       },
       {
@@ -1035,7 +1055,11 @@ app.post("/api/batch-save-payments", authenticateToken, paymentLimiter, async (r
 
     // Single atomic update operation
     const updateResult = await paymentsCollection.updateOne(
-      { Client_Name: clientName, Type: type, Year: yearInt },
+      { 
+        Client_Name: { $eq: clientName }, 
+        Type: { $eq: type }, 
+        Year: { $eq: parseInt(year) } 
+      },
       {
         $set: {
           Payments: updatedPayments,
@@ -1206,7 +1230,11 @@ app.post("/api/add-new-year", authenticateToken, async (req, res) => {
       console.error(`No clients found for user ${username}`);
       return res.status(400).json({ error: `No clients found for user ${username}` });
     }
-    const existingPayments = await paymentsCollection.find({ Year: parseInt(year) }).toArray();
+    const yearInt = parseInt(year);
+if (isNaN(yearInt)) {
+  throw new ValidationError("Invalid year parameter");
+}
+const existingPayments = await paymentsCollection.find({ Year: { $eq: yearInt } }).toArray();
     if (existingPayments.length > 0) {
       await paymentsCollection.deleteMany({ Year: parseInt(year) });
       console.log(`Deleted ${existingPayments.length} existing payments for year ${year}`);
