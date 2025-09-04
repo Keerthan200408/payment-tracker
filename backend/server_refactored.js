@@ -257,7 +257,7 @@ app.post("/api/refresh-token", asyncHandler(async (req, res) => {
   
   const db = await connectMongo();
   const users = db.collection("users");
-  const user = await users.findOne({ Username: decoded.username });
+  const user = await users.findOne(sanitizeMongoQuery({ Username: decoded.username }));
   
   if (!user) {
     throw new AppError("User not found", config.statusCodes.FORBIDDEN);
@@ -467,9 +467,7 @@ app.post("/api/save-payment", authenticateToken, asyncHandler(async (req, res) =
   
   const [payment, client] = await Promise.all([
     paymentsCollection.findOne(createSafeQuery(clientName, type, parseInt(year))),
-    clientsCollection.findOne({ 
-      Client_Name: clientName
-    })
+    clientsCollection.findOne(createSafeQuery(clientName))
   ]);
   
   console.log("Client lookup result:", {

@@ -157,11 +157,9 @@ async function calculateNewDuePayment(updatedPayments, months, amountToBePaid, c
   let previousYearDue = 0;
   if (year > 2025) {
     try {
-      const prevYearPayment = await paymentsCollection.findOne({
-        Client_Name: clientName,
-        Type: type,
-        Year: year - 1
-      });
+      const prevYearPayment = await paymentsCollection.findOne(
+        createSafeQuery(clientName, type, year - 1)
+      );
       previousYearDue = parseFloat(prevYearPayment?.Due_Payment) || 0;
       console.log(`Previous year (${year - 1}) due payment: ${previousYearDue}`);
     } catch (error) {
@@ -246,12 +244,9 @@ app.post("/api/google-signin", asyncHandler(async (req, res) => {
 
     const db = await connectMongo();
     const users = db.collection("users");
-    const user = await users.findOne({ 
-      $or: [
-        { GoogleEmail: { $eq: String(email) } }, 
-        { Username: { $eq: String(email) } }
-      ] 
-    });
+    const user = await users.findOne(sanitizeMongoQuery({ 
+      $or: [{ GoogleEmail: email }, { Username: email }] 
+    }));
     
     if (user) {
       const username = user.Username;
@@ -403,7 +398,7 @@ app.post("/api/refresh-token", async (req, res) => {
     }
     const db = await connectMongo();
     const users = db.collection("users");
-    const user = await users.findOne({ Username: decoded.username });
+    const user = await users.findOne(sanitizeMongoQuery({ Username: decoded.username }));
     if (!user) {
       return res.status(403).json({ error: "User not found" });
     }
@@ -580,12 +575,10 @@ app.put("/api/edit-client", authenticateToken, async (req, res) => {
     }
     // Preserve createdAt from existing client
     await clientsCollection.updateOne(
-      { 
-        Client_Name: { $eq: clientName }, 
-        Type: { $eq: type }, 
-        Year: { $eq: parseInt(year) } 
-      },
-      { $set: { Client_Name, Type, Monthly_Payment: paymentValue, Email, Phone_Number, createdAt: client.createdAt } }
+      createSafeQuery(oldClientName, oldType),
+      sanitizeUpdateObject({ 
+        $set: { Client_Name, Type, Monthly_Payment: paymentValue, Email, Phone_Number, createdAt: client.createdAt } 
+      })
     );
     const paymentDocs = await paymentsCollection.find({ Client_Name: oldClientName, Type: oldType }).toArray();
     for (const doc of paymentDocs) {
@@ -605,15 +598,15 @@ app.put("/api/edit-client", authenticateToken, async (req, res) => {
       }
       await paymentsCollection.updateOne(
         { _id: doc._id },
-        {
+        sanitizeUpdateObject({
           $set: {
             Client_Name,
             Type,
             Amount_To_Be_Paid: paymentValue,
             Due_Payment: currentYearDuePayment + prevYearCumulativeDue,
-            createdAt: doc.createdAt, // Preserve createdAt
+            createdAt: doc.createdAt,
           },
-        }
+        })
       );
     }
     res.json({ message: "Client updated successfully" });
@@ -845,16 +838,12 @@ const payment = await paymentsCollection.findOne(
       updatedPayments: JSON.stringify(updatedPayments),
     });
 
-    await paymentsCollection.updateOne(
-      createSafeQuery(clientName, type, parseInt(year)),
-      sanitizeUpdateObject({ 
-        $set: { 
-          Payments: updatedPayments, 
-          Due_Payment: finalDuePayment,
-          Last_Updated: new Date()
-        } 
-      })
-    );
+
+// Fixed
+await paymentsCollection.updateOne(
+  createSafeQuery(clientName, type, parseInt(year)),
+  sanitizeUpdateObject({ $set: { Remarks: updatedRemarks, Last_Updated: new Date() } })
+);
 
     const updatedRow = {
       Client_Name: payment.Client_Name,
@@ -1096,18 +1085,14 @@ app.post("/api/batch-save-payments", authenticateToken, paymentLimiter, async (r
 
     // Single atomic update operation
     const updateResult = await paymentsCollection.updateOne(
-      { 
-        Client_Name: { $eq: clientName }, 
-        Type: { $eq: type }, 
-        Year: { $eq: parseInt(year) } 
-      },
-      {
+      createSafeQuery(clientName, type, parseInt(year)),
+      sanitizeUpdateObject({
         $set: {
           Payments: updatedPayments,
           Due_Payment: finalDuePayment,
           Last_Updated: new Date(),
         },
-      }
+      })
     );
 
     if (updateResult.matchedCount === 0) {
