@@ -3,7 +3,7 @@ import { formatCurrency } from '../../utils/formatters';
 import RemarkPopup from '../shared/RemarkPopup';
 
 const DataTable = memo(({ 
-    data, months, currentYear,
+    data, months, currentYear, isLoading, 
     handleInputChange, getInputBackgroundColor,
     localInputValues, pendingUpdates,
     onRemarkSaved, onRemarkButtonClick

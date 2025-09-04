@@ -313,6 +313,7 @@ const [typeError, setTypeError] = useState("");
                     data={filteredData} 
                     months={months}
                     currentYear={currentYear}
+                    isLoading={isLoadingYears}
                     onRemarkSaved={handleRemarkSaved}
                     handleInputChange={handleInputChange}
                     localInputValues={localInputValues}
