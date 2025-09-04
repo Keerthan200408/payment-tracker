@@ -14,7 +14,7 @@ import LoadingSkeleton from './components/common/LoadingSkeleton';
 import SessionTimer from './components/common/SessionTimer';
 
 const App = () => {
-    const { sessionToken, currentUser, isInitialized, logout } = useAuth();
+    const { sessionToken, setSessionToken, currentUser, setCurrentUser, isInitialized, logout } = useAuth();
     const { fetchClients, fetchTypes } = useData();
 
     // UI State for navigation and editing
@@ -57,7 +57,16 @@ const App = () => {
 
     // If no user session, render the sign-in page
     if (!sessionToken) {
-        return <SignInPage />;
+        // 👇 2. Pass all the required functions as props
+        return (
+            <SignInPage 
+                setSessionToken={setSessionToken}
+                setCurrentUser={setCurrentUser}
+                setPage={setPage}
+                fetchClients={fetchClients}
+                fetchPayments={fetchPayments}
+            />
+        );
     }
 
     // Simple router to render the correct page component
