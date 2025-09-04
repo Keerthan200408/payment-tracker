@@ -1,30 +1,27 @@
-const { MongoClient } = require("mongodb");
+const database = require('../db/mongo');
 const { asyncHandler } = require('../middleware/errorHandler');
 
-// Reusable MongoDB connection function (consistent with your server)
-async function connectMongo() {
-    // Note: Ensure MONGODB_URI is correctly set in your .env file
-    const mongoClient = new MongoClient(process.env.MONGODB_URI, {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
-    });
-    if (!mongoClient.topology || !mongoClient.topology.isConnected()) {
-        await mongoClient.connect();
-    }
-    return mongoClient.db("payment_tracker");
-}
-
-// @desc    Get the notification queue for the logged-in user
+/**
+ * @desc    Get the notification queue for the logged-in user
+ * @route   GET /api/notifications/queue
+ */
 exports.getNotificationQueue = asyncHandler(async (req, res) => {
-    const db = await connectMongo();
     const username = req.user.username;
+    const notificationQueuesCollection = (await database.getDb()).collection('notification_queues');
 
-    const notificationDoc = await db.collection('notification_queues').findOne({ username });
+    const notificationDoc = await notificationQueuesCollection.findOne({ username });
 
-    res.json({ queue: notificationDoc?.queue || [] });
+    if (!notificationDoc) {
+        return res.json({ queue: [] });
+    }
+
+    res.json({ queue: notificationDoc.queue || [] });
 });
 
-// @desc    Save or update the notification queue
+/**
+ * @desc    Save or update the notification queue for the logged-in user
+ * @route   POST /api/notifications/queue
+ */
 exports.saveNotificationQueue = asyncHandler(async (req, res) => {
     const { queue } = req.body;
     const username = req.user.username;
@@ -33,9 +30,9 @@ exports.saveNotificationQueue = asyncHandler(async (req, res) => {
         return res.status(400).json({ error: 'Queue must be an array' });
     }
 
-    const db = await connectMongo();
+    const notificationQueuesCollection = (await database.getDb()).collection('notification_queues');
 
-    await db.collection('notification_queues').updateOne(
+    await notificationQueuesCollection.updateOne(
         { username },
         {
             $set: {
@@ -49,13 +46,16 @@ exports.saveNotificationQueue = asyncHandler(async (req, res) => {
     res.status(200).json({ message: 'Queue saved successfully' });
 });
 
-// @desc    Clear the notification queue
+/**
+ * @desc    Clear the notification queue for the logged-in user
+ * @route   DELETE /api/notifications/queue
+ */
 exports.clearNotificationQueue = asyncHandler(async (req, res) => {
-    const db = await connectMongo();
     const username = req.user.username;
+    const notificationQueuesCollection = (await database.getDb()).collection('notification_queues');
 
-    // We update the queue to an empty array instead of deleting the document
-    await db.collection('notification_queues').updateOne(
+    // Update the queue to an empty array instead of deleting the document
+    await notificationQueuesCollection.updateOne(
         { username },
         {
             $set: {
