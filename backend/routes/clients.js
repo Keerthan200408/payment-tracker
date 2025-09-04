@@ -217,7 +217,7 @@ router.put("/update-client", authenticateToken, asyncHandler(async (req, res) =>
 }));
 
 // Delete Client
-router.post("/delete-client", authenticateToken, asyncHandler(async (req, res) => {
+router.delete("/delete-client", authenticateToken, asyncHandler(async (req, res) => {
   let { Client_Name, Type } = req.body;
   
   if (!Client_Name || !Type) {

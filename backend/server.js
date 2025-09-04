@@ -20,6 +20,7 @@ const paymentRoutes = require("./routes/payments");
 const notificationRoutes = require("./routes/notificationRoutes");
 const messageRoutes = require("./routes/messageRoutes");
 const utilitiesRoutes = require("./routes/utilities");
+const typesRoutes = require("./routes/types");
 
 // =================================================================
 // INITIALIZATION

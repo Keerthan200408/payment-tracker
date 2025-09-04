@@ -97,6 +97,28 @@ const [typeError, setTypeError] = useState("");
         saveQueue();
         return () => saveQueue.cancel();
     }, [notificationQueue, sessionToken, handleApiError]);
+
+    useEffect(() => {
+        // This effect syncs local input changes with incoming data from the server
+        // It prevents user input from being overwritten during background saves
+        const initialValues = {};
+        paymentsData.forEach((row, globalRowIndex) => {
+            months.forEach((month) => {
+                const key = `${globalRowIndex}-${month}`;
+                if (localInputValues[key] === undefined) { // Only set if not already edited by user
+                    initialValues[key] = row[month] || "";
+                }
+            });
+        });
+        setLocalInputValues(prev => ({ ...prev, ...initialValues }));
+    }, [paymentsData]);
+    
+    useEffect(() => {
+    // Fetch payments for the current year when the page loads or the year changes.
+    if (sessionToken && currentYear) {
+        fetchPayments(currentYear);
+    }
+}, [sessionToken, currentYear, fetchPayments]);
     
     const clearQueueFromDB = async () => {
         try {
@@ -132,20 +154,7 @@ const [typeError, setTypeError] = useState("");
 
     // --- All Functions from original HomePage.jsx, now complete ---
     
-    useEffect(() => {
-        // This effect syncs local input changes with incoming data from the server
-        // It prevents user input from being overwritten during background saves
-        const initialValues = {};
-        paymentsData.forEach((row, globalRowIndex) => {
-            months.forEach((month) => {
-                const key = `${globalRowIndex}-${month}`;
-                if (localInputValues[key] === undefined) { // Only set if not already edited by user
-                    initialValues[key] = row[month] || "";
-                }
-            });
-        });
-        setLocalInputValues(prev => ({ ...prev, ...initialValues }));
-    }, [paymentsData]);
+    
 
     
 

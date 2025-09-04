@@ -27,7 +27,7 @@ export const DataProvider = ({ children }) => {
     const fetchTypes = useCallback(async (forceRefresh = false) => {
         try {
             const data = await api.types.getTypes(forceRefresh);
-            setTypes(data || []);
+            setTypes(data.types || []);
         } catch (error) { handleApiError(error); }
     }, [handleApiError]);
     

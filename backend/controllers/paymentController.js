@@ -82,13 +82,18 @@ exports.getPaymentsByYear = async (req, res) => {
  */
 exports.getUserYears = async (req, res) => {
     const paymentsCollection = database.getPaymentsCollection(req.user.username);
-    const years = await paymentsCollection.distinct("Year");
+    const yearsFromDb = await paymentsCollection.distinct("Year");
 
-    const validYears = years.filter(y => y && y >= 2025).sort((a, b) => a - b);
-    if (!validYears.includes(2025)) {
-        validYears.unshift(2025);
-    }
-    res.json(validYears);
+    // Use a Set to ensure years are unique and 2025 is always included
+    const yearSet = new Set(yearsFromDb);
+    yearSet.add(2025);
+
+    // Convert Set back to an array, filter out any invalid values, and sort numerically
+    const allYears = Array.from(yearSet)
+        .filter(y => y && !isNaN(y))
+        .sort((a, b) => a - b);
+
+    res.json(allYears);
 };
 
 // =================================================================
