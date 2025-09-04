@@ -1,4 +1,11 @@
 {
+  "name": "payment-tracker",
+  "version": "1.0.0",
+  "license": "MIT",
+  "scripts": {
+    "start": "cd backend && yarn install && node server.js",
+    "dev": "cd backend && yarn dev"
+  },
   "devDependencies": {
     "tailwindcss": "^4.1.8"
   },
