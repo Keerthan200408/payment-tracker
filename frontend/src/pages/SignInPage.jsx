@@ -135,7 +135,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
 } finally {
   setIsLoading(false);
 }
-  });
+  }, [setSessionToken, setCurrentUser, setPage, fetchClients, fetchPayments, setGoogleEmail, setChosenUsername, setShowUsernameModal, setError, setIsLoading]);
 
   const handleUsernameSubmit = async () => {
     if (!chosenUsername.trim()) {
