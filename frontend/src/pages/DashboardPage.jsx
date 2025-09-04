@@ -4,13 +4,11 @@ import { useData } from '../contexts/DataContext';
 import api from '../api';
 import { debounce } from 'lodash';
 
-// ASSUMPTION: These components exist in the specified paths.
 import DataTable from '../components/dashboard/DataTable';
 import YearSelector from '../components/dashboard/YearSelector';
 import NotificationModal from '../components/dashboard/NotificationModal';
 import RemarkPopup from '../components/shared/RemarkPopup';
 
-// CORRECTED: Define months array directly in the frontend.
 const months = [
     "january", "february", "march", "april", "may", "june",
     "july", "august", "september", "october", "november", "december"
@@ -23,14 +21,11 @@ const DashboardPage = ({ setPage }) => {
         paymentsData, 
         setPaymentsData, 
         fetchPayments, 
-        types, 
         fetchTypes, 
         handleApiError,
-        setErrorMessage,
-        fetchClients, // We'll need this for refreshing after import
+        fetchClients,
     } = useData();
     
-    // Page-specific state from original HomePage.jsx
     const [currentYear, setCurrentYear] = useState(() => localStorage.getItem("currentYear") || new Date().getFullYear().toString());
     const [availableYears, setAvailableYears] = useState([currentYear]);
     const [isLoadingYears, setIsLoadingYears] = useState(false);
@@ -40,29 +35,36 @@ const DashboardPage = ({ setPage }) => {
     const saveTimeoutsRef = useRef({});
     const [remarkPopup, setRemarkPopup] = useState({ isOpen: false });
 
-    //newly added
-    // Add these lines with your other state declarations
-const [isImporting, setIsImporting] = useState(false);
-const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
-const [newType, setNewType] = useState("");
-const [typeError, setTypeError] = useState("");
+    const [isImporting, setIsImporting] = useState(false);
+    const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
+    const [newType, setNewType] = useState("");
+    const [typeError, setTypeError] = useState("");
 
-    // --- Notification Queue Logic (This is correct) ---
     const [notificationQueue, setNotificationQueue] = useState([]);
     const notificationQueueRef = useRef([]);
     const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
+    
+    // 👇 THIS IS THE FIX 👇
+    // This hook runs when the page loads. It fetches the payment
+    // data for the currently selected year, ensuring that after a
+    // refresh, the data is re-loaded.
+    useEffect(() => {
+        if (sessionToken && currentYear) {
+            fetchPayments(currentYear);
+        }
+    }, [sessionToken, currentYear, fetchPayments]);
+
 
     useEffect(() => {
         const fetchUserYears = async () => {
             if (sessionToken) {
                 setIsLoadingYears(true);
                 try {
-                    // This assumes you have a `getUserYears` method in your payments API service
                     const yearsData = await api.payments.getUserYears(); 
                     setAvailableYears(yearsData.length > 0 ? yearsData : [currentYear]);
                 } catch (error) {
                     handleApiError(error);
-                    setAvailableYears([currentYear]); // Fallback
+                    setAvailableYears([currentYear]);
                 } finally {
                     setIsLoadingYears(false);
                 }
@@ -97,28 +99,21 @@ const [typeError, setTypeError] = useState("");
         saveQueue();
         return () => saveQueue.cancel();
     }, [notificationQueue, sessionToken, handleApiError]);
-
-    useEffect(() => {
-        // This effect syncs local input changes with incoming data from the server
-        // It prevents user input from being overwritten during background saves
-        const initialValues = {};
-        paymentsData.forEach((row, globalRowIndex) => {
-            months.forEach((month) => {
-                const key = `${globalRowIndex}-${month}`;
-                if (localInputValues[key] === undefined) { // Only set if not already edited by user
-                    initialValues[key] = row[month] || "";
-                }
-            });
-        });
-        setLocalInputValues(prev => ({ ...prev, ...initialValues }));
-    }, [paymentsData]);
     
     useEffect(() => {
-    // Fetch payments for the current year when the page loads or the year changes.
-    if (sessionToken && currentYear) {
-        fetchPayments(currentYear);
-    }
-}, [sessionToken, currentYear, fetchPayments]);
+        const initialValues = {};
+        if (Array.isArray(paymentsData)) {
+            paymentsData.forEach((row, globalRowIndex) => {
+                months.forEach((month) => {
+                    const key = `${globalRowIndex}-${month}`;
+                    if (localInputValues[key] === undefined) {
+                        initialValues[key] = row[month] || "";
+                    }
+                });
+            });
+            setLocalInputValues(prev => ({ ...prev, ...initialValues }));
+        }
+    }, [paymentsData]);
     
     const clearQueueFromDB = async () => {
         try {
@@ -140,7 +135,7 @@ const [typeError, setTypeError] = useState("");
         setIsLoadingYears(true);
         try {
             await api.payments.addNewYear(newYear);
-            const updatedYears = await api.payments.getUserYears(true); // force refresh years
+            const updatedYears = await api.payments.getUserYears(true);
             setAvailableYears(updatedYears);
             handleYearChange(newYear);
             alert(`Year ${newYear} added successfully!`);
@@ -151,12 +146,6 @@ const [typeError, setTypeError] = useState("");
             setIsLoadingYears(false);
         }
     };
-
-    // --- All Functions from original HomePage.jsx, now complete ---
-    
-    
-
-    
 
     const handleRemarkSaved = (clientName, type, month, newRemark) => {
         setPaymentsData(prevData => prevData.map(row => {
@@ -169,7 +158,6 @@ const [typeError, setTypeError] = useState("");
     };
     
     const savePayment = useCallback(async (rowIndex, month, value) => {
-        // This function is now complete and correct
         const row = paymentsData[rowIndex];
         if (!row) return;
 
@@ -238,12 +226,11 @@ const [typeError, setTypeError] = useState("");
         });
     }, [paymentsData, searchQuery]);
 
-    // ADDED: Logic for Add Type Modal
     const handleAddType = async () => {
         if (!newType.trim()) { setTypeError("Type cannot be empty."); return; }
         try {
             await api.types.addType({ type: newType.trim() });
-            await fetchTypes(true); // Force refresh types
+            await fetchTypes(true);
             setIsTypeModalOpen(false);
             setNewType("");
             setTypeError("");
@@ -251,7 +238,6 @@ const [typeError, setTypeError] = useState("");
         } catch (error) { setTypeError(error.response?.data?.error || "Failed to add type."); }
     };
     
-    // ADDED: Logic for CSV Import
     const importCsv = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -260,7 +246,6 @@ const [typeError, setTypeError] = useState("");
         try {
             const text = await file.text();
             const rows = text.split("\n").filter(row => row.trim());
-            // This is a simplified parser, assuming format: [amount, type, email, clientName, phone]
             const records = rows.map(row => row.split(",").map(cell => cell.trim()));
             await api.payments.importCsv(records, currentYear);
             alert("CSV import successful! Refreshing data...");
@@ -276,8 +261,8 @@ const [typeError, setTypeError] = useState("");
     };
     
     return (
-         <div className="p-0 sm:p-6">
-             <YearSelector 
+        <div className="p-0 sm:p-6">
+            <YearSelector 
                 currentYear={currentYear}
                 availableYears={availableYears}
                 onYearChange={handleYearChange}
@@ -286,7 +271,7 @@ const [typeError, setTypeError] = useState("");
             />
             
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
-                 <div className="flex gap-3 mb-4 sm:mb-0">
+                <div className="flex gap-3 mb-4 sm:mb-0">
                     <button onClick={() => setPage("addClient")} className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700">Add Client</button>
                     <button onClick={() => setIsTypeModalOpen(true)} className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700">Add Type</button>
                     <input type="file" accept=".csv" ref={csvFileInputRef} onChange={importCsv} className="hidden" id="csv-import" disabled={isImporting} />
@@ -294,7 +279,7 @@ const [typeError, setTypeError] = useState("");
                         {isImporting ? "Importing..." : "Bulk Import"}
                     </label>
                 </div>
-                 <button onClick={() => setIsNotificationModalOpen(true)} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                <button onClick={() => setIsNotificationModalOpen(true)} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
                     Send Notifications ({notificationQueue.length})
                 </button>
             </div>

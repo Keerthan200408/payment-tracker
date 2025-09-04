@@ -53,7 +53,7 @@ const AddClientPage = ({ setPage, editClient, setEditClient }) => {
             return;
         }
         try {
-            await api.utilities.addType({ type: newType.trim() });
+            await api.types.addType({ type: newType.trim() });
             await fetchTypes(true); // Force a refresh of the types list
             
             setIsTypeModalOpen(false);
