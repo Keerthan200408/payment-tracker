@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, useCallback, useContext } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useContext, useMemo } from 'react';
 import api from '../api'; // Using our new centralized API service
 
 const AuthContext = createContext(null);
@@ -10,12 +10,12 @@ export const AuthProvider = ({ children }) => {
     const [isInitialized, setIsInitialized] = useState(false);
 
     // Centralized login function
-    const login = (user, token) => {
+    const login = useCallback((user, token) => { // <-- Wrapped in useCallback for stability
         localStorage.setItem("currentUser", user);
         localStorage.setItem("sessionToken", token);
         setCurrentUser(user);
         setSessionToken(token);
-    };
+    }, []);
 
     // Centralized logout function
     const logout = useCallback(() => {
@@ -36,7 +36,15 @@ export const AuthProvider = ({ children }) => {
         }
     }, [isInitialized]);
 
-    const value = { sessionToken, currentUser, isInitialized, login, logout };
+    const value = useMemo(() => ({ 
+        sessionToken, 
+        currentUser, 
+        isInitialized, 
+        login, 
+        logout,
+        setSessionToken, // <-- ADD THIS
+        setCurrentUser   // <-- ADD THIS
+    }), [sessionToken, currentUser, isInitialized, login, logout]);
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
