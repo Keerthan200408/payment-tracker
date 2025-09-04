@@ -39,7 +39,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
       if (fetchClients && fetchPayments) {
         await Promise.all([
           fetchClients(sessionToken),
-          fetchPayments(sessionToken, new Date().getFullYear().toString())
+          fetchPayments(new Date().getFullYear().toString())
         ]);
       }
       
@@ -116,7 +116,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
         if (fetchClients && fetchPayments) {
           await Promise.all([
             fetchClients(sessionToken),
-            fetchPayments(sessionToken, new Date().getFullYear().toString())
+            fetchPayments(new Date().getFullYear().toString())
           ]);
         }
         
@@ -167,7 +167,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
       if (fetchClients && fetchPayments) {
         await Promise.all([
           fetchClients(sessionToken),
-          fetchPayments(sessionToken, new Date().getFullYear().toString())
+          fetchPayments(new Date().getFullYear().toString())
         ]);
       }
       alert('Account created successfully! Your personalized data sheets have been set up.');
