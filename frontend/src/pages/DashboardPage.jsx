@@ -40,6 +40,13 @@ const DashboardPage = ({ setPage }) => {
     const saveTimeoutsRef = useRef({});
     const [remarkPopup, setRemarkPopup] = useState({ isOpen: false });
 
+    //newly added
+    // Add these lines with your other state declarations
+const [isImporting, setIsImporting] = useState(false);
+const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
+const [newType, setNewType] = useState("");
+const [typeError, setTypeError] = useState("");
+
     // --- Notification Queue Logic (This is correct) ---
     const [notificationQueue, setNotificationQueue] = useState([]);
     const notificationQueueRef = useRef([]);
