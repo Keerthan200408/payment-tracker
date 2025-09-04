@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://payment-tracker-aswa.onrender.com';
@@ -88,7 +88,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
 }
   };
 
-  const handleGoogleSignIn = async (response) => {
+  const handleGoogleSignIn = useCallback(async (response) => {
     try {
       setIsLoading(true);
       setError('');
@@ -135,7 +135,7 @@ const SignInPage = ({ setSessionToken, setCurrentUser, setPage, fetchClients, fe
 } finally {
   setIsLoading(false);
 }
-  };
+  });
 
   const handleUsernameSubmit = async () => {
     if (!chosenUsername.trim()) {
