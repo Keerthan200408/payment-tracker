@@ -558,196 +558,179 @@ Payment Tracker Team`);
   }, [messageTemplate]);
 
   // Handle sending notifications
-  const handleSendNotifications = async (template) => {
-    setIsSendingNotifications(true);
-    let successCount = 0;
-    let errorCount = 0;
-    const errors = [];
+const handleSendNotifications = async (template) => {
+  setIsSendingNotifications(true);
+  let successCount = 0;
+  let errorCount = 0;
+  const errors = [];
 
-    try {
-      for (const notification of notificationQueue) {
-        try {
-          // Replace template variables
-          const personalizedMessage = template
-            .replace(/{clientName}/g, notification.clientName)
-            .replace(/{type}/g, notification.type)
-            .replace(/{month}/g, notification.month.charAt(0).toUpperCase() + notification.month.slice(1))
-            .replace(/{paidAmount}/g, notification.value || '0.00')
-            .replace(/{duePayment}/g, notification.duePayment || '0.00');
+  try {
+    for (const notification of notificationQueue) {
+      try {
+        // Replace template variables
+        const personalizedMessage = template
+          .replace(/{clientName}/g, notification.clientName)
+          .replace(/{type}/g, notification.type)
+          .replace(/{month}/g, notification.month.charAt(0).toUpperCase() + notification.month.slice(1))
+          .replace(/{paidAmount}/g, notification.value || '0.00')
+          .replace(/{duePayment}/g, notification.duePayment || '0.00');
 
-          let notificationSent = false;
+        let notificationSent = false;
 
-          // Try WhatsApp first if phone number exists
-          if (notification.phone && notification.phone.trim()) {
-            try {
-              const whatsappResponse = await axios.post(
-                `${BASE_URL}/send-whatsapp`,
-                {
-                  to: notification.phone,
-                  message: personalizedMessage
-                },
-                {
-                  headers: { Authorization: `Bearer ${sessionToken}` },
-                  timeout: 10000
-                }
-              );
-              console.log(`WhatsApp sent to ${notification.clientName}:`, whatsappResponse.data);
-              notificationSent = true;
-              successCount++;
-            } catch (whatsappError) {
-              console.log(`WhatsApp failed for ${notification.clientName}, trying email...`);
-            }
-          }
-
-          // Try Email if WhatsApp failed or no phone number
-          if (!notificationSent && notification.email && notification.email.trim()) {
-            try {
-              const emailResponse = await axios.post(
-                `${BASE_URL}/send-email`,
-                {
-                  to: notification.email,
-                  subject: `Payment Reminder - ${notification.type}`,
-                  html: personalizedMessage.replace(/\n/g, '<br>')
-                },
-                {
-                  headers: { Authorization: `Bearer ${sessionToken}` },
-                  timeout: 10000
-                }
-              );
-              console.log(`Email sent to ${notification.clientName}:`, emailResponse.data);
-              notificationSent = true;
-              successCount++;
-            } catch (emailError) {
-              console.log(`Email failed for ${notification.clientName}`);
-            }
-          }
-
-          if (!notificationSent) {
-            errorCount++;
-            errors.push(`${notification.clientName}: No valid contact method available`);
-          }
-
-              // Try Email if WhatsApp failed or no phone number
-              if (!notificationSent && notification.email && notification.email.trim()) {
-                try {
-                  const emailResponse = await axios.post(
-                    `${BASE_URL}/send-email`,
-                    {
-                      to: notification.email,
-                      subject: `Payment Reminder - ${notification.type}`,
-                      html: personalizedMessage.replace(/\n/g, '<br>')
-                    },
-                    {
-                      headers: { Authorization: `Bearer ${sessionToken}` },
-                      timeout: 10000
-                    }
-                  );
-                  console.log(`Email sent to ${notification.clientName}:`, emailResponse.data);
-                  notificationSent = true;
-                  successCount++;
-                } catch (emailError) {
-                  console.log(`Email failed for ${notification.clientName}`);
-                }
+        // Try WhatsApp first if phone number exists
+        if (notification.phone && notification.phone.trim()) {
+          try {
+            const whatsappResponse = await axios.post(
+              `${BASE_URL}/send-whatsapp`,
+              {
+                to: notification.phone,
+                message: personalizedMessage
+              },
+              {
+                headers: { Authorization: `Bearer ${sessionToken}` },
+                timeout: 10000
               }
+            );
+            console.log(`WhatsApp sent to ${notification.clientName}:`, whatsappResponse.data);
+            notificationSent = true;
+            successCount++;
+          } catch (whatsappError) {
+            console.log(`WhatsApp failed for ${notification.clientName}, trying email...`);
+          }
+        }
 
-              if (!notificationSent) {
-                errorCount++;
-                errors.push(`${notification.clientName}: No valid contact method available`);
+        // Try Email if WhatsApp failed or no phone number
+        if (!notificationSent && notification.email && notification.email.trim()) {
+          try {
+            const emailResponse = await axios.post(
+              `${BASE_URL}/send-email`,
+              {
+                to: notification.email,
+                subject: `Payment Reminder - ${notification.type}`,
+                html: personalizedMessage.replace(/\n/g, '<br>')
+              },
+              {
+                headers: { Authorization: `Bearer ${sessionToken}` },
+                timeout: 10000
               }
+            );
+            console.log(`Email sent to ${notification.clientName}:`, emailResponse.data);
+            notificationSent = true;
+            successCount++;
+          } catch (emailError) {
+            console.log(`Email failed for ${notification.clientName}`);
+          }
+        }
 
-              // Small delay between notifications to avoid rate limiting
-              await new Promise(resolve => setTimeout(resolve, 500));
-            } catch (error) {
-              errorCount++;
-              errors.push(`${notification.clientName}: ${error.message}`);
-    // Only reset if it's a major change (like year change) or initial load
-    const isInitialLoad = Object.keys(localInputValues).length === 0;
-    const isYearChange = paymentsData.length > 0 && Object.keys(localInputValues).length > 0 && 
-      !Object.keys(localInputValues).some(key => {
-        const [rowIdx] = key.split('-');
-        return parseInt(rowIdx) < paymentsData.length;
-      });
-    
-    // For initial load or year change, reset everything
-    if (isInitialLoad || isYearChange) {
-      console.log(`HomePage.jsx: ${isInitialLoad ? 'Initial load' : 'Year change'} detected, resetting localInputValues`);
-      
-      // Clear any pending timeouts when doing a full reset
-      Object.keys(saveTimeoutsRef.current).forEach(key => {
-        clearTimeout(saveTimeoutsRef.current[key]);
-        delete saveTimeoutsRef.current[key];
-      });
-      
-      const initialValues = {};
-      paymentsData.forEach((row, arrayIndex) => {
-        // Use the same logic as in the table render
-        const globalRowIndex = paymentsData.findIndex((r) => r.Client_Name === row.Client_Name && r.Type === row.Type);
-        console.log(`UseEffect initializing values for ${row.Client_Name} (${row.Type}): arrayIndex=${arrayIndex}, globalRowIndex=${globalRowIndex}`);
-        
-        months.forEach((month) => {
-          const key = `${globalRowIndex}-${month}`;
-          initialValues[key] = row?.[month] || "";
-        });
-      });
-      setLocalInputValues(initialValues);
-      setPendingUpdates({});
-    } else {
-      // For normal data updates (like successful saves), only update specific fields
-      // but preserve any pending user input
-      const updatedValues = { ...localInputValues };
-      let hasChanges = false;
-      
-      paymentsData.forEach((row, arrayIndex) => {
-        const globalRowIndex = paymentsData.findIndex((r) => r.Client_Name === row.Client_Name && r.Type === row.Type);
-        
-        months.forEach((month) => {
-          const key = `${globalRowIndex}-${month}`;
-          const hasPendingUpdate = pendingUpdates[key];
-          const hasActiveTimeout = saveTimeoutsRef.current[key];
-          
-          // Skip updates if:
-          // 1. There's a pending update (user is actively typing)
-          // 2. There's an active timeout (save is in progress)
-          if (hasPendingUpdate || hasActiveTimeout) {
-            console.log(`Skipping update for ${key} - pending: ${hasPendingUpdate}, timeout: ${!!hasActiveTimeout}`);
-            return;
-          }
-          
-          // Only update if the field exists and the value is different
-          if (updatedValues[key] !== undefined) {
-            const newValue = row?.[month] || "";
-            if (updatedValues[key] !== newValue) {
-              console.log(`Updating ${key} from server data: "${updatedValues[key]}" -> "${newValue}"`);
-              updatedValues[key] = newValue;
-              hasChanges = true;
-            }
-          } else {
-            // Initialize missing keys
-            updatedValues[key] = row?.[month] || "";
-            hasChanges = true;
-          }
-        });
-      });
-      
-      if (hasChanges) {
-        console.log('Applying server updates to localInputValues');
-        setLocalInputValues(updatedValues);
+        if (!notificationSent) {
+          errorCount++;
+          errors.push(`${notification.clientName}: No valid contact method available`);
+        }
+
+        // Small delay between notifications to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (error) {
+        errorCount++;
+        errors.push(`${notification.clientName}: ${error.message}`);
       }
     }
-  }, [paymentsData, months, pendingUpdates]);
+  } catch (error) {
+    console.error('Error in notification loop:', error);
+  } finally {
+    setIsSendingNotifications(false);
+  }
+};
 
-  // Fetch years when sessionToken is available
-  useEffect(() => {
-    const controller = new AbortController();
-    if (sessionToken) {
-      log("HomePage.jsx: SessionToken available, fetching years");
-      debouncedSearchUserYears(controller.signal);
+// UseEffect for handling payments data updates
+useEffect(() => {
+  // Only reset if it's a major change (like year change) or initial load
+  const isInitialLoad = Object.keys(localInputValues).length === 0;
+  const isYearChange = paymentsData.length > 0 && Object.keys(localInputValues).length > 0 && 
+    !Object.keys(localInputValues).some(key => {
+      const [rowIdx] = key.split('-');
+      return parseInt(rowIdx) < paymentsData.length;
+    });
+  
+  // For initial load or year change, reset everything
+  if (isInitialLoad || isYearChange) {
+    console.log(`HomePage.jsx: ${isInitialLoad ? 'Initial load' : 'Year change'} detected, resetting localInputValues`);
+    
+    // Clear any pending timeouts when doing a full reset
+    Object.keys(saveTimeoutsRef.current).forEach(key => {
+      clearTimeout(saveTimeoutsRef.current[key]);
+      delete saveTimeoutsRef.current[key];
+    });
+    
+    const initialValues = {};
+    paymentsData.forEach((row, arrayIndex) => {
+      // Use the same logic as in the table render
+      const globalRowIndex = paymentsData.findIndex((r) => r.Client_Name === row.Client_Name && r.Type === row.Type);
+      console.log(`UseEffect initializing values for ${row.Client_Name} (${row.Type}): arrayIndex=${arrayIndex}, globalRowIndex=${globalRowIndex}`);
+      
+      months.forEach((month) => {
+        const key = `${globalRowIndex}-${month}`;
+        initialValues[key] = row?.[month] || "";
+      });
+    });
+    setLocalInputValues(initialValues);
+    setPendingUpdates({});
+  } else {
+    // For normal data updates (like successful saves), only update specific fields
+    // but preserve any pending user input
+    const updatedValues = { ...localInputValues };
+    let hasChanges = false;
+    
+    paymentsData.forEach((row, arrayIndex) => {
+      const globalRowIndex = paymentsData.findIndex((r) => r.Client_Name === row.Client_Name && r.Type === row.Type);
+      
+      months.forEach((month) => {
+        const key = `${globalRowIndex}-${month}`;
+        const hasPendingUpdate = pendingUpdates[key];
+        const hasActiveTimeout = saveTimeoutsRef.current[key];
+        
+        // Skip updates if:
+        // 1. There's a pending update (user is actively typing)
+        // 2. There's an active timeout (save is in progress)
+        if (hasPendingUpdate || hasActiveTimeout) {
+          console.log(`Skipping update for ${key} - pending: ${hasPendingUpdate}, timeout: ${!!hasActiveTimeout}`);
+          return;
+        }
+        
+        // Only update if the field exists and the value is different
+        if (updatedValues[key] !== undefined) {
+          const newValue = row?.[month] || "";
+          if (updatedValues[key] !== newValue) {
+            console.log(`Updating ${key} from server data: "${updatedValues[key]}" -> "${newValue}"`);
+            updatedValues[key] = newValue;
+            hasChanges = true;
+          }
+        } else {
+          // Initialize missing keys
+          updatedValues[key] = row?.[month] || "";
+          hasChanges = true;
+        }
+      });
+    });
+    
+    if (hasChanges) {
+      console.log('Applying server updates to localInputValues');
+      setLocalInputValues(updatedValues);
     }
-    return () => {
-      controller.abort();
-      debouncedSearchUserYears.cancel();
-    };
-  }, [sessionToken, debouncedSearchUserYears]);
+  }
+}, [paymentsData, months, pendingUpdates]);
+
+// Fetch years when sessionToken is available
+useEffect(() => {
+  const controller = new AbortController();
+  if (sessionToken) {
+    log("HomePage.jsx: SessionToken available, fetching years");
+    debouncedSearchUserYears(controller.signal);
+  }
+  return () => {
+    controller.abort();
+    debouncedSearchUserYears.cancel();
+  };
+}, [sessionToken, debouncedSearchUserYears]);
 
   // Reset pagination when year or data changes
   useEffect(() => {
