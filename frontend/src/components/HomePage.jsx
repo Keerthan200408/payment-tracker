@@ -627,36 +627,39 @@ Payment Tracker Team`);
             errors.push(`${notification.clientName}: No valid contact method available`);
           }
 
-          // Small delay between notifications to avoid rate limiting
-          await new Promise(resolve => setTimeout(resolve, 500));
-        } catch (error) {
-          errorCount++;
-          errors.push(`${notification.clientName}: ${error.message}`);
-        }
-      }
+              // Try Email if WhatsApp failed or no phone number
+              if (!notificationSent && notification.email && notification.email.trim()) {
+                try {
+                  const emailResponse = await axios.post(
+                    `${BASE_URL}/send-email`,
+                    {
+                      to: notification.email,
+                      subject: `Payment Reminder - ${notification.type}`,
+                      html: personalizedMessage.replace(/\n/g, '<br>')
+                    },
+                    {
+                      headers: { Authorization: `Bearer ${sessionToken}` },
+                      timeout: 10000
+                    }
+                  );
+                  console.log(`Email sent to ${notification.clientName}:`, emailResponse.data);
+                  notificationSent = true;
+                  successCount++;
+                } catch (emailError) {
+                  console.log(`Email failed for ${notification.clientName}`);
+                }
+              }
 
-      // Clear notification queue after sending
-      setNotificationQueue([]);
-      setIsNotificationModalOpen(false);
+              if (!notificationSent) {
+                errorCount++;
+                errors.push(`${notification.clientName}: No valid contact method available`);
+              }
 
-      // Show results
-      if (successCount > 0) {
-        setLocalErrorMessage(`Successfully sent ${successCount} notifications. ${errorCount > 0 ? `${errorCount} failed.` : ''}`);
-      }
-      if (errors.length > 0) {
-        console.log('Notification errors:', errors);
-      }
-
-    } catch (error) {
-      console.error('Error sending notifications:', error);
-      setLocalErrorMessage('Failed to send notifications: ' + error.message);
-    } finally {
-      setIsSendingNotifications(false);
-    }
-  };
-
-  // Initialize local input values when payments data changes (smart reset)
-  useEffect(() => {
+              // Small delay between notifications to avoid rate limiting
+              await new Promise(resolve => setTimeout(resolve, 500));
+            } catch (error) {
+              errorCount++;
+              errors.push(`${notification.clientName}: ${error.message}`);
     // Only reset if it's a major change (like year change) or initial load
     const isInitialLoad = Object.keys(localInputValues).length === 0;
     const isYearChange = paymentsData.length > 0 && Object.keys(localInputValues).length > 0 && 

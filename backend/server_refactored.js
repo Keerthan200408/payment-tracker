@@ -17,6 +17,7 @@ const { globalLimiter, paymentLimiter, whatsappLimiter, authLimiter } = require(
 const { sanitizeInput, sanitizeEmail, sanitizeUsername, sanitizeClientName, sanitizeType, validatePaymentAmount } = require("./utils/sanitize");
 const { calculateDuePaymentWithPreviousYear, processPaymentUpdate, createPaymentDocument, getMonthKey } = require("./utils/paymentCalculations");
 const { retryWithBackoff } = require("./utils/retryWithBackoff");
+const notificationsRouter = require("./routes/notifications");
 
 require("dotenv").config();
 
@@ -56,6 +57,13 @@ app.use("/api/google-signin", authLimiter);
 app.use("/api/google-signup", authLimiter);
 app.use("/api/login", authLimiter);
 app.use("/api/signup", authLimiter);
+
+// Routes
+app.use("/api/auth", require("./routes/auth"));
+app.use("/api/clients", require("./routes/clients"));
+app.use("/api/payments", require("./routes/payments"));
+app.use("/api/utilities", require("./routes/utilities"));
+app.use("/api/notifications", notificationsRouter);
 
 // Cookie parser and JSON parsing
 app.use(cookieParser());
