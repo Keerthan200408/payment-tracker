@@ -51,9 +51,10 @@ const DashboardPage = ({ setPage }) => {
 
     // This is the single function responsible for changing the active year.
     const handleYearChange = useCallback((year) => {
-        if (year && year.toString() !== currentYear.toString()) {
-            setCurrentYear(year.toString());
-            localStorage.setItem("currentYear", year.toString());
+        const yearString = year.toString();
+        if (yearString && yearString !== currentYear) {
+            setCurrentYear(yearString);
+            localStorage.setItem("currentYear", yearString);
         }
     }, [currentYear]);
 
@@ -80,6 +81,25 @@ const DashboardPage = ({ setPage }) => {
             setIsLoadingYears(false);
         }
     }, [sessionToken, handleApiError, handleYearChange]);
+
+    const handleAddNewYear = async () => {
+        const latestYear = Math.max(...availableYears.map(y => parseInt(y, 10))) || new Date().getFullYear();
+        const newYear = (latestYear + 1).toString();
+        
+        setIsLoadingYears(true);
+        try {
+            await api.payments.addNewYear(newYear);
+            alert(`Year ${newYear} added successfully!`);
+        } catch (error) {
+            const errorMessage = error.response?.data?.error || `Failed to add year ${newYear}.`;
+            alert(errorMessage);
+        } finally {
+            // After the API call, refresh the year list and switch to the target year.
+            await fetchUserYears(true); 
+            handleYearChange(newYear);  
+            setIsLoadingYears(false);
+        }
+    };
 
     // 1. On initial load, fetch the list of years.
     useEffect(() => {
@@ -164,25 +184,6 @@ const DashboardPage = ({ setPage }) => {
             setLocalInputValues(prev => ({ ...prev, ...initialValues }));
         }
     }, [paymentsData]);
-
-    const handleAddNewYear = async () => {
-        const latestYear = Math.max(...availableYears.map(y => parseInt(y, 10))) || new Date().getFullYear();
-        const newYear = (latestYear + 1).toString();
-        
-        setIsLoadingYears(true);
-        try {
-            await api.payments.addNewYear(newYear);
-            alert(`Year ${newYear} added successfully!`);
-        } catch (error) {
-            const errorMessage = error.response?.data?.error || `Failed to add year ${newYear}.`;
-            alert(errorMessage);
-        } finally {
-            // After the API call, refresh the year list and switch to the target year.
-            await fetchUserYears(true); 
-            handleYearChange(newYear);  
-            setIsLoadingYears(false);
-        }
-    };
 
         // This function fetches the list of years and validates the current selection.
     const fetchAndValidateYears = useCallback(async (forceRefresh = false) => {
