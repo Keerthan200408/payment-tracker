@@ -51,7 +51,8 @@ const DashboardPage = ({ setPage }) => {
     const entriesPerPage = 10;
 
 
-const fetchUserYears = useCallback(async (forceRefresh = false) => {
+// --- FIX #1: This function now only fetches the list of years ---
+    const fetchUserYears = useCallback(async (forceRefresh = false) => {
         if (!sessionToken) return;
         setIsLoadingYears(true);
         try {
@@ -61,6 +62,7 @@ const fetchUserYears = useCallback(async (forceRefresh = false) => {
             if (sortedYears.length > 0) {
                 setAvailableYears(sortedYears);
                 const storedYear = localStorage.getItem("currentYear");
+                // If the stored year isn't valid, update it to the latest available one.
                 if (!sortedYears.includes(storedYear)) {
                     const latestYear = sortedYears[sortedYears.length - 1];
                     setCurrentYear(latestYear);
@@ -70,23 +72,24 @@ const fetchUserYears = useCallback(async (forceRefresh = false) => {
                 setAvailableYears([new Date().getFullYear().toString()]);
             }
         } catch (error) {
-            // Your error handling
+            handleApiError(error);
         } finally {
             setIsLoadingYears(false);
         }
-    }, [sessionToken]); // DEPENDENCY FIX: Only depends on sessionToken.
+    }, [sessionToken, handleApiError]); // Dependency array is now stable.
 
-    // This useEffect now correctly fetches years on initial load
+
+    // --- FIX #2: Fetch years ONCE on component load or when you log in ---
     useEffect(() => {
-        fetchUserYears(true); // Force refresh on load to get latest years
-    }, [sessionToken]);
+        fetchUserYears(true);
+    }, [sessionToken]); // This correctly runs only when sessionToken is available.
 
-    // This useEffect fetches payments ONLY when the currentYear changes.
+// --- FIX #3: This effect now ONLY handles fetching payments when the year changes ---
     useEffect(() => {
         if (sessionToken && currentYear) {
-            fetchPayments(currentYear, true);
+            fetchPayments(currentYear, true); // Force refresh data for the new year.
         }
-    }, [sessionToken, currentYear, fetchPayments]);
+    }, [currentYear, sessionToken, fetchPayments]);
 
     useEffect(() => {
         const loadQueue = async () => {
@@ -138,7 +141,6 @@ const fetchUserYears = useCallback(async (forceRefresh = false) => {
         } catch (error) { handleApiError(error); }
     };
 
-    // --- MEMOIZED CALCULATIONS for Filtering and Pagination ---
     const filteredData = useMemo(() => {
         return (paymentsData || [])
             .filter(row => {
@@ -168,11 +170,13 @@ const fetchUserYears = useCallback(async (forceRefresh = false) => {
 
     // --- FIX #2: Simplified year change handler ---
     const handleYearChange = (year) => {
-        setCurrentYear(year);
-        localStorage.setItem("currentYear", year);
-        // The `useEffect` above will now reliably handle fetching the payment data.
+        if (year !== currentYear) {
+            setCurrentYear(year);
+            localStorage.setItem("currentYear", year);
+        }
     };
 
+    // --- FIX #5: Updated logic for adding a new year ---
     const handleAddNewYear = async () => {
         const latestYear = Math.max(...availableYears.map(y => parseInt(y, 10))) || parseInt(currentYear, 10);
         const newYear = (latestYear + 1).toString();
@@ -181,15 +185,15 @@ const fetchUserYears = useCallback(async (forceRefresh = false) => {
         try {
             await api.payments.addNewYear(newYear);
             alert(`Year ${newYear} added successfully!`);
-            await fetchUserYears(true);
-            handleYearChange(newYear);
+            await fetchUserYears(true); // Refresh the list of available years
+            handleYearChange(newYear); // Switch to the newly created year
         } catch (error) {
             const errorMessage = error.response?.data?.error || `Failed to add year ${newYear}.`;
             alert(errorMessage);
             
             if (errorMessage.includes("already exists")) {
-                await fetchUserYears(true); 
-                handleYearChange(newYear);
+                await fetchUserYears(true); // Ensure the list is up-to-date
+                handleYearChange(newYear); // Switch to that year anyway
             }
         } finally {
             setIsLoadingYears(false);
