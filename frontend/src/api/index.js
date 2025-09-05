@@ -131,6 +131,7 @@ const apiService = {
     verifyWhatsAppContact: (contactData) => api.post("/messages/verify-whatsapp", contactData),
   },
 
+  
   utils: {
     testSMTP: () => api.get("/utils/test-smtp"),
   },

@@ -82,24 +82,24 @@ exports.getPaymentsByYear = async (req, res) => {
  */
 // --- REPLACE your old getUserYears function with this one ---
 exports.getUserYears = async (req, res) => {
-    const paymentsCollection = database.getPaymentsCollection(req.user.username);
-    
-    // 1. Get all distinct non-null years from the database.
-    const yearsFromDb = await paymentsCollection.distinct("Year", { Year: { $ne: null } });
+    const paymentsCollection = database.getPaymentsCollection(req.user.username);
+    
+    // 1. Get all distinct non-null years from the database.
+    const yearsFromDb = await paymentsCollection.distinct("Year", { Year: { $ne: null } });
 
-    // 2. Use a Set to ensure all years are unique and 2025 is always included.
-    //    We also parse every year as an integer to handle mixed data types (e.g., "2026" and 2026).
-    const yearSet = new Set(yearsFromDb.map(y => parseInt(y)));
-    yearSet.add(2025);
+    // 2. Use a Set to ensure all years are unique and 2025 is always included.
+    //    We also parse every year as an integer to handle mixed data types (e.g., "2026" and 2026).
+    const yearSet = new Set(yearsFromDb.map(y => parseInt(y)));
+    yearSet.add(2025);
 
-    // 3. Convert the Set back to an array, filter out any potential NaN values, and sort numerically.
-    const allYears = Array.from(yearSet)
-        .filter(year => !isNaN(year))
-        .sort((a, b) => a - b);
+    // 3. Convert the Set back to an array, filter out any potential NaN values, and sort numerically.
+    const allYears = Array.from(yearSet)
+        .filter(year => !isNaN(year))
+        .sort((a, b) => a - b);
 
 console.log(`[getUserYears] Sending years for user ${req.user.username}:`, allYears);
 
-    res.json(allYears);
+    res.json(allYears);
 };
 
 // =================================================================
@@ -371,10 +371,20 @@ exports.importCsv = async (req, res) => {
     }
     
     if (validClients.length > 0) {
-        await clientsCollection.insertMany(validClients, { ordered: false }).catch(err => console.error("Error inserting clients:", err));
+        try {
+            await clientsCollection.insertMany(validClients, { ordered: false });
+        } catch (err) {
+            console.error("Error inserting clients:", err);
+            errors.push(`Database error: Failed to insert ${validClients.length} clients. ${err.message}`);
+        }
     }
     if (validPayments.length > 0) {
-        await paymentsCollection.insertMany(validPayments, { ordered: false }).catch(err => console.error("Error inserting payments:", err));
+        try {
+            await paymentsCollection.insertMany(validPayments, { ordered: false });
+        } catch (err) {
+            console.error("Error inserting payments:", err);
+            errors.push(`Database error: Failed to insert ${validPayments.length} payment records. ${err.message}`);
+        }
     }
 
     res.status(201).json({

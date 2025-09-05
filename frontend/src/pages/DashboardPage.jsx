@@ -378,18 +378,104 @@ const DashboardPage = ({ setPage }) => {
     setIsImporting(true);
     try {
       const text = await file.text();
-      const rows = text.split('\n').filter(row => row.trim());
-      const records = rows.map(row => row.split(',').map(cell => cell.trim()));
+      const rows = text
+        .split('\n')
+        .filter(row => row.trim())
+        .map(row => {
+          const cols = row
+            .split(',')
+            .map(cell => cell.trim().replace(/^"|"$/g, ''));
+          return cols.filter(col => col.trim());
+        });
 
-      await api.payments.importCsv(records, currentYear);
-      alert('CSV import successful! Refreshing data...');
+      if (rows.length === 0) {
+        throw new Error('CSV file is empty.');
+      }
+
+      // Get current types for validation
+      const types = await api.types.getTypes(true);
+      const capitalizedTypes = types.map(type => type.toUpperCase());
+
+      if (capitalizedTypes.length === 0) {
+        throw new Error('No payment types defined. Please add types before importing.');
+      }
+
+      // Process rows into the format expected by backend: [amount, type, email, clientName, phone]
+      const records = [];
+      const parseErrors = [];
+
+      rows.forEach((row, index) => {
+        let clientName = "", type = "", amount = 0, email = "", phone = "";
+        
+        // Parse each cell in the row
+        row.forEach((cell) => {
+          if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cell)) {
+            email = cell;
+          } else if (/^\+?[\d\s-]{10,15}$/.test(cell)) {
+            phone = cell;
+          } else if (capitalizedTypes.includes(cell.trim().toUpperCase())) {
+            type = cell.trim().toUpperCase();
+          } else if (!isNaN(parseFloat(cell)) && parseFloat(cell) > 0) {
+            amount = parseFloat(cell);
+          } else if (cell.trim()) {
+            clientName = cell.trim();
+          }
+        });
+        
+        // Validate required fields
+        if (!clientName || !type || !amount) {
+          parseErrors.push(
+            `Row ${index + 1}: Missing required fields (Client Name: "${clientName}", Type: "${type}", Amount: ${amount}). Valid types: ${capitalizedTypes.join(", ")}`
+          );
+          return;
+        }
+        
+        // Format as expected by backend: [amount, type, email, clientName, phone]
+        records.push([amount, type, email, clientName, phone]);
+      });
+
+      if (records.length === 0) {
+        throw new Error(`No valid records found. Errors:\n${parseErrors.join('\n')}`);
+      }
+
+      const response = await api.payments.importCsv(records, currentYear);
+      
+      // Show detailed success message
+      const summary = response.summary;
+      let message = `CSV import completed!\n\n`;
+      message += `• Total records: ${summary.totalRecords}\n`;
+      message += `• Successfully imported: ${summary.successfulImports}\n`;
+      message += `• Duplicates skipped: ${summary.skippedDuplicates}\n`;
+      message += `• Errors: ${summary.errors}`;
+      
+      if (parseErrors.length > 0) {
+        message += `\n\nParse errors:\n${parseErrors.join('\n')}`;
+      }
+      
+      alert(message);
 
       // Refresh both years and payments
       await fetchUserYears(true);
       await fetchPayments(currentYear, true);
     } catch (error) {
       handleApiError(error);
-      alert(error?.response?.data?.error || 'Failed to import CSV.');
+      
+      // Show detailed error message
+      let errorMessage = error?.response?.data?.error || error.message || 'Failed to import CSV.';
+      
+      if (error?.response?.data?.details?.errors?.length > 0) {
+        errorMessage += '\n\nServer validation errors:\n' + 
+          error.response.data.details.errors.join('\n');
+      }
+      
+      if (error?.response?.data?.details?.duplicates?.length > 0) {
+        errorMessage += '\n\nDuplicates found:\n' + 
+          error.response.data.details.duplicates.map(d => 
+            `• ${d.clientName} (${d.type}) - ${d.reason}`
+          ).join('\n');
+      }
+      
+      alert(errorMessage);
     } finally {
       setIsImporting(false);
       if (csvFileInputRef.current) {
