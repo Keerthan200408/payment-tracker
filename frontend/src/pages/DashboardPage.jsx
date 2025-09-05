@@ -342,7 +342,7 @@ const DashboardPage = ({ setPage }) => {
             {/* --- Main table with horizontal scroll --- */}
             <div className="bg-white rounded-lg shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
-                    <DataTable data={paginatedData} paymentsData={paymentsData} months={months} localInputValues={localInputValues} handleInputChange={handleInputChange} getInputBackgroundColor={getInputBackgroundColor} onRemarkButtonClick={(info) => setRemarkPopup({ ...info, isOpen: true })} />
+                    <DataTable data={paginatedData} paymentsData={paymentsData} months={months} localInputValues={localInputValues} handleInputChange={handleInputChange} getInputBackgroundColor={getInputBackgroundColor} onRemarkButtonClick={(info) => setRemarkPopup({ ...info, isOpen: true })}/>
                 </div>
             </div>
 

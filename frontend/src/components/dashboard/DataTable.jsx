@@ -7,7 +7,8 @@ const DataTable = memo(({
     localInputValues,
     handleInputChange, 
     getInputBackgroundColor,
-    onRemarkButtonClick 
+    onRemarkButtonClick,
+    currentRemark = "N/A"
 }) => {
 
     if (!Array.isArray(data) || data.length === 0) {
@@ -79,7 +80,7 @@ const DataTable = memo(({
                                                     currentRemark: row.Remarks?.[month.charAt(0).toUpperCase() + month.slice(1)] || ""
                                                 })}
                                                 className={`absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-xs transition-opacity ${hasRemark ? 'bg-blue-500 text-white' : 'bg-gray-300 text-gray-600 opacity-0 group-hover:opacity-100'}`}
-                                                title={hasRemark ? `Remark: ${currentRemark}` : 'Add remark'}
+                                                title={hasRemark ? `Remark: ${row.Remarks?.[month.charAt(0).toUpperCase() + month.slice(1)]}` : 'Add remark'}
                                             >
                                                <i className={`fas ${hasRemark ? 'fa-comment' : 'fa-plus'}`}></i>
                                             </button>
