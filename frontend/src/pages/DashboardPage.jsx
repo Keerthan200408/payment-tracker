@@ -393,7 +393,8 @@ const DashboardPage = ({ setPage }) => {
       }
 
       // Get current types for validation
-      const types = await api.types.getTypes(true);
+      const typesResponse = await api.types.getTypes(true);
+      const types = typesResponse.types || [];
       const capitalizedTypes = types.map(type => type.toUpperCase());
 
       if (capitalizedTypes.length === 0) {
