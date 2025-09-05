@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api';
 
-// normalize contact fields across variants
+/* ------------------------- contact field normalization ------------------------- */
 const pickFirst = (...cands) => {
   for (const v of cands) {
     if (v !== undefined && v !== null) {
@@ -11,20 +11,46 @@ const pickFirst = (...cands) => {
   }
   return null;
 };
+
+// Accept a wide range of server/client key variants
 const getPhone = (n) =>
-  pickFirst(n.phone, n.Phone, n.Phone_Number, n['Phone Number'], n.whatsapp, n.WhatsApp, n.contactPhone);
+  pickFirst(
+    n.phone,
+    n.Phone,
+    n.Phone_Number,
+    n['Phone Number'],
+    n.whatsapp,
+    n.WhatsApp,
+    n.contactPhone,
+    n.Mobile,
+    n.Mobile_Number,
+    n['Mobile Number'],
+    n.contact_number,
+    n.Contact,
+  );
+
 const getEmail = (n) =>
-  pickFirst(n.email, n.Email, n['E-mail'], n.Email_Address, n.Mail, n.contactEmail);
+  pickFirst(
+    n.email,
+    n.Email,
+    n['E-mail'],
+    n.Email_Address,
+    n['Email Address'],
+    n.Mail,
+    n.contactEmail
+  );
+/* ------------------------------------------------------------------------------ */
 
 const NotificationModal = ({ isOpen, onClose, queue, setQueue, clearQueueFromDB }) => {
   const [messageTemplate, setMessageTemplate] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [sendSummary, setSendSummary] = useState(null);
 
+  // Default template (idempotent)
   useEffect(() => {
     if (!messageTemplate) {
       setMessageTemplate(
-        `Dear {clientName},
+`Dear {clientName},
 
 This is a payment reminder for your {type} service.
 
@@ -43,11 +69,13 @@ Thank you!`
   };
 
   const handleRemove = (id) => {
+    // remove a single recipient from the queue
     setQueue((prev) => prev.filter((n) => n.id !== id));
   };
 
   const handleSendAll = async () => {
     if (!queue?.length) return;
+
     setIsSending(true);
     setSendSummary(null);
 
@@ -58,28 +86,34 @@ Thank you!`
       const phone = getPhone(n);
       const email = getEmail(n);
 
-      const personalizedMessage = messageTemplate
+      const monthLabel = n?.month
+        ? n.month.charAt(0).toUpperCase() + n.month.slice(1)
+        : '';
+
+      const personalizedMessage = (messageTemplate || '')
         .replace(/{clientName}/g, n.clientName ?? '')
         .replace(/{type}/g, n.type ?? '')
-        .replace(/{month}/g, n.month ? n.month.charAt(0).toUpperCase() + n.month.slice(1) : '')
+        .replace(/{month}/g, monthLabel)
         .replace(/{paidAmount}/g, toMoney(n.value))
         .replace(/{duePayment}/g, toMoney(n.duePayment));
 
       try {
         if (phone) {
           await api.messages.sendWhatsApp({ to: phone, message: personalizedMessage });
+          successCount++;
         } else if (email) {
           await api.messages.sendEmail({
             to: email,
             subject: `Payment Reminder: ${n.type ?? ''}`,
             html: personalizedMessage.replace(/\n/g, '<br>'),
           });
+          successCount++;
         } else {
-          errorCount++; // no contact info
-          continue;
+          // No usable contact info
+          errorCount++;
         }
-        successCount++;
       } catch (err) {
+        // eslint-disable-next-line no-console
         console.error(`Failed to send notification to ${n.clientName}:`, err);
         errorCount++;
       }
@@ -88,11 +122,13 @@ Thank you!`
     setIsSending(false);
     setSendSummary({ success: successCount, errors: errorCount });
 
+    // If anything was sent successfully, clear queue on server then locally
     if (successCount > 0 && typeof clearQueueFromDB === 'function') {
       try {
         await clearQueueFromDB();
         setQueue([]);
       } catch (e) {
+        // eslint-disable-next-line no-console
         console.error('Failed to clear queue from DB:', e);
       }
     }
@@ -111,32 +147,54 @@ Thank you!`
       <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold">Send Notifications ({count} pending)</h2>
-          <button onClick={handleClose} className="text-gray-500 hover:text-gray-700" disabled={isSending} aria-label="Close">
+          <button
+            onClick={handleClose}
+            className="text-gray-500 hover:text-gray-700"
+            disabled={isSending}
+            aria-label="Close"
+          >
             ✕
           </button>
         </div>
 
+        {/* Recipients list with contact info + remove */}
         <div className="mb-4 border rounded">
-          <div className="px-3 py-2 bg-gray-50 border-b text-sm text-gray-700">Recipients</div>
+          <div className="px-3 py-2 bg-gray-50 border-b text-sm text-gray-700">
+            Recipients
+          </div>
+
           {count === 0 ? (
-            <div className="px-3 py-6 text-center text-sm text-gray-500">No recipients in the queue.</div>
+            <div className="px-3 py-6 text-center text-sm text-gray-500">
+              No recipients in the queue.
+            </div>
           ) : (
             <ul className="max-h-56 overflow-y-auto divide-y">
               {queue.map((n) => {
                 const phone = getPhone(n);
                 const email = getEmail(n);
+                const monthLabel = n?.month
+                  ? n.month.charAt(0).toUpperCase() + n.month.slice(1)
+                  : '-';
+
                 return (
                   <li key={n.id} className="px-3 py-2 text-sm">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <div className="font-medium">{n.clientName || '-'} • {n.type || '-'}</div>
-                        <div className="text-gray-600">
-                          Month: {n.month ? n.month.charAt(0).toUpperCase() + n.month.slice(1) : '-'} • Paid: ₹{toMoney(n.value)} • Due: ₹{toMoney(n.duePayment)}
+                        <div className="font-medium">
+                          {n.clientName || '-'} • {n.type || '-'}
                         </div>
+                        <div className="text-gray-600">
+                          Month: {monthLabel} • Paid: ₹{toMoney(n.value)} • Due: ₹{toMoney(n.duePayment)}
+                        </div>
+
+                        {/* Show BOTH if available */}
                         <div className="text-gray-500">
-                          {phone ? `WhatsApp: ${phone}` : (email ? `Email: ${email}` : 'No contact info')}
+                          {phone ? `WhatsApp: ${phone}` : 'WhatsApp: —'}
+                          {'  '}
+                          {email ? `• Email: ${email}` : '• Email: —'}
                         </div>
                       </div>
+
                       <button
                         className="shrink-0 px-2 py-1 text-xs rounded bg-red-50 text-red-600 hover:bg-red-100"
                         onClick={() => handleRemove(n.id)}
@@ -154,9 +212,12 @@ Thank you!`
           )}
         </div>
 
+        {/* Template editor */}
         <label className="block text-sm font-medium text-gray-700 mb-1">
           Message template
-          <span className="ml-1 text-xs text-gray-500">(variables: {'{clientName}'}, {'{type}'}, {'{month}'}, {'{paidAmount}'}, {'{duePayment}'})</span>
+          <span className="ml-1 text-xs text-gray-500">
+            (variables: {'{clientName}'}, {'{type}'}, {'{month}'}, {'{paidAmount}'}, {'{duePayment}'})
+          </span>
         </label>
         <textarea
           value={messageTemplate}
@@ -165,18 +226,33 @@ Thank you!`
           disabled={isSending}
         />
 
+        {/* Actions */}
         <div className="flex justify-between items-center">
-          <div className="text-xs text-gray-500">Tip: Use new lines in the template; we convert to HTML for email automatically.</div>
+          <div className="text-xs text-gray-500">
+            Tip: Use new lines in the template; we convert to HTML for email automatically.
+          </div>
           <div className="flex gap-3">
-            <button onClick={handleClose} disabled={isSending} className="px-4 py-2 border rounded">Cancel</button>
-            <button onClick={handleSendAll} disabled={isSending || count === 0} className="px-4 py-2 bg-green-600 text-white rounded disabled:bg-gray-400">
+            <button
+              onClick={handleClose}
+              disabled={isSending}
+              className="px-4 py-2 border rounded"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSendAll}
+              disabled={isSending || count === 0}
+              className="px-4 py-2 bg-green-600 text-white rounded disabled:bg-gray-400"
+            >
               {isSending ? 'Sending...' : `Send All (${count})`}
             </button>
           </div>
         </div>
 
         {sendSummary && (
-          <p className="mt-4 text-sm text-center">Sent: {sendSummary.success}, Failed: {sendSummary.errors}</p>
+          <p className="mt-4 text-sm text-center">
+            Sent: {sendSummary.success}, Failed: {sendSummary.errors}
+          </p>
         )}
       </div>
     </div>
