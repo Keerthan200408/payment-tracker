@@ -51,18 +51,6 @@ const DashboardPage = ({ setPage }) => {
 
     // --- CORE DATA FETCHING FUNCTIONS ---
 
-    // Handle year change from dropdown
-    const handleYearChange = useCallback((year) => {
-        const yearString = year.toString();
-        console.log('[handleYearChange] Changing year to:', yearString);
-        
-        if (yearString && yearString !== currentYear) {
-            setCurrentYear(yearString);
-            localStorage.setItem("currentYear", yearString);
-            // fetchPayments will be triggered by the useEffect below
-        }
-    }, [currentYear]);
-
     // Fetch available years from the server
     const fetchUserYears = useCallback(async (forceRefresh = false) => {
         if (!sessionToken) return;
@@ -95,7 +83,19 @@ const DashboardPage = ({ setPage }) => {
         } finally {
             setIsLoadingYears(false);
         }
-    }, [sessionToken, handleApiError, handleYearChange]);
+    }, [sessionToken, handleApiError]);
+
+    // Handle year change from dropdown
+    const handleYearChange = useCallback((year) => {
+        const yearString = year.toString();
+        console.log('[handleYearChange] Changing year to:', yearString);
+        
+        if (yearString && yearString !== currentYear) {
+            setCurrentYear(yearString);
+            localStorage.setItem("currentYear", yearString);
+            // fetchPayments will be triggered by the useEffect below
+        }
+    }, [currentYear]);
 
     // Handle adding a new year
     const handleAddNewYear = useCallback(async () => {
@@ -191,19 +191,21 @@ const DashboardPage = ({ setPage }) => {
     
     // 5. Initialize local input values when payments data changes
     useEffect(() => {
-        const initialValues = {};
         if (Array.isArray(paymentsData)) {
+            console.log('[useEffect] Payments data changed, clearing local values for new year');
+            // Clear all local input values when switching years to avoid stale data
+            setLocalInputValues({});
+            
+            const initialValues = {};
             paymentsData.forEach((row, globalRowIndex) => {
                 months.forEach((month) => {
                     const key = `${globalRowIndex}-${month}`;
-                    if (localInputValues[key] === undefined) {
-                        initialValues[key] = row[month] || "";
-                    }
+                    initialValues[key] = row[month] || "";
                 });
             });
-            setLocalInputValues(prev => ({ ...prev, ...initialValues }));
+            setLocalInputValues(initialValues);
         }
-    }, [paymentsData]);
+    }, [paymentsData]);  // Remove localInputValues dependency to avoid infinite loop
 
     // --- OTHER HANDLER FUNCTIONS ---
     
