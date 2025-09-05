@@ -92,6 +92,9 @@ const apiService = {
         addNewYear: (year) => api.post("/payments/add-new-year", { year }),
         importCsv: (csvData, year) => api.post(`/payments/import-csv?year=${year}`, csvData),
         saveRemark: (remarkData, year) => api.post(`/payments/save-remark?year=${year}`, remarkData),
+        // --- THIS IS THE FIX ---
+        // The function was missing from this object.
+        getUserYears: (forceRefresh) => withCache('user_years', () => api.get('/payments/get-user-years'), forceRefresh),
     },
     types: {
         getTypes: (forceRefresh) => withCache('types', () => api.get("/utilities/get-types"), forceRefresh),

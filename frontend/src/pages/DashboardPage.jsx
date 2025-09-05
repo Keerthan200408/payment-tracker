@@ -51,6 +51,18 @@ const DashboardPage = ({ setPage }) => {
 
     // --- CORE DATA FETCHING FUNCTIONS ---
 
+    // Handle year change from dropdown
+    const handleYearChange = useCallback((year) => {
+        const yearString = year.toString();
+        console.log('[handleYearChange] Changing year to:', yearString);
+        
+        if (yearString && yearString !== currentYear) {
+            setCurrentYear(yearString);
+            localStorage.setItem("currentYear", yearString);
+            // fetchPayments will be triggered by the useEffect below
+        }
+    }, [currentYear]);
+
     // Fetch available years from the server
     const fetchUserYears = useCallback(async (forceRefresh = false) => {
         if (!sessionToken) return;
@@ -83,19 +95,7 @@ const DashboardPage = ({ setPage }) => {
         } finally {
             setIsLoadingYears(false);
         }
-    }, [sessionToken, handleApiError]);
-
-    // Handle year change from dropdown
-    const handleYearChange = useCallback((year) => {
-        const yearString = year.toString();
-        console.log('[handleYearChange] Changing year to:', yearString);
-        
-        if (yearString && yearString !== currentYear) {
-            setCurrentYear(yearString);
-            localStorage.setItem("currentYear", yearString);
-            // fetchPayments will be triggered by the useEffect below
-        }
-    }, [currentYear]);
+    }, [sessionToken, handleApiError, handleYearChange]);
 
     // Handle adding a new year
     const handleAddNewYear = useCallback(async () => {
