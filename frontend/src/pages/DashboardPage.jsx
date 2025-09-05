@@ -43,15 +43,13 @@ const DashboardPage = ({ setPage }) => {
     const notificationQueueRef = useRef([]);
     const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
     
-    // --- NEW: State for Filtering & Pagination ---
     const [searchQuery, setSearchQuery] = useState("");
-    const [monthFilter, setMonthFilter] = useState(''); // <-- ADDED THIS LINE
-    const [statusFilter, setStatusFilter] = useState(''); // <-- ADDED THIS LINE
+    const [monthFilter, setMonthFilter] = useState('');
+    const [statusFilter, setStatusFilter] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const entriesPerPage = 10;
 
-
-// --- FIX #1: This function now only fetches the list of years ---
+    // --- FIX #1: This function's only job is to get all available years ---
     const fetchUserYears = useCallback(async (forceRefresh = false) => {
         if (!sessionToken) return;
         setIsLoadingYears(true);
@@ -65,6 +63,7 @@ const DashboardPage = ({ setPage }) => {
                 // If the stored year isn't valid, update it to the latest available one.
                 if (!sortedYears.includes(storedYear)) {
                     const latestYear = sortedYears[sortedYears.length - 1];
+                    // Directly call the state update logic here
                     setCurrentYear(latestYear);
                     localStorage.setItem("currentYear", latestYear);
                 }
@@ -78,18 +77,17 @@ const DashboardPage = ({ setPage }) => {
         }
     }, [sessionToken, handleApiError]); // Dependency array is now stable.
 
-
-    // --- FIX #2: Fetch years ONCE on component load or when you log in ---
+    // --- FIX #2: Fetch years ONCE on initial load or login ---
     useEffect(() => {
         fetchUserYears(true);
-    }, [sessionToken]); // This correctly runs only when sessionToken is available.
+    }, [sessionToken]); // This will only run once when you log in.
 
-// --- FIX #3: This effect now ONLY handles fetching payments when the year changes ---
+    // --- FIX #3: Fetch payments ONLY when the `currentYear` changes ---
     useEffect(() => {
         if (sessionToken && currentYear) {
-            fetchPayments(currentYear, true); // Force refresh data for the new year.
+            fetchPayments(currentYear, true); // Force a refresh when the year changes
         }
-    }, [currentYear, sessionToken, fetchPayments]);
+    }, [currentYear, sessionToken, fetchPayments]); // This correctly triggers data fetching.
 
     useEffect(() => {
         const loadQueue = async () => {
@@ -168,7 +166,7 @@ const DashboardPage = ({ setPage }) => {
     const totalEntries = filteredData.length;
     const totalPages = Math.ceil(totalEntries / entriesPerPage);
 
-    // --- FIX #2: Simplified year change handler ---
+    // --- FIX #4: This function's only job is to update the state and localStorage ---
     const handleYearChange = (year) => {
         if (year !== currentYear) {
             setCurrentYear(year);
@@ -176,7 +174,6 @@ const DashboardPage = ({ setPage }) => {
         }
     };
 
-    // --- FIX #5: Updated logic for adding a new year ---
     const handleAddNewYear = async () => {
         const latestYear = Math.max(...availableYears.map(y => parseInt(y, 10))) || parseInt(currentYear, 10);
         const newYear = (latestYear + 1).toString();
@@ -185,40 +182,26 @@ const DashboardPage = ({ setPage }) => {
         try {
             await api.payments.addNewYear(newYear);
             alert(`Year ${newYear} added successfully!`);
-            await fetchUserYears(true); // Refresh the list of available years
-            handleYearChange(newYear); // Switch to the newly created year
         } catch (error) {
             const errorMessage = error.response?.data?.error || `Failed to add year ${newYear}.`;
             alert(errorMessage);
-            
-            if (errorMessage.includes("already exists")) {
-                await fetchUserYears(true); // Ensure the list is up-to-date
-                handleYearChange(newYear); // Switch to that year anyway
-            }
         } finally {
+            // This block runs for BOTH success and failure (e.g., "already exists")
+            await fetchUserYears(true); // Get the latest list of years
+            handleYearChange(newYear);  // ALWAYS switch to the year you tried to add
             setIsLoadingYears(false);
         }
     };
 
-
-
-    // --- THIS IS THE FINAL, CORRECTED FUNCTION ---
     const handleRemarkSaved = (clientName, type, month, newRemark) => {
         const monthKey = month.charAt(0).toUpperCase() + month.slice(1);
-
-        // This function creates a new array with the updated data,
-        // which guarantees React will re-render the dashboard.
         const newPaymentsData = paymentsData.map(row => {
             if (row.Client_Name === clientName && row.Type === type) {
-                // Create a new Remarks object for immutability
                 const updatedRemarks = { ...row.Remarks, [monthKey]: newRemark };
-                // Return a new row object with the updated remarks
                 return { ...row, Remarks: updatedRemarks };
             }
-            return row; // Return all other rows unchanged
+            return row;
         });
-
-        // Set the new array as the state
         setPaymentsData(newPaymentsData);
     };
     
@@ -283,8 +266,6 @@ const DashboardPage = ({ setPage }) => {
         return isPending ? `${baseColor} ring-2 ring-blue-300` : baseColor;
     }, [localInputValues, pendingUpdates]);
     
-    
-
     useEffect(() => {
         setCurrentPage(1);
     }, [searchQuery, monthFilter, statusFilter, currentYear]);
@@ -325,14 +306,12 @@ const DashboardPage = ({ setPage }) => {
     
     return (
         <div className="p-6 bg-gray-50 min-h-screen">
-            {/* --- Top action buttons and year selector --- */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
                 <div className="flex flex-wrap gap-3 mb-4 sm:mb-0">
                     <button onClick={() => setPage("addClient")} className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 flex items-center"><i className="fas fa-plus mr-2"></i> Add Client</button>
                     <button onClick={() => setIsTypeModalOpen(true)} className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 flex items-center"><i className="fas fa-tags mr-2"></i> Add Type</button>
                     <input type="file" accept=".csv" ref={csvFileInputRef} onChange={importCsv} className="hidden" id="csv-import" disabled={isImporting} />
                     <label htmlFor="csv-import" className={`px-4 py-2 rounded-lg bg-white border flex items-center ${isImporting ? "opacity-50" : "hover:bg-gray-50 cursor-pointer"}`}><i className="fas fa-upload mr-2"></i>{isImporting ? "Importing..." : "Bulk Import"}</label>
-                    <button onClick={handleAddNewYear} className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 flex items-center" disabled={isLoadingYears}><i className="fas fa-calendar-plus mr-2"></i>{isLoadingYears ? "Adding..." : "Add New Year"}</button>
                 </div>
                 <div className="flex items-center gap-3">
                     <button onClick={() => setIsNotificationModalOpen(true)} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center" disabled={notificationQueue.length === 0}><i className="fas fa-paper-plane mr-2"></i>Send Messages ({notificationQueue.length})</button>
@@ -340,7 +319,6 @@ const DashboardPage = ({ setPage }) => {
                 </div>
             </div>
 
-            {/* --- Search and filters bar --- */}
             <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 mb-6">
                 <div className="relative flex-1">
                     <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
@@ -358,14 +336,12 @@ const DashboardPage = ({ setPage }) => {
                 </select>
             </div>
 
-            {/* --- Main table with horizontal scroll --- */}
             <div className="bg-white rounded-lg shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
                     <DataTable data={paginatedData} paymentsData={paymentsData} months={months} localInputValues={localInputValues} handleInputChange={handleInputChange} getInputBackgroundColor={getInputBackgroundColor} onRemarkButtonClick={(info) => setRemarkPopup({ ...info, isOpen: true })}/>
                 </div>
             </div>
 
-            {/* --- Pagination Controls --- */}
             {totalEntries > entriesPerPage && (
                 <div className="flex justify-between items-center mt-6">
                     <p className="text-sm text-gray-700">Showing {(currentPage - 1) * entriesPerPage + 1} to {Math.min(currentPage * entriesPerPage, totalEntries)} of {totalEntries} entries</p>
@@ -377,7 +353,6 @@ const DashboardPage = ({ setPage }) => {
                 </div>
             )}
             
-            {/* --- Modals --- */}
             <RemarkPopup isOpen={remarkPopup.isOpen} onClose={() => setRemarkPopup({ isOpen: false })} onRemarkSaved={handleRemarkSaved} {...remarkPopup} />
             <NotificationModal isOpen={isNotificationModalOpen} onClose={() => setIsNotificationModalOpen(false)} queue={notificationQueue} setQueue={setNotificationQueue} />
             {isTypeModalOpen && (
