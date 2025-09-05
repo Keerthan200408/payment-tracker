@@ -1,7 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api';
 
-const NotificationModal = ({ isOpen, onClose, queue, setQueue, clearQueueFromDB }) => {
+// helper to normalize phone/email across different field names
+const pickFirst = (...candidates) => {
+  for (const v of candidates) {
+    if (v !== undefined && v !== null) {
+      const s = String(v).trim();
+      if (s) return s;
+    }
+  }
+  return null;
+};
+const getPhone = (n) =>
+  pickFirst(n.phone, n.Phone, n.Phone_Number, n.whatsapp, n.contactPhone);
+const getEmail = (n) =>
+  pickFirst(n.email, n.Email, n.Email_Address, n.contactEmail, n.Mail);
+
+const NotificationModal = ({
+  isOpen,
+  onClose,
+  queue,
+  setQueue,
+  clearQueueFromDB,
+}) => {
   const [messageTemplate, setMessageTemplate] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [sendSummary, setSendSummary] = useState(null);
@@ -28,7 +49,6 @@ Thank you!`
   };
 
   const handleRemove = (id) => {
-    // remove a single recipient from the queue
     setQueue((prev) => prev.filter((n) => n.id !== id));
   };
 
@@ -42,6 +62,9 @@ Thank you!`
     let errorCount = 0;
 
     for (const n of queue) {
+      const phone = getPhone(n);
+      const email = getEmail(n);
+
       const personalizedMessage = messageTemplate
         .replace(/{clientName}/g, n.clientName ?? '')
         .replace(/{type}/g, n.type ?? '')
@@ -53,19 +76,19 @@ Thank you!`
         .replace(/{duePayment}/g, toMoney(n.duePayment));
 
       try {
-        if (n.phone) {
-          await api.messages.sendWhatsApp({ to: n.phone, message: personalizedMessage });
-          successCount++;
-        } else if (n.email) {
+        if (phone) {
+          await api.messages.sendWhatsApp({ to: phone, message: personalizedMessage });
+        } else if (email) {
           await api.messages.sendEmail({
-            to: n.email,
+            to: email,
             subject: `Payment Reminder: ${n.type ?? ''}`,
             html: personalizedMessage.replace(/\n/g, '<br>'),
           });
-          successCount++;
         } else {
-          errorCount++; // no contact info
+          errorCount++;
+          continue;
         }
+        successCount++;
       } catch (err) {
         console.error(`Failed to send notification to ${n.clientName}:`, err);
         errorCount++;
@@ -91,7 +114,6 @@ Thank you!`
   };
 
   if (!isOpen) return null;
-
   const count = queue?.length ?? 0;
 
   return (
@@ -111,7 +133,7 @@ Thank you!`
           </button>
         </div>
 
-        {/* NEW: Recipients list with remove (✕) */}
+        {/* Recipients list with remove option */}
         <div className="mb-4 border rounded">
           <div className="px-3 py-2 bg-gray-50 border-b text-sm text-gray-700">
             Recipients
@@ -122,37 +144,45 @@ Thank you!`
             </div>
           ) : (
             <ul className="max-h-56 overflow-y-auto divide-y">
-              {queue.map((n) => (
-                <li key={n.id} className="px-3 py-2 text-sm">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="font-medium">
-                        {n.clientName || '-'} • {n.type || '-'}
+              {queue.map((n) => {
+                const phone = getPhone(n);
+                const email = getEmail(n);
+                return (
+                  <li key={n.id} className="px-3 py-2 text-sm">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="font-medium">
+                          {n.clientName || '-'} • {n.type || '-'}
+                        </div>
+                        <div className="text-gray-600">
+                          Month:{' '}
+                          {n.month
+                            ? n.month.charAt(0).toUpperCase() + n.month.slice(1)
+                            : '-'}{' '}
+                          • Paid: ₹{toMoney(n.value)} • Due: ₹
+                          {toMoney(n.duePayment)}
+                        </div>
+                        <div className="text-gray-500">
+                          {phone
+                            ? `WhatsApp: ${phone}`
+                            : email
+                            ? `Email: ${email}`
+                            : 'No contact info'}
+                        </div>
                       </div>
-                      <div className="text-gray-600">
-                        Month: {n.month ? n.month.charAt(0).toUpperCase() + n.month.slice(1) : '-'}
-                        {' '}• Paid: ₹{toMoney(n.value)} • Due: ₹{toMoney(n.duePayment)}
-                      </div>
-                      <div className="text-gray-500">
-                        {n.phone
-                          ? `WhatsApp: ${n.phone}`
-                          : n.email
-                          ? `Email: ${n.email}`
-                          : 'No contact info'}
-                      </div>
+                      <button
+                        className="shrink-0 px-2 py-1 text-xs rounded bg-red-50 text-red-600 hover:bg-red-100"
+                        onClick={() => handleRemove(n.id)}
+                        disabled={isSending}
+                        aria-label={`Remove ${n.clientName || 'recipient'}`}
+                        title="Remove from queue"
+                      >
+                        ✕
+                      </button>
                     </div>
-                    <button
-                      className="shrink-0 px-2 py-1 text-xs rounded bg-red-50 text-red-600 hover:bg-red-100"
-                      onClick={() => handleRemove(n.id)}
-                      disabled={isSending}
-                      aria-label={`Remove ${n.clientName || 'recipient'}`}
-                      title="Remove from queue"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -161,7 +191,8 @@ Thank you!`
         <label className="block text-sm font-medium text-gray-700 mb-1">
           Message template
           <span className="ml-1 text-xs text-gray-500">
-            (variables: {'{clientName}'}, {'{type}'}, {'{month}'}, {'{paidAmount}'}, {'{duePayment}'})
+            (variables: {'{clientName}'}, {'{type}'}, {'{month}'}, {'{paidAmount}'},{' '}
+            {'{duePayment}'})
           </span>
         </label>
         <textarea
