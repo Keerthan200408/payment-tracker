@@ -313,10 +313,10 @@ const DashboardPage = ({ setPage }) => {
         
         const isPending = pendingUpdates[key];
         const baseColor = status === "Unpaid" 
-            ? "bg-red-200/50" 
+            ? "bg-red-100 border-red-200" 
             : status === "PartiallyPaid" 
-                ? "bg-yellow-200/50" 
-                : "bg-green-200/50";
+                ? "bg-yellow-100 border-yellow-200" 
+                : "bg-green-100 border-green-200";
         
         return isPending ? `${baseColor} ring-2 ring-blue-300` : baseColor;
     }, [localInputValues, pendingUpdates]);
@@ -404,94 +404,119 @@ const DashboardPage = ({ setPage }) => {
     
     return (
         <div className="p-6 bg-gray-50 min-h-screen">
+            {/* Top action buttons and year selector */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
-                <div className="flex flex-wrap gap-3 mb-4 sm:mb-0">
-                    <button 
-                        onClick={() => setPage("addClient")} 
-                        className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 flex items-center"
+                <div className="flex gap-3 mb-4 sm:mb-0">
+                    <button
+                        onClick={() => setPage("addClient")}
+                        className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition duration-200 flex items-center"
                     >
                         <i className="fas fa-plus mr-2"></i> Add Client
                     </button>
-                    <button 
-                        onClick={() => setIsTypeModalOpen(true)} 
-                        className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 flex items-center"
+                    <button
+                        onClick={() => setIsTypeModalOpen(true)}
+                        className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition duration-200 flex items-center"
                     >
-                        <i className="fas fa-tags mr-2"></i> Add Type
+                        <i className="fas fa-plus mr-2"></i> Add Type
                     </button>
-                    <input 
-                        type="file" 
-                        accept=".csv" 
-                        ref={csvFileInputRef} 
-                        onChange={importCsv} 
-                        className="hidden" 
-                        id="csv-import" 
-                        disabled={isImporting} 
+                    <input
+                        type="file"
+                        accept=".csv"
+                        ref={csvFileInputRef}
+                        onChange={importCsv}
+                        className="hidden"
+                        id="csv-import"
+                        disabled={isImporting}
                     />
-                    <label 
-                        htmlFor="csv-import" 
-                        className={`px-4 py-2 rounded-lg bg-white border flex items-center ${
-                            isImporting ? "opacity-50" : "hover:bg-gray-50 cursor-pointer"
-                        }`}
+                    <label
+                        htmlFor="csv-import"
+                        className={`px-4 py-2 rounded-lg text-gray-700 bg-white border border-gray-300 flex items-center ${
+                            isImporting
+                                ? "opacity-50 cursor-not-allowed"
+                                : "hover:bg-gray-50 cursor-pointer"
+                        } transition duration-200`}
                     >
                         <i className="fas fa-upload mr-2"></i>
                         {isImporting ? "Importing..." : "Bulk Import"}
                     </label>
+                    <button
+                        onClick={handleAddNewYear}
+                        className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition duration-200 flex items-center"
+                        disabled={isLoadingYears}
+                    >
+                        <i className="fas fa-calendar-plus mr-2"></i>
+                        {isLoadingYears ? "Loading..." : "Add New Year"}
+                    </button>
                 </div>
+
                 <div className="flex items-center gap-3">
-                    <button 
-                        onClick={() => setIsNotificationModalOpen(true)} 
-                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center" 
+                    {notificationQueue.length > 0 && (
+                        <div className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm flex items-center">
+                            <i className="fas fa-bell mr-1"></i>
+                            {notificationQueue.length} pending
+                        </div>
+                    )}
+                    <button
+                        onClick={() => setIsNotificationModalOpen(true)}
+                        className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition duration-200 flex items-center"
                         disabled={notificationQueue.length === 0}
                     >
                         <i className="fas fa-paper-plane mr-2"></i>
                         Send Messages ({notificationQueue.length})
                     </button>
-                    <YearSelector 
-                        currentYear={currentYear} 
-                        availableYears={availableYears} 
-                        onYearChange={handleYearChange} 
-                        isLoadingYears={isLoadingYears} 
-                        onAddNewYear={handleAddNewYear}
-                    />
+                    <select
+                        value={currentYear}
+                        onChange={(e) => handleYearChange(e.target.value)}
+                        className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+                        disabled={isLoadingYears}
+                    >
+                        {availableYears.map((year) => (
+                            <option key={year} value={year}>
+                                {year}
+                            </option>
+                        ))}
+                    </select>
                 </div>
             </div>
 
+            {/* Search and filters */}
             <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 mb-6">
-                <div className="relative flex-1">
+                <div className="relative flex-1 sm:w-1/3">
                     <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                    <input 
-                        type="text" 
-                        placeholder="Search by client name or type..." 
-                        value={searchQuery} 
-                        onChange={(e) => setSearchQuery(e.target.value)} 
-                        className="w-full pl-10 pr-4 py-2 border rounded-lg" 
+                    <input
+                        type="text"
+                        placeholder="Search by client or type..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base"
                     />
                 </div>
-                <select 
-                    value={monthFilter} 
-                    onChange={(e) => setMonthFilter(e.target.value)} 
-                    className="p-2 border rounded-lg w-full sm:w-auto"
+                <select
+                    value={monthFilter}
+                    onChange={(e) => setMonthFilter(e.target.value)}
+                    className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
                 >
-                    <option value="">Filter by Month</option>
-                    {months.map(month => (
+                    <option value="">All Months</option>
+                    {months.map((month) => (
                         <option key={month} value={month}>
                             {month.charAt(0).toUpperCase() + month.slice(1)}
                         </option>
                     ))}
                 </select>
-                <select 
-                    value={statusFilter} 
-                    onChange={(e) => setStatusFilter(e.target.value)} 
-                    className="p-2 border rounded-lg w-full sm:w-auto" 
+                <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
                     disabled={!monthFilter}
                 >
-                    <option value="">Filter by Status</option>
+                    <option value="">Status</option>
                     <option value="Paid">Paid</option>
                     <option value="PartiallyPaid">Partially Paid</option>
                     <option value="Unpaid">Unpaid</option>
                 </select>
             </div>
 
+            {/* Main table */}
             <div className="bg-white rounded-lg shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
                     <DataTable 
@@ -506,26 +531,35 @@ const DashboardPage = ({ setPage }) => {
                 </div>
             </div>
 
+            {/* Pagination */}
             {totalEntries > entriesPerPage && (
                 <div className="flex justify-between items-center mt-6">
                     <p className="text-sm text-gray-700">
                         Showing {(currentPage - 1) * entriesPerPage + 1} to {Math.min(currentPage * entriesPerPage, totalEntries)} of {totalEntries} entries
                     </p>
                     <div className="flex gap-2">
-                        <button 
-                            onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} 
-                            disabled={currentPage === 1} 
-                            className="px-4 py-2 border rounded-md disabled:opacity-50"
+                        <button
+                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                            disabled={currentPage === 1}
+                            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 disabled:opacity-50 hover:bg-gray-50"
                         >
                             Previous
                         </button>
-                        <span className="p-2 text-sm">
-                            Page {currentPage} of {totalPages}
-                        </span>
-                        <button 
-                            onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} 
-                            disabled={currentPage === totalPages} 
-                            className="px-4 py-2 border rounded-md disabled:opacity-50"
+                        {[...Array(totalPages)].map((_, i) => (
+                            <button
+                                key={i}
+                                onClick={() => setCurrentPage(i + 1)}
+                                className={`px-4 py-2 border border-gray-300 rounded-md ${
+                                    currentPage === i + 1 ? "bg-gray-800 text-white" : "text-gray-700 hover:bg-gray-50"
+                                }`}
+                            >
+                                {i + 1}
+                            </button>
+                        ))}
+                        <button
+                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                            disabled={currentPage === totalPages}
+                            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 disabled:opacity-50 hover:bg-gray-50"
                         >
                             Next
                         </button>
@@ -547,27 +581,37 @@ const DashboardPage = ({ setPage }) => {
                 setQueue={setNotificationQueue} 
             />
             
+            {/* Add Type Modal */}
             {isTypeModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
                     <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-sm">
-                        <h2 className="text-lg font-semibold mb-4">Add New Type</h2>
-                        <input 
-                            type="text" 
-                            value={newType} 
-                            onChange={e => { setNewType(e.target.value); setTypeError(""); }}
-                            placeholder="Enter type (e.g. GST)" 
-                            className="w-full p-2 border border-gray-300 rounded mb-2" 
+                        <h2 className="text-lg font-semibold mb-4 flex items-center">
+                            <i className="fas fa-tags mr-2 text-indigo-700"></i>
+                            Add New Type
+                        </h2>
+                        <input
+                            type="text"
+                            value={newType}
+                            onChange={e => {
+                                setNewType(e.target.value);
+                                setTypeError("");
+                            }}
+                            placeholder="Enter type (e.g. GST, IT RETURN)"
+                            className="w-full p-2 border border-gray-300 rounded mb-2"
+                            maxLength={50}
                         />
-                        {typeError && <div className="text-sm text-red-600 mb-2">{typeError}</div>}
+                        {typeError && (
+                            <div className="text-sm text-red-600 mb-2">{typeError}</div>
+                        )}
                         <div className="flex justify-end gap-2 mt-2">
-                            <button 
-                                onClick={() => setIsTypeModalOpen(false)} 
-                                className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300"
+                            <button
+                                onClick={() => setIsTypeModalOpen(false)}
+                                className="px-4 py-2 rounded bg-gray-200 text-gray-700 hover:bg-gray-300"
                             >
                                 Cancel
                             </button>
-                            <button 
-                                onClick={handleAddType} 
+                            <button
+                                onClick={handleAddType}
                                 className="px-4 py-2 rounded bg-gray-800 text-white hover:bg-gray-700"
                             >
                                 Add Type
