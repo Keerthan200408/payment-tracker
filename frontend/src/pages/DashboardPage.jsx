@@ -407,7 +407,7 @@ const DashboardPage = ({ setPage }) => {
 
       rows.forEach((row, index) => {
         let clientName = "", type = "", amount = 0, email = "", phone = "";
-        
+       
         // Parse each cell in the row
         row.forEach((cell) => {
           if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cell)) {
@@ -422,7 +422,7 @@ const DashboardPage = ({ setPage }) => {
             clientName = cell.trim();
           }
         });
-        
+       
         // Validate required fields
         if (!clientName || !type || !amount) {
           parseErrors.push(
@@ -430,7 +430,7 @@ const DashboardPage = ({ setPage }) => {
           );
           return;
         }
-        
+       
         // Format as expected by backend: [amount, type, email, clientName, phone]
         records.push([amount, type, email, clientName, phone]);
       });
@@ -440,19 +440,19 @@ const DashboardPage = ({ setPage }) => {
       }
 
       const response = await api.payments.importCsv(records, currentYear);
-      
+     
       // Show detailed success message
-      const summary = response.summary;
+      const summary = response.data?.summary || response.summary;
       let message = `CSV import completed!\n\n`;
-      message += `• Total records: ${summary.totalRecords}\n`;
-      message += `• Successfully imported: ${summary.successfulImports}\n`;
-      message += `• Duplicates skipped: ${summary.skippedDuplicates}\n`;
-      message += `• Errors: ${summary.errors}`;
-      
+      message += `• Total records: ${summary?.totalRecords || 'Unknown'}\n`;
+      message += `• Successfully imported: ${summary?.successfulImports || 'Unknown'}\n`;
+      message += `• Duplicates skipped: ${summary?.skippedDuplicates || 'Unknown'}\n`;
+      message += `• Errors: ${summary?.errors || 'Unknown'}`;
+     
       if (parseErrors.length > 0) {
         message += `\n\nParse errors:\n${parseErrors.join('\n')}`;
       }
-      
+     
       alert(message);
 
       // Refresh both years and payments
@@ -460,22 +460,23 @@ const DashboardPage = ({ setPage }) => {
       await fetchPayments(currentYear, true);
     } catch (error) {
       handleApiError(error);
-      
+     
       // Show detailed error message
       let errorMessage = error?.response?.data?.error || error.message || 'Failed to import CSV.';
-      
-      if (error?.response?.data?.details?.errors?.length > 0) {
-        errorMessage += '\n\nServer validation errors:\n' + 
-          error.response.data.details.errors.join('\n');
+     
+      const errorData = error?.response?.data;
+      if (errorData?.details?.errors?.length > 0) {
+        errorMessage += '\n\nServer validation errors:\n' +
+          errorData.details.errors.join('\n');
       }
-      
-      if (error?.response?.data?.details?.duplicates?.length > 0) {
-        errorMessage += '\n\nDuplicates found:\n' + 
-          error.response.data.details.duplicates.map(d => 
+     
+      if (errorData?.details?.duplicates?.length > 0) {
+        errorMessage += '\n\nDuplicates found:\n' +
+          errorData.details.duplicates.map(d =>
             `• ${d.clientName} (${d.type}) - ${d.reason}`
           ).join('\n');
       }
-      
+     
       alert(errorMessage);
     } finally {
       setIsImporting(false);
