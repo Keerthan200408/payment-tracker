@@ -40,6 +40,7 @@ const DashboardPage = ({ setPage }) => {
     const [typeError, setTypeError] = useState("");
 
     const [notificationQueue, setNotificationQueue] = useState([]);
+    const notificationQueueRef = useRef([]);
     const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
     
     // --- NEW: State for Filtering & Pagination ---
