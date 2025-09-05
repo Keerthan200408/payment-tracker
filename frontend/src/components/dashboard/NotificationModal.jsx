@@ -1,87 +1,207 @@
 import React, { useState, useEffect } from 'react';
-import api from '../../api'; // Use our centralized API service
+import api from '../../api';
 
 const NotificationModal = ({ isOpen, onClose, queue, setQueue, clearQueueFromDB }) => {
-    const [messageTemplate, setMessageTemplate] = useState('');
-    const [isSending, setIsSending] = useState(false);
-    const [sendSummary, setSendSummary] = useState(null);
+  const [messageTemplate, setMessageTemplate] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [sendSummary, setSendSummary] = useState(null);
 
-    useEffect(() => {
-        // Default template
-        if (!messageTemplate) {
-            setMessageTemplate(`Dear {clientName},\n\nThis is a payment reminder for your {type} service.\n\n- Month: {month}\n- Amount Paid: ₹{paidAmount}\n- Total Due: ₹{duePayment}\n\nThank you!`);
+  useEffect(() => {
+    if (!messageTemplate) {
+      setMessageTemplate(
+        `Dear {clientName},
+
+This is a payment reminder for your {type} service.
+
+- Month: {month}
+- Amount Paid: ₹{paidAmount}
+- Total Due: ₹{duePayment}
+
+Thank you!`
+      );
+    }
+  }, [messageTemplate]);
+
+  const toMoney = (x) => {
+    const n = Number(x);
+    return Number.isFinite(n) ? n.toFixed(2) : '0.00';
+  };
+
+  const handleRemove = (id) => {
+    // remove a single recipient from the queue
+    setQueue((prev) => prev.filter((n) => n.id !== id));
+  };
+
+  const handleSendAll = async () => {
+    if (!queue?.length) return;
+
+    setIsSending(true);
+    setSendSummary(null);
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const n of queue) {
+      const personalizedMessage = messageTemplate
+        .replace(/{clientName}/g, n.clientName ?? '')
+        .replace(/{type}/g, n.type ?? '')
+        .replace(
+          /{month}/g,
+          n.month ? n.month.charAt(0).toUpperCase() + n.month.slice(1) : ''
+        )
+        .replace(/{paidAmount}/g, toMoney(n.value))
+        .replace(/{duePayment}/g, toMoney(n.duePayment));
+
+      try {
+        if (n.phone) {
+          await api.messages.sendWhatsApp({ to: n.phone, message: personalizedMessage });
+          successCount++;
+        } else if (n.email) {
+          await api.messages.sendEmail({
+            to: n.email,
+            subject: `Payment Reminder: ${n.type ?? ''}`,
+            html: personalizedMessage.replace(/\n/g, '<br>'),
+          });
+          successCount++;
+        } else {
+          errorCount++; // no contact info
         }
-    }, [messageTemplate]);
-
-    const handleSendAll = async () => {
-        setIsSending(true);
-        setSendSummary(null);
-        let successCount = 0;
-        let errorCount = 0;
-
-        for (const notification of queue) {
-            const personalizedMessage = messageTemplate
-                .replace(/{clientName}/g, notification.clientName)
-                .replace(/{type}/g, notification.type)
-                .replace(/{month}/g, notification.month.charAt(0).toUpperCase() + notification.month.slice(1))
-                .replace(/{paidAmount}/g, notification.value || '0.00')
-                .replace(/{duePayment}/g, notification.duePayment || '0.00');
-
-            try {
-                // Prioritize WhatsApp, fallback to Email
-                if (notification.phone) {
-                    await api.messages.sendWhatsApp({ to: notification.phone, message: personalizedMessage });
-                } else if (notification.email) {
-                    await api.messages.sendEmail({ to: notification.email, subject: `Payment Reminder: ${notification.type}`, html: personalizedMessage.replace(/\n/g, '<br>') });
-                }
-                successCount++;
-            } catch (error) {
-                console.error(`Failed to send notification to ${notification.clientName}:`, error);
-                errorCount++;
-            }
-        }
-        
-        setIsSending(false);
-        setSendSummary({ success: successCount, errors: errorCount });
-        
-        if (successCount > 0) {
-            await clearQueueFromDB();
-        }
-    };
-
-    const handleClose = () => {
-        setSendSummary(null);
-        onClose();
+      } catch (err) {
+        console.error(`Failed to send notification to ${n.clientName}:`, err);
+        errorCount++;
+      }
     }
 
-    if (!isOpen) return null;
+    setIsSending(false);
+    setSendSummary({ success: successCount, errors: errorCount });
 
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-                <h2 className="text-xl font-semibold mb-4">Send Notifications ({queue.length} pending)</h2>
-                {/* List of notifications, template textarea, and action buttons go here */}
-                {/* ... (This is the same JSX you had in HomePage.jsx for the modal) ... */}
-                <textarea
-                    value={messageTemplate}
-                    onChange={(e) => setMessageTemplate(e.target.value)}
-                    className="w-full h-40 p-2 border rounded mb-4"
-                    disabled={isSending}
-                />
-                <div className="flex justify-end gap-3">
-                    <button onClick={handleClose} disabled={isSending} className="px-4 py-2 border rounded">Cancel</button>
-                    <button onClick={handleSendAll} disabled={isSending || queue.length === 0} className="px-4 py-2 bg-green-600 text-white rounded disabled:bg-gray-400">
-                        {isSending ? 'Sending...' : `Send All (${queue.length})`}
-                    </button>
-                </div>
-                 {sendSummary && (
-                    <p className="mt-4 text-sm text-center">
-                        Sent: {sendSummary.success}, Failed: {sendSummary.errors}
-                    </p>
-                )}
-            </div>
+    if (successCount > 0 && typeof clearQueueFromDB === 'function') {
+      try {
+        await clearQueueFromDB();
+        setQueue([]); // reflect cleared server queue
+      } catch (e) {
+        console.error('Failed to clear queue from DB:', e);
+      }
+    }
+  };
+
+  const handleClose = () => {
+    setSendSummary(null);
+    onClose?.();
+  };
+
+  if (!isOpen) return null;
+
+  const count = queue?.length ?? 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold">
+            Send Notifications ({count} pending)
+          </h2>
+          <button
+            onClick={handleClose}
+            className="text-gray-500 hover:text-gray-700"
+            disabled={isSending}
+            aria-label="Close"
+          >
+            ✕
+          </button>
         </div>
-    );
+
+        {/* NEW: Recipients list with remove (✕) */}
+        <div className="mb-4 border rounded">
+          <div className="px-3 py-2 bg-gray-50 border-b text-sm text-gray-700">
+            Recipients
+          </div>
+          {count === 0 ? (
+            <div className="px-3 py-6 text-center text-sm text-gray-500">
+              No recipients in the queue.
+            </div>
+          ) : (
+            <ul className="max-h-56 overflow-y-auto divide-y">
+              {queue.map((n) => (
+                <li key={n.id} className="px-3 py-2 text-sm">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-medium">
+                        {n.clientName || '-'} • {n.type || '-'}
+                      </div>
+                      <div className="text-gray-600">
+                        Month: {n.month ? n.month.charAt(0).toUpperCase() + n.month.slice(1) : '-'}
+                        {' '}• Paid: ₹{toMoney(n.value)} • Due: ₹{toMoney(n.duePayment)}
+                      </div>
+                      <div className="text-gray-500">
+                        {n.phone
+                          ? `WhatsApp: ${n.phone}`
+                          : n.email
+                          ? `Email: ${n.email}`
+                          : 'No contact info'}
+                      </div>
+                    </div>
+                    <button
+                      className="shrink-0 px-2 py-1 text-xs rounded bg-red-50 text-red-600 hover:bg-red-100"
+                      onClick={() => handleRemove(n.id)}
+                      disabled={isSending}
+                      aria-label={`Remove ${n.clientName || 'recipient'}`}
+                      title="Remove from queue"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* Template editor */}
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Message template
+          <span className="ml-1 text-xs text-gray-500">
+            (variables: {'{clientName}'}, {'{type}'}, {'{month}'}, {'{paidAmount}'}, {'{duePayment}'})
+          </span>
+        </label>
+        <textarea
+          value={messageTemplate}
+          onChange={(e) => setMessageTemplate(e.target.value)}
+          className="w-full h-40 p-2 border rounded mb-4 font-mono text-sm"
+          disabled={isSending}
+        />
+
+        {/* Actions */}
+        <div className="flex justify-between items-center">
+          <div className="text-xs text-gray-500">
+            Tip: Use new lines in the template; we convert to HTML for email automatically.
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={handleClose}
+              disabled={isSending}
+              className="px-4 py-2 border rounded"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSendAll}
+              disabled={isSending || count === 0}
+              className="px-4 py-2 bg-green-600 text-white rounded disabled:bg-gray-400"
+            >
+              {isSending ? 'Sending...' : `Send All (${count})`}
+            </button>
+          </div>
+        </div>
+
+        {sendSummary && (
+          <p className="mt-4 text-sm text-center">
+            Sent: {sendSummary.success}, Failed: {sendSummary.errors}
+          </p>
+        )}
+      </div>
+    </div>
+  );
 };
 
 export default NotificationModal;
