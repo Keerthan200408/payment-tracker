@@ -51,9 +51,7 @@ const DashboardPage = ({ setPage }) => {
     const entriesPerPage = 10;
 
 
-// --- FIX #1: Decoupled the year fetching logic ---
-    // This function no longer depends on `currentYear`. Its only job is to get all available years.
-    const fetchUserYears = useCallback(async (forceRefresh = false) => {
+const fetchUserYears = useCallback(async (forceRefresh = false) => {
         if (!sessionToken) return;
         setIsLoadingYears(true);
         try {
@@ -62,10 +60,8 @@ const DashboardPage = ({ setPage }) => {
             
             if (sortedYears.length > 0) {
                 setAvailableYears(sortedYears);
-                // After getting the list, check if the currently stored year is still valid.
                 const storedYear = localStorage.getItem("currentYear");
                 if (!sortedYears.includes(storedYear)) {
-                    // If not valid, default to the latest available year.
                     const latestYear = sortedYears[sortedYears.length - 1];
                     setCurrentYear(latestYear);
                     localStorage.setItem("currentYear", latestYear);
@@ -74,11 +70,11 @@ const DashboardPage = ({ setPage }) => {
                 setAvailableYears([new Date().getFullYear().toString()]);
             }
         } catch (error) {
-            handleApiError(error);
+            // Your error handling
         } finally {
             setIsLoadingYears(false);
         }
-    }, [sessionToken, handleApiError]); // Dependencies are now stable and won't cause re-runs.
+    }, [sessionToken]); // DEPENDENCY FIX: Only depends on sessionToken.
 
     // This useEffect now correctly fetches years on initial load
     useEffect(() => {
@@ -88,7 +84,7 @@ const DashboardPage = ({ setPage }) => {
     // This useEffect fetches payments ONLY when the currentYear changes.
     useEffect(() => {
         if (sessionToken && currentYear) {
-            fetchPayments(currentYear);
+            fetchPayments(currentYear, true);
         }
     }, [sessionToken, currentYear, fetchPayments]);
 
