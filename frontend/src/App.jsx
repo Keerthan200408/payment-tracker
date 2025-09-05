@@ -8,6 +8,7 @@ import DashboardPage from './pages/DashboardPage';
 import AddClientPage from './pages/AddClientPage';
 import ClientsPage from './pages/ClientsPage';
 import PaymentsPage from './pages/PaymentsPage';
+import ReportsPage from './pages/ReportsPage';
 
 // ASSUMPTION: These common components exist in 'src/components/common/'.
 import LoadingSkeleton from './components/common/LoadingSkeleton';
@@ -59,7 +60,7 @@ const App = () => {
     if (!sessionToken) {
         // 👇 2. Pass all the required functions as props
         return (
-            <SignInPage 
+            <SignInPage
                 setSessionToken={setSessionToken}
                 setCurrentUser={setCurrentUser}
                 setPage={setPage}
@@ -78,7 +79,8 @@ const App = () => {
                 return <AddClientPage setPage={setPage} editClient={editClient} setEditClient={setEditClient} />;
             case "payments":
                 return <PaymentsPage />;
-            // Add a "reports" page here in the future if needed
+            case "reports":
+                return <ReportsPage setPage={setPage} />;
             case "home":
             default:
                 return <DashboardPage setPage={setPage} />;
@@ -113,11 +115,11 @@ const App = () => {
                             </button>
                         </div>
                         <ul className="space-y-1">
-                             {['home', 'clients', 'payments'].map((p) => (
+                             {['home', 'clients', 'payments', 'reports'].map((p) => (
                                 <li key={p}>
                                     <button onClick={() => { setPage(p); setIsSidebarOpen(false); }}
                                         className={`w-full text-left p-3 rounded-lg flex items-center transition-colors ${page === p ? "bg-blue-50 text-blue-700 font-semibold" : "text-gray-700 hover:bg-gray-100"}`}>
-                                        <i className={`fas ${p === 'home' ? 'fa-tachometer-alt' : p === 'clients' ? 'fa-users' : 'fa-money-bill-wave'} mr-3 w-4`}></i>
+                                        <i className={`fas ${p === 'home' ? 'fa-tachometer-alt' : p === 'clients' ? 'fa-users' : p === 'payments' ? 'fa-money-bill-wave' : 'fa-chart-bar'} mr-3 w-4`}></i>
                                         {p.charAt(0).toUpperCase() + p.slice(1)}
                                     </button>
                                 </li>

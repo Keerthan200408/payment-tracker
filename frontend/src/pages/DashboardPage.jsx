@@ -559,6 +559,12 @@ const DashboardPage = ({ setPage }) => {
             <i className="fas fa-plus mr-2"></i> Add Client
           </button>
           <button
+            onClick={() => setPage('reports')}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition duration-200 flex items-center"
+          >
+            <i className="fas fa-chart-bar mr-2"></i> Reports
+          </button>
+          <button
             onClick={() => setIsTypeModalOpen(true)}
             className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition duration-200 flex items-center"
           >
