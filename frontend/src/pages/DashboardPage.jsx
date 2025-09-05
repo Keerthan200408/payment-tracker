@@ -49,35 +49,46 @@ const DashboardPage = ({ setPage }) => {
     const [statusFilter, setStatusFilter] = useState(''); // <-- ADDED THIS LINE
     const [currentPage, setCurrentPage] = useState(1);
     const entriesPerPage = 10;
-    
-    // 👇 THIS IS THE FIX 👇
-    // This hook runs when the page loads. It fetches the payment
-    // data for the currently selected year, ensuring that after a
-    // refresh, the data is re-loaded.
+
+    // --- FIX #1: Centralized and reliable function to fetch years ---
+    const fetchUserYears = useCallback(async (forceRefresh = false) => {
+        if (sessionToken) {
+            setIsLoadingYears(true);
+            try {
+                const yearsData = await api.payments.getUserYears(forceRefresh);
+                const sortedYears = (yearsData || []).map(String).sort((a, b) => a.localeCompare(b));
+                
+                if (sortedYears.length > 0) {
+                    setAvailableYears(sortedYears);
+                    // This ensures the currentYear is always a valid one from the available list
+                    if (!sortedYears.includes(currentYear)) {
+                        const newCurrentYear = sortedYears[sortedYears.length - 1];
+                        setCurrentYear(newCurrentYear);
+                        localStorage.setItem("currentYear", newCurrentYear);
+                    }
+                } else {
+                    setAvailableYears([currentYear]);
+                }
+            } catch (error) {
+                handleApiError(error);
+                setAvailableYears([currentYear]); // Fallback on error
+            } finally {
+                setIsLoadingYears(false);
+            }
+        }
+    }, [sessionToken, currentYear, handleApiError]);
+
+    // This useEffect now correctly fetches years on initial load
+    useEffect(() => {
+        fetchUserYears(true); // Force refresh on load to get latest years
+    }, [fetchUserYears]);
+
+    // This useEffect fetches payments ONLY when the currentYear changes.
     useEffect(() => {
         if (sessionToken && currentYear) {
             fetchPayments(currentYear);
         }
     }, [sessionToken, currentYear, fetchPayments]);
-
-
-    useEffect(() => {
-        const fetchUserYears = async () => {
-            if (sessionToken) {
-                setIsLoadingYears(true);
-                try {
-                    const yearsData = await api.payments.getUserYears(); 
-                    setAvailableYears(yearsData.length > 0 ? yearsData : [currentYear]);
-                } catch (error) {
-                    handleApiError(error);
-                    setAvailableYears([currentYear]);
-                } finally {
-                    setIsLoadingYears(false);
-                }
-            }
-        };
-        fetchUserYears();
-    }, [sessionToken, handleApiError]);
 
     useEffect(() => {
         const loadQueue = async () => {
@@ -160,22 +171,27 @@ const DashboardPage = ({ setPage }) => {
     const handleYearChange = (year) => {
         setCurrentYear(year);
         localStorage.setItem("currentYear", year);
-        fetchPayments(year, true);
     };
 
     const handleAddNewYear = async () => {
-        const latestYear = availableYears.sort((a,b) => b-a)[0] || currentYear;
-        const newYear = (parseInt(latestYear) + 1).toString();
+        const latestYear = Math.max(...availableYears.map(y => parseInt(y))) || parseInt(currentYear);
+        const newYear = (latestYear + 1).toString();
+        
         setIsLoadingYears(true);
         try {
             await api.payments.addNewYear(newYear);
-            const updatedYears = await api.payments.getUserYears(true);
-            setAvailableYears(updatedYears);
-            handleYearChange(newYear);
             alert(`Year ${newYear} added successfully!`);
+            await fetchUserYears(true); // Refresh the list
+            handleYearChange(newYear);    // Switch to the new year
         } catch (error) {
-            handleApiError(error);
-            alert(error.response?.data?.error || `Failed to add year ${newYear}.`);
+            const errorMessage = error.response?.data?.error || `Failed to add year ${newYear}.`;
+            alert(errorMessage);
+            
+            // If the error is "already exists", fetch the latest years and switch to it.
+            if (errorMessage.includes("already exists")) {
+                await fetchUserYears(true); 
+                handleYearChange(newYear);
+            }
         } finally {
             setIsLoadingYears(false);
         }
@@ -317,7 +333,7 @@ const DashboardPage = ({ setPage }) => {
                 </div>
                 <div className="flex items-center gap-3">
                     <button onClick={() => setIsNotificationModalOpen(true)} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center" disabled={notificationQueue.length === 0}><i className="fas fa-paper-plane mr-2"></i>Send Messages ({notificationQueue.length})</button>
-                    <YearSelector currentYear={currentYear} availableYears={availableYears} onYearChange={setCurrentYear} isLoadingYears={isLoadingYears} />
+                    <YearSelector currentYear={currentYear} availableYears={availableYears} onYearChange={handleYearChange} isLoadingYears={isLoadingYears} onAddNewYear={handleAddNewYear}/>
                 </div>
             </div>
 
