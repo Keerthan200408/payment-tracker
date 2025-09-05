@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
+import api from '../../api'; 
 
 const BASE_URL = "https://payment-tracker-aswa.onrender.com/api";
 
@@ -59,20 +60,15 @@ const RemarkPopup = ({
     setError('');
 
     try {
-      await axios.post(
-        `${BASE_URL}/save-remark`,
-        {
-          clientName,
-          type,
-          month,
-          remark: remark.trim() === '' ? 'N/A' : remark.trim()
-        },
-        {
-          headers: { Authorization: `Bearer ${sessionToken}` },
-          params: { year },
-          timeout: 10000,
-        }
-      );
+      // Use the centralized api service
+        const remarkData = {
+            clientName,
+            type,
+            month,
+            remark: remark.trim() === '' ? 'N/A' : remark.trim()
+        };
+        
+        await api.payments.saveRemark(remarkData, year);
 
       setIsEditing(false);
       onRemarkSaved && onRemarkSaved(remark.trim() === '' ? 'N/A' : remark.trim());
