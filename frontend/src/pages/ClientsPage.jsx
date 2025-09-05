@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useData } from '../contexts/DataContext';
 import api from '../api';
 import ClientsTable from '../components/clients/ClientsTable';
