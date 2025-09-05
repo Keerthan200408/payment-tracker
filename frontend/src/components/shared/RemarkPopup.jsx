@@ -65,6 +65,10 @@ const handleSave = async () => {
         // This updates the DashboardPage's state
         onRemarkSaved?.(finalRemark);
 
+        // --- FIX #1: Update the popup's internal state ---
+      // This ensures the popup knows the new "current" remark value.
+      setRemark(finalRemark); 
+
         // NEW: This tells the popup to switch back to the display view
         setIsEditing(false);
 
@@ -135,7 +139,7 @@ const handleSave = async () => {
             </div>
             <div className="bg-gray-50 p-3 rounded-md border">
               <p className="text-gray-900 whitespace-pre-wrap">
-                {currentRemark}
+                {remark}
               </p>
             </div>
           </div>
