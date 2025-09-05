@@ -11,8 +11,7 @@ const RemarkPopup = ({
   type, 
   month, 
   currentRemark = "N/A", 
-  year, 
-  sessionToken,
+  year,
   onRemarkSaved 
 }) => {
   const [remark, setRemark] = useState(currentRemark);
@@ -62,15 +61,11 @@ const handleSave = async () => {
         const remarkData = { clientName, type, month, remark: finalRemark };
         await api.payments.saveRemark(remarkData, year);
         
-        // This updates the DashboardPage's state
-        onRemarkSaved?.(finalRemark);
-
-        // --- FIX #1: Update the popup's internal state ---
-      // This ensures the popup knows the new "current" remark value.
-      setRemark(finalRemark); 
-
-        // NEW: This tells the popup to switch back to the display view
-        setIsEditing(false);
+        // 1. Call the parent function to update the dashboard's state
+        onRemarkSaved?.(clientName, type, month, finalRemark);
+        
+        // 2. Close the popup to signal that the action is complete
+        onClose();
 
     } catch (error) {
         console.error('Failed to save remark:', error);

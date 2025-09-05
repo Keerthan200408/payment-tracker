@@ -181,25 +181,27 @@ const DashboardPage = ({ setPage }) => {
         }
     };
 
-    // In DashboardPage.jsx
 
-const handleRemarkSaved = (clientName, type, month, newRemark) => {
-    // 1. This part updates the main data array for the DataTable (This is correct)
-    setPaymentsData(prevData => prevData.map(row => {
-        if (row.Client_Name === clientName && row.Type === type) {
-            const monthKey = month.charAt(0).toUpperCase() + month.slice(1);
-            return { ...row, Remarks: { ...row.Remarks, [monthKey]: newRemark } };
-        }
-        return row;
-    }));
 
-    // 2. NEW: This part updates the state for the OPEN popup,
-    // sending the new remark back to it so it can display it.
-    setRemarkPopup(prev => ({
-        ...prev,
-        currentRemark: newRemark,
-    }));
-};
+    // --- THIS IS THE FINAL, CORRECTED FUNCTION ---
+    const handleRemarkSaved = (clientName, type, month, newRemark) => {
+        const monthKey = month.charAt(0).toUpperCase() + month.slice(1);
+
+        // This function creates a new array with the updated data,
+        // which guarantees React will re-render the dashboard.
+        const newPaymentsData = paymentsData.map(row => {
+            if (row.Client_Name === clientName && row.Type === type) {
+                // Create a new Remarks object for immutability
+                const updatedRemarks = { ...row.Remarks, [monthKey]: newRemark };
+                // Return a new row object with the updated remarks
+                return { ...row, Remarks: updatedRemarks };
+            }
+            return row; // Return all other rows unchanged
+        });
+
+        // Set the new array as the state
+        setPaymentsData(newPaymentsData);
+    };
     
     const savePayment = useCallback(async (rowIndex, month, value) => {
         const row = paymentsData[rowIndex];
@@ -357,7 +359,7 @@ const handleRemarkSaved = (clientName, type, month, newRemark) => {
             )}
             
             {/* --- Modals --- */}
-            <RemarkPopup isOpen={remarkPopup.isOpen} onClose={() => setRemarkPopup({ isOpen: false })} {...remarkPopup} />
+            <RemarkPopup isOpen={remarkPopup.isOpen} onClose={() => setRemarkPopup({ isOpen: false })} onRemarkSaved={handleRemarkSaved} {...remarkPopup} />
             <NotificationModal isOpen={isNotificationModalOpen} onClose={() => setIsNotificationModalOpen(false)} queue={notificationQueue} setQueue={setNotificationQueue} />
             {isTypeModalOpen && (
                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
