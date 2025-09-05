@@ -51,34 +51,30 @@ const RemarkPopup = ({
     }
   }, [isEditing]);
 
-  const handleSave = async () => {
-    if (remark.trim() === '') {
-      setRemark('N/A');
-    }
+  // In RemarkPopup.jsx
 
+const handleSave = async () => {
+    const finalRemark = remark.trim() === '' ? 'N/A' : remark.trim();
     setIsSaving(true);
     setError('');
 
     try {
-      // Use the centralized api service
-        const remarkData = {
-            clientName,
-            type,
-            month,
-            remark: remark.trim() === '' ? 'N/A' : remark.trim()
-        };
-        
+        const remarkData = { clientName, type, month, remark: finalRemark };
         await api.payments.saveRemark(remarkData, year);
+        
+        // This updates the DashboardPage's state
+        onRemarkSaved?.(finalRemark);
 
-      setIsEditing(false);
-      onRemarkSaved && onRemarkSaved(remark.trim() === '' ? 'N/A' : remark.trim());
+        // NEW: This tells the popup to switch back to the display view
+        setIsEditing(false);
+
     } catch (error) {
-      console.error('Failed to save remark:', error);
-      setError(error.response?.data?.error || 'Failed to save remark');
+        console.error('Failed to save remark:', error);
+        setError(error.response?.data?.error || 'Failed to save remark');
     } finally {
-      setIsSaving(false);
+        setIsSaving(false);
     }
-  };
+};
 
   const handleCancel = () => {
     setRemark(currentRemark);

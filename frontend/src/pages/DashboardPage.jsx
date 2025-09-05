@@ -181,15 +181,25 @@ const DashboardPage = ({ setPage }) => {
         }
     };
 
-    const handleRemarkSaved = (clientName, type, month, newRemark) => {
-        setPaymentsData(prevData => prevData.map(row => {
-            if (row.Client_Name === clientName && row.Type === type) {
-                const monthKey = month.charAt(0).toUpperCase() + month.slice(1);
-                return { ...row, Remarks: { ...row.Remarks, [monthKey]: newRemark } };
-            }
-            return row;
-        }));
-    };
+    // In DashboardPage.jsx
+
+const handleRemarkSaved = (clientName, type, month, newRemark) => {
+    // 1. This part updates the main data array for the DataTable (This is correct)
+    setPaymentsData(prevData => prevData.map(row => {
+        if (row.Client_Name === clientName && row.Type === type) {
+            const monthKey = month.charAt(0).toUpperCase() + month.slice(1);
+            return { ...row, Remarks: { ...row.Remarks, [monthKey]: newRemark } };
+        }
+        return row;
+    }));
+
+    // 2. NEW: This part updates the state for the OPEN popup,
+    // sending the new remark back to it so it can display it.
+    setRemarkPopup(prev => ({
+        ...prev,
+        currentRemark: newRemark,
+    }));
+};
     
     const savePayment = useCallback(async (rowIndex, month, value) => {
         const row = paymentsData[rowIndex];
