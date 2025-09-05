@@ -261,48 +261,51 @@ const DashboardPage = ({ setPage }) => {
     };
     
     return (
-        <div className="p-0 sm:p-6">
-            <YearSelector 
-                currentYear={currentYear}
-                availableYears={availableYears}
-                onYearChange={handleYearChange}
-                isLoadingYears={isLoadingYears}
-                onAddNewYear={handleAddNewYear}
-            />
+        // Main container uses flex-col and takes full screen height to control scrolling
+        <div className="flex flex-col h-full max-h-[calc(100vh-120px)] bg-gray-50 rounded-lg">
             
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
-                <div className="flex gap-3 mb-4 sm:mb-0">
-                    <button onClick={() => setPage("addClient")} className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700">Add Client</button>
-                    <button onClick={() => setIsTypeModalOpen(true)} className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700">Add Type</button>
-                    <input type="file" accept=".csv" ref={csvFileInputRef} onChange={importCsv} className="hidden" id="csv-import" disabled={isImporting} />
-                    <label htmlFor="csv-import" className={`px-4 py-2 rounded-lg text-gray-700 bg-white border border-gray-300 cursor-pointer ${isImporting ? "opacity-50" : "hover:bg-gray-50"}`}>
-                        {isImporting ? "Importing..." : "Bulk Import"}
-                    </label>
+            {/* --- TOP CONTROL BAR (FIXED) --- */}
+            <div className="flex-shrink-0 p-4 bg-white border-b border-gray-200 rounded-t-lg">
+                <div className="flex justify-between items-center">
+                    {/* Left side controls */}
+                    <div className="flex items-center gap-3">
+                        <button onClick={() => setPage("addClient")} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">Add Client</button>
+                        <button onClick={() => setIsTypeModalOpen(true)} className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 text-sm font-medium">Add Type</button>
+                        <input type="file" accept=".csv" ref={csvFileInputRef} onChange={importCsv} className="hidden" id="csv-import" disabled={isImporting} />
+                        <label htmlFor="csv-import" className={`px-4 py-2 rounded-lg text-sm font-medium bg-white border border-gray-300 cursor-pointer ${isImporting ? "opacity-50" : "hover:bg-gray-50"}`}>
+                            {isImporting ? "Importing..." : "Bulk Import in CSV Format"}
+                        </label>
+                    </div>
+
+                    {/* Right side controls */}
+                    <div className="flex items-center gap-4">
+                         <button onClick={() => setIsNotificationModalOpen(true)} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium">
+                            Send Notifications ({notificationQueue.length})
+                        </button>
+                        <YearSelector 
+                            currentYear={currentYear}
+                            availableYears={availableYears}
+                            onYearChange={handleYearChange}
+                            isLoadingYears={isLoadingYears}
+                            onAddNewYear={handleAddNewYear}
+                        />
+                    </div>
                 </div>
-                <button onClick={() => setIsNotificationModalOpen(true)} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
-                    Send Notifications ({notificationQueue.length})
-                </button>
             </div>
 
-            <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 mb-6">
-                <input
+            {/* --- SEARCH BAR (FIXED) --- */}
+            <div className="flex-shrink-0 p-4 bg-white border-b border-gray-200">
+                 <input
                     type="text"
                     placeholder="Search by client or type..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border rounded-lg"
+                    className="w-full pl-4 pr-4 py-2 border rounded-lg text-sm"
                 />
             </div>
 
-            <NotificationModal 
-                isOpen={isNotificationModalOpen}
-                onClose={() => setIsNotificationModalOpen(false)}
-                queue={notificationQueue}
-                setQueue={setNotificationQueue}
-                clearQueueFromDB={clearQueueFromDB}
-            />
-            
-            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+            {/* --- SCROLLABLE DATA TABLE CONTAINER --- */}
+            <div className="flex-grow overflow-auto">
                 <DataTable 
                     data={filteredData}
                     months={months}
@@ -318,16 +321,23 @@ const DashboardPage = ({ setPage }) => {
                 />
             </div>
 
+            {/* --- MODALS (remain outside the layout flow) --- */}
+            <NotificationModal 
+                isOpen={isNotificationModalOpen}
+                onClose={() => setIsNotificationModalOpen(false)}
+                queue={notificationQueue}
+                setQueue={setNotificationQueue}
+                clearQueueFromDB={clearQueueFromDB}
+            />
             <RemarkPopup
                 isOpen={remarkPopup.isOpen}
                 onClose={() => setRemarkPopup({ ...remarkPopup, isOpen: false })}
                 clientName={remarkPopup.clientName} type={remarkPopup.type} month={remarkPopup.month}
                 currentRemark={remarkPopup.currentRemark} year={currentYear} sessionToken={sessionToken}
-                onRemarkSaved={(newRemark) => handleRemarkSaved(remarkPopup.clientName, remarkPopup.type, remarkPopup.month, newRemark)}
+                onRemarkSaved={handleRemarkSaved}
             />
-
             {isTypeModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
                     <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-sm">
                         <h2 className="text-lg font-semibold mb-4">Add New Type</h2>
                         <input type="text" value={newType} onChange={e => { setNewType(e.target.value); setTypeError(""); }}
