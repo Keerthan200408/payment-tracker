@@ -401,33 +401,58 @@ const DashboardPage = ({ setPage }) => {
         throw new Error('No payment types defined. Please add types before importing.');
       }
 
-      // Process rows into the format expected by backend: [amount, type, email, clientName, phone]
+      // First row should be headers
+      const headers = rows[0].map(header => header.trim().toLowerCase());
+      const dataRows = rows.slice(1); // Skip header row
+     
+      // Find column indices
+      const clientNameIndex = headers.findIndex(h => h.includes('client') && h.includes('name'));
+      const typeIndex = headers.findIndex(h => h.includes('type'));
+      const amountIndex = headers.findIndex(h => h.includes('payment') || h.includes('amount'));
+      const emailIndex = headers.findIndex(h => h.includes('email'));
+      const phoneIndex = headers.findIndex(h => h.includes('phone'));
+     
+      // Validate required columns exist
+      if (clientNameIndex === -1) {
+        throw new Error('CSV must have a "Client_Name" column');
+      }
+      if (typeIndex === -1) {
+        throw new Error('CSV must have a "Type" column');
+      }
+      if (amountIndex === -1) {
+        throw new Error('CSV must have a "Monthly_Payment" or "Amount" column');
+      }
+     
+      // Process data rows
       const records = [];
       const parseErrors = [];
 
-      rows.forEach((row, index) => {
-        let clientName = "", type = "", amount = 0, email = "", phone = "";
-       
-        // Parse each cell in the row
-        row.forEach((cell) => {
-          if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cell)) {
-            email = cell;
-          } else if (/^\+?[\d\s-]{10,15}$/.test(cell)) {
-            phone = cell;
-          } else if (capitalizedTypes.includes(cell.trim().toUpperCase())) {
-            type = cell.trim().toUpperCase();
-          } else if (!isNaN(parseFloat(cell)) && parseFloat(cell) > 0) {
-            amount = parseFloat(cell);
-          } else if (cell.trim()) {
-            clientName = cell.trim();
-          }
-        });
+      dataRows.forEach((row, index) => {
+        const clientName = row[clientNameIndex]?.trim() || "";
+        const type = row[typeIndex]?.trim().toUpperCase() || "";
+        const amountStr = row[amountIndex]?.trim() || "";
+        const email = row[emailIndex]?.trim() || "";
+        const phone = row[phoneIndex]?.trim() || "";
        
         // Validate required fields
-        if (!clientName || !type || !amount) {
-          parseErrors.push(
-            `Row ${index + 1}: Missing required fields (Client Name: "${clientName}", Type: "${type}", Amount: ${amount}). Valid types: ${capitalizedTypes.join(", ")}`
-          );
+        if (!clientName) {
+          parseErrors.push(`Row ${index + 2}: Client Name is required`);
+          return;
+        }
+       
+        if (!type) {
+          parseErrors.push(`Row ${index + 2}: Type is required`);
+          return;
+        }
+       
+        if (!capitalizedTypes.includes(type)) {
+          parseErrors.push(`Row ${index + 2}: Type "${type}" is not valid. Valid types: ${capitalizedTypes.join(", ")}`);
+          return;
+        }
+       
+        const amount = parseFloat(amountStr);
+        if (isNaN(amount) || amount <= 0) {
+          parseErrors.push(`Row ${index + 2}: Monthly Payment must be a positive number (got: "${amountStr}")`);
           return;
         }
        
