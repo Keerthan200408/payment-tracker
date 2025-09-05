@@ -7,8 +7,7 @@ const DataTable = memo(({
     localInputValues,
     handleInputChange, 
     getInputBackgroundColor,
-    onRemarkButtonClick,
-    currentRemark = "N/A"
+    onRemarkButtonClick
 }) => {
 
     if (!Array.isArray(data) || data.length === 0) {
