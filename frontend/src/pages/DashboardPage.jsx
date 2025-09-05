@@ -261,94 +261,75 @@ const DashboardPage = ({ setPage }) => {
     };
     
     return (
-        // Main container uses flex-col and takes full screen height to control scrolling
-        <div className="flex flex-col h-full max-h-[calc(100vh-120px)] bg-gray-50 rounded-lg">
+        <div className="p-6 bg-gray-50 min-h-screen">
+            {/* --- Top action buttons and year selector --- */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+                <div className="flex flex-wrap gap-3 mb-4 sm:mb-0">
+                    <button onClick={() => setPage("addClient")} className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 flex items-center"><i className="fas fa-plus mr-2"></i> Add Client</button>
+                    <button onClick={() => setIsTypeModalOpen(true)} className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 flex items-center"><i className="fas fa-tags mr-2"></i> Add Type</button>
+                    <input type="file" accept=".csv" ref={csvFileInputRef} onChange={importCsv} className="hidden" id="csv-import" disabled={isImporting} />
+                    <label htmlFor="csv-import" className={`px-4 py-2 rounded-lg bg-white border flex items-center ${isImporting ? "opacity-50" : "hover:bg-gray-50 cursor-pointer"}`}><i className="fas fa-upload mr-2"></i>{isImporting ? "Importing..." : "Bulk Import"}</label>
+                    <button onClick={handleAddNewYear} className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700 flex items-center" disabled={isLoadingYears}><i className="fas fa-calendar-plus mr-2"></i>{isLoadingYears ? "Adding..." : "Add New Year"}</button>
+                </div>
+                <div className="flex items-center gap-3">
+                    <button onClick={() => setIsNotificationModalOpen(true)} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center" disabled={notificationQueue.length === 0}><i className="fas fa-paper-plane mr-2"></i>Send Messages ({notificationQueue.length})</button>
+                    <YearSelector currentYear={currentYear} availableYears={availableYears} onYearChange={setCurrentYear} isLoadingYears={isLoadingYears} />
+                </div>
+            </div>
+
+            {/* --- Search and filters bar --- */}
+            <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3 mb-6">
+                <div className="relative flex-1">
+                    <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                    <input type="text" placeholder="Search by client name or type..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-10 pr-4 py-2 border rounded-lg" />
+                </div>
+                <select value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)} className="p-2 border rounded-lg w-full sm:w-auto">
+                    <option value="">Filter by Month</option>
+                    {months.map(month => <option key={month} value={month}>{month.charAt(0).toUpperCase() + month.slice(1)}</option>)}
+                </select>
+                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="p-2 border rounded-lg w-full sm:w-auto" disabled={!monthFilter}>
+                    <option value="">Filter by Status</option>
+                    <option value="Paid">Paid</option>
+                    <option value="PartiallyPaid">Partially Paid</option>
+                    <option value="Unpaid">Unpaid</option>
+                </select>
+            </div>
+
+            {/* --- Main table with horizontal scroll --- */}
+            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                    <DataTable data={paginatedData} paymentsData={paymentsData} months={months} localInputValues={localInputValues} handleInputChange={handleInputChange} getInputBackgroundColor={getInputBackgroundColor} onRemarkButtonClick={(info) => setRemarkPopup({ ...info, isOpen: true })} />
+                </div>
+            </div>
+
+            {/* --- Pagination Controls --- */}
+            {totalEntries > entriesPerPage && (
+                <div className="flex justify-between items-center mt-6">
+                    <p className="text-sm text-gray-700">Showing {(currentPage - 1) * entriesPerPage + 1} to {Math.min(currentPage * entriesPerPage, totalEntries)} of {totalEntries} entries</p>
+                    <div className="flex gap-2">
+                        <button onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1} className="px-4 py-2 border rounded-md disabled:opacity-50">Previous</button>
+                        <span className="p-2 text-sm">Page {currentPage} of {totalPages}</span>
+                        <button onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages} className="px-4 py-2 border rounded-md disabled:opacity-50">Next</button>
+                    </div>
+                </div>
+            )}
             
-            {/* --- TOP CONTROL BAR (FIXED) --- */}
-            <div className="flex-shrink-0 p-4 bg-white border-b border-gray-200 rounded-t-lg">
-                <div className="flex justify-between items-center">
-                    {/* Left side controls */}
-                    <div className="flex items-center gap-3">
-                        <button onClick={() => setPage("addClient")} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">Add Client</button>
-                        <button onClick={() => setIsTypeModalOpen(true)} className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 text-sm font-medium">Add Type</button>
-                        <input type="file" accept=".csv" ref={csvFileInputRef} onChange={importCsv} className="hidden" id="csv-import" disabled={isImporting} />
-                        <label htmlFor="csv-import" className={`px-4 py-2 rounded-lg text-sm font-medium bg-white border border-gray-300 cursor-pointer ${isImporting ? "opacity-50" : "hover:bg-gray-50"}`}>
-                            {isImporting ? "Importing..." : "Bulk Import in CSV Format"}
-                        </label>
-                    </div>
-
-                    {/* Right side controls */}
-                    <div className="flex items-center gap-4">
-                         <button onClick={() => setIsNotificationModalOpen(true)} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium">
-                            Send Notifications ({notificationQueue.length})
-                        </button>
-                        <YearSelector 
-                            currentYear={currentYear}
-                            availableYears={availableYears}
-                            onYearChange={handleYearChange}
-                            isLoadingYears={isLoadingYears}
-                            onAddNewYear={handleAddNewYear}
-                        />
-                    </div>
-                </div>
-            </div>
-
-            {/* --- SEARCH BAR (FIXED) --- */}
-            <div className="flex-shrink-0 p-4 bg-white border-b border-gray-200">
-                 <input
-                    type="text"
-                    placeholder="Search by client or type..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-4 pr-4 py-2 border rounded-lg text-sm"
-                />
-            </div>
-
-            {/* --- SCROLLABLE DATA TABLE CONTAINER --- */}
-            <div className="flex-grow overflow-auto">
-                <DataTable 
-                    data={filteredData}
-                    months={months}
-                    currentYear={currentYear}
-                    isLoading={isLoadingYears}
-                    sessionToken={sessionToken}
-                    handleInputChange={handleInputChange}
-                    getInputBackgroundColor={getInputBackgroundColor}
-                    localInputValues={localInputValues}
-                    pendingUpdates={pendingUpdates}
-                    onRemarkSaved={handleRemarkSaved}
-                    onRemarkButtonClick={(remarkInfo) => setRemarkPopup({ ...remarkInfo, isOpen: true })}
-                />
-            </div>
-
-            {/* --- MODALS (remain outside the layout flow) --- */}
-            <NotificationModal 
-                isOpen={isNotificationModalOpen}
-                onClose={() => setIsNotificationModalOpen(false)}
-                queue={notificationQueue}
-                setQueue={setNotificationQueue}
-                clearQueueFromDB={clearQueueFromDB}
-            />
-            <RemarkPopup
-                isOpen={remarkPopup.isOpen}
-                onClose={() => setRemarkPopup({ ...remarkPopup, isOpen: false })}
-                clientName={remarkPopup.clientName} type={remarkPopup.type} month={remarkPopup.month}
-                currentRemark={remarkPopup.currentRemark} year={currentYear} sessionToken={sessionToken}
-                onRemarkSaved={handleRemarkSaved}
-            />
+            {/* --- Modals --- */}
+            <RemarkPopup isOpen={remarkPopup.isOpen} onClose={() => setRemarkPopup({ isOpen: false })} {...remarkPopup} />
+            <NotificationModal isOpen={isNotificationModalOpen} onClose={() => setIsNotificationModalOpen(false)} queue={notificationQueue} setQueue={setNotificationQueue} />
             {isTypeModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-                    <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-sm">
-                        <h2 className="text-lg font-semibold mb-4">Add New Type</h2>
-                        <input type="text" value={newType} onChange={e => { setNewType(e.target.value); setTypeError(""); }}
-                            placeholder="Enter type (e.g. GST)" className="w-full p-2 border border-gray-300 rounded mb-2" />
-                        {typeError && <div className="text-sm text-red-600 mb-2">{typeError}</div>}
-                        <div className="flex justify-end gap-2 mt-2">
-                            <button onClick={() => setIsTypeModalOpen(false)} className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">Cancel</button>
-                            <button onClick={handleAddType} className="px-4 py-2 rounded bg-gray-800 text-white hover:bg-gray-700">Add Type</button>
-                        </div>
-                    </div>
-                </div>
+                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+                     <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-sm">
+                         <h2 className="text-lg font-semibold mb-4">Add New Type</h2>
+                         <input type="text" value={newType} onChange={e => { setNewType(e.target.value); setTypeError(""); }}
+                             placeholder="Enter type (e.g. GST)" className="w-full p-2 border border-gray-300 rounded mb-2" />
+                         {typeError && <div className="text-sm text-red-600 mb-2">{typeError}</div>}
+                         <div className="flex justify-end gap-2 mt-2">
+                             <button onClick={() => setIsTypeModalOpen(false)} className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">Cancel</button>
+                             <button onClick={handleAddType} className="px-4 py-2 rounded bg-gray-800 text-white hover:bg-gray-700">Add Type</button>
+                         </div>
+                     </div>
+                 </div>
             )}
         </div>
     );

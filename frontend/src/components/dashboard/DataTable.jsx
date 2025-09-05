@@ -1,177 +1,102 @@
-import React, { memo, useCallback, useMemo, useState } from 'react';
-import { formatCurrency } from '../../utils/formatters';
-import RemarkPopup from '../shared/RemarkPopup';
+import React, { memo, useMemo } from 'react';
 
 const DataTable = memo(({ 
-    data, months, currentYear, isLoading, sessionToken,
-    handleInputChange, getInputBackgroundColor,
-    localInputValues, pendingUpdates,
-    onRemarkSaved, onRemarkButtonClick
+    data, 
+    months,
+    paymentsData, // The full, unfiltered data for finding the correct index
+    localInputValues,
+    handleInputChange, 
+    getInputBackgroundColor,
+    onRemarkButtonClick 
 }) => {
-  const [remarkPopup, setRemarkPopup] = useState({
-    isOpen: false,
-    clientName: '',
-    type: '',
-    month: '',
-    currentRemark: 'N/A'
-  });
-  
 
-  const memoizedData = useMemo(() => {
-    if (!Array.isArray(data)) return [];
-    return data.map((row, index) => ({
-      ...row,
-      key: `${row.Client_Name || index}_${currentYear}`,
-    }));
-  }, [data, currentYear]);
+    if (!Array.isArray(data) || data.length === 0) {
+        return (
+            <div className="text-center py-16 text-gray-500">
+                <p className="text-lg">No data available.</p>
+                <p className="text-sm mt-1">Try changing the year or clearing your search filter.</p>
+            </div>
+        );
+    }
+    
+    // Use a memoized version of data to prevent re-mapping on every render
+    const memoizedData = useMemo(() => data.map(row => ({
+        ...row,
+        key: `${row.Client_Name}-${row.Type}`
+    })), [data]);
 
-  if (!Array.isArray(memoizedData) || memoizedData.length === 0) {
+
     return (
-      <div className="text-center py-8 text-gray-500">
-        <div className="flex flex-col items-center">
-          <i className="fas fa-users text-4xl text-gray-300 mb-3"></i>
-          <p className="text-lg font-medium text-gray-600">
-            No data available for {currentYear}
-          </p>
-          <p className="text-sm text-gray-400 mt-1">
-            No payment data found. Try refreshing or check the Clients sheet.
-          </p>
-        </div>
-      </div>
-    );
-  }
+        <table className="min-w-full divide-y divide-gray-200 border-collapse">
+            <thead className="bg-gray-50 sticky top-0 z-20">
+                <tr>
+                    {/* Sticky Columns */}
+                    <th scope="col" className="sticky left-0 z-30 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50 w-48 min-w-[12rem]">Client</th>
+                    <th scope="col" className="sticky left-[192px] z-30 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50 w-40 min-w-[10rem]">Type</th>
+                    <th scope="col" className="sticky left-[352px] z-30 px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase bg-gray-50 w-40 min-w-[10rem]">Amount To Be Paid</th>
+                    
+                    {/* Scrollable Columns */}
+                    {months.map((month) => (
+                        <th key={month} scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase w-32 min-w-[8rem]">
+                            {month.charAt(0).toUpperCase() + month.slice(1)}
+                        </th>
+                    ))}
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase w-40 min-w-[10rem]">Total Due</th>
+                </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+                {memoizedData.map((row) => {
+                    // Find the original index from the full dataset for correct data binding
+                    const globalRowIndex = paymentsData.findIndex(p => p.Client_Name === row.Client_Name && p.Type === row.Type);
 
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full">
-        <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
-          <tr>
-            <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-              Client
-            </th>
-            <th className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-              Type
-            </th>
-            <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-              Amount To Be Paid
-            </th>
-            {months.map((month, index) => (
-              <th
-                key={index}
-                className="px-6 py-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50"
-              >
-                {month.charAt(0).toUpperCase() + month.slice(1)}
-              </th>
-            ))}
-            <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider bg-gray-50">
-              Total Due
-            </th>
-          </tr>
-        </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
-          {memoizedData.map((row, localRowIndex) => {
-            const globalRowIndex = data.findIndex(
-              (r) => r.Client_Name === row.Client_Name
-            );
-            return (
-              <tr
-                key={row.key}
-                onContextMenu={(e) => handleContextMenu(e, globalRowIndex)}
-                className="hover:bg-gray-50"
-              >
-                <td className="px-6 py-4 whitespace-nowrap flex items-center text-sm sm:text-base text-gray-900">
-                  <i className="fas fa-user-circle mr-2 text-gray-400"></i>
-                  {row?.Client_Name || "N/A"}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-center text-sm sm:text-base text-gray-900">
-                  {row?.Type || "N/A"}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm sm:text-base text-gray-900">
-                  ₹{(parseFloat(row?.Amount_To_Be_Paid) || 0).toLocaleString()}.00
-                </td>
-                {months.map((month, colIndex) => {
-                  const monthKey = month.charAt(0).toUpperCase() + month.slice(1);
-                  const currentRemark = row?.Remarks?.[monthKey] || "N/A";
-                  const hasRemark = currentRemark !== "N/A";
-                  
-                  return (
-                    <td
-                      key={colIndex}
-                      className="px-6 py-4 whitespace-nowrap text-center relative group"
-                    >
-                      <div className="relative">
-                        <input
-                          type="text"
-                          value={
-                            localInputValues[`${globalRowIndex}-${month}`] !== undefined
-                              ? localInputValues[`${globalRowIndex}-${month}`]
-                              : row?.[month] || ""
-                          }
-                          onChange={(e) =>
-                            handleInputChange(globalRowIndex, month, e.target.value)
-                          }
-                          className={`w-20 p-1 border border-gray-300 rounded text-right focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm sm:text-base ${getInputBackgroundColor(
-                            row,
-                            month,
-                            globalRowIndex
-                          )}`}
-                          placeholder="0.00"
-                          title={
-                            pendingUpdates[`${globalRowIndex}-${month}`]
-                              ? "Saving..."
-                              : ""
-                          }
-                        />
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setRemarkPopup({
-                              isOpen: true,
-                              clientName: row?.Client_Name || '',
-                              type: row?.Type || '',
-                              month: month,
-                              currentRemark: currentRemark
-                            });
-                          }}
-                          className={`absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-xs transition-all duration-200 ${
-                            hasRemark 
-                              ? 'bg-blue-500 text-white hover:bg-blue-600' 
-                              : 'bg-gray-300 text-gray-600 hover:bg-gray-400 opacity-0 group-hover:opacity-100'
-                          }`}
-                          title={hasRemark ? `Remark: ${currentRemark}` : 'Add remark'}
-                        >
-                          <i className={`fas ${hasRemark ? 'fa-comment' : 'fa-plus'}`}></i>
-                        </button>
-                      </div>
-                    </td>
-                  );
+                    return (
+                        <tr key={row.key} className="hover:bg-gray-50">
+                            {/* Sticky Cells */}
+                            <td className="sticky left-0 z-10 px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 bg-white hover:bg-gray-50 w-48 min-w-[12rem]">{row.Client_Name}</td>
+                            <td className="sticky left-[192px] z-10 px-6 py-4 whitespace-nowrap text-sm text-gray-500 bg-white hover:bg-gray-50 w-40 min-w-[10rem]">{row.Type}</td>
+                            <td className="sticky left-[352px] z-10 px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right bg-white hover:bg-gray-50 w-40 min-w-[10rem]">
+                                ₹{parseFloat(row.Amount_To_Be_Paid || 0).toLocaleString('en-IN')}
+                            </td>
+
+                            {/* Scrollable Cells */}
+                            {months.map((month) => {
+                                const hasRemark = row.Remarks?.[month.charAt(0).toUpperCase() + month.slice(1)] && row.Remarks?.[month.charAt(0).toUpperCase() + month.slice(1)] !== "N/A";
+                                return (
+                                    <td key={month} className="px-6 py-4 whitespace-nowrap text-center relative group">
+                                        <div className="relative">
+                                            <input
+                                                type="text"
+                                                value={localInputValues[`${globalRowIndex}-${month}`] ?? row[month] ?? ""}
+                                                onChange={(e) => handleInputChange(globalRowIndex, month, e.target.value)}
+                                                className={`w-24 p-1 border rounded text-right text-sm ${getInputBackgroundColor(row, month, globalRowIndex)}`}
+                                                placeholder="0.00"
+                                            />
+                                            <button
+                                                onClick={() => onRemarkButtonClick({
+                                                    clientName: row.Client_Name,
+                                                    type: row.Type,
+                                                    month: month,
+                                                    currentRemark: row.Remarks?.[month.charAt(0).toUpperCase() + month.slice(1)] || ""
+                                                })}
+                                                className={`absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-xs transition-opacity ${hasRemark ? 'bg-blue-500 text-white' : 'bg-gray-300 text-gray-600 opacity-0 group-hover:opacity-100'}`}
+                                                title="Edit Remark"
+                                            >
+                                               <i className={`fas ${hasRemark ? 'fa-comment' : 'fa-plus'}`}></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                );
+                            })}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right w-40 min-w-[10rem]">
+                                ₹{parseFloat(row.Due_Payment || 0).toLocaleString('en-IN')}
+                            </td>
+                        </tr>
+                    );
                 })}
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm sm:text-base text-gray-900">
-                  ₹{(parseFloat(row?.Due_Payment) || 0).toLocaleString()}.00
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      
-      <RemarkPopup
-        isOpen={remarkPopup.isOpen}
-        onClose={() => setRemarkPopup({ ...remarkPopup, isOpen: false })}
-        clientName={remarkPopup.clientName}
-        type={remarkPopup.type}
-        month={remarkPopup.month}
-        currentRemark={remarkPopup.currentRemark}
-        year={currentYear}
-        sessionToken={sessionToken}
-        onRemarkSaved={(newRemark) => {
-          onRemarkSaved && onRemarkSaved(remarkPopup.clientName, remarkPopup.type, remarkPopup.month, newRemark);
-        }}
-      />
-    </div>
-  );
+            </tbody>
+        </table>
+    );
 });
 
 DataTable.displayName = 'DataTable';
-
-export default DataTable; 
+export default DataTable;
