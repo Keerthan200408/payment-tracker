@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api';
 
-// helper to normalize phone/email across different field names
-const pickFirst = (...candidates) => {
-  for (const v of candidates) {
+// normalize contact fields across variants
+const pickFirst = (...cands) => {
+  for (const v of cands) {
     if (v !== undefined && v !== null) {
       const s = String(v).trim();
       if (s) return s;
@@ -12,17 +12,11 @@ const pickFirst = (...candidates) => {
   return null;
 };
 const getPhone = (n) =>
-  pickFirst(n.phone, n.Phone, n.Phone_Number, n.whatsapp, n.contactPhone);
+  pickFirst(n.phone, n.Phone, n.Phone_Number, n['Phone Number'], n.whatsapp, n.WhatsApp, n.contactPhone);
 const getEmail = (n) =>
-  pickFirst(n.email, n.Email, n.Email_Address, n.contactEmail, n.Mail);
+  pickFirst(n.email, n.Email, n['E-mail'], n.Email_Address, n.Mail, n.contactEmail);
 
-const NotificationModal = ({
-  isOpen,
-  onClose,
-  queue,
-  setQueue,
-  clearQueueFromDB,
-}) => {
+const NotificationModal = ({ isOpen, onClose, queue, setQueue, clearQueueFromDB }) => {
   const [messageTemplate, setMessageTemplate] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [sendSummary, setSendSummary] = useState(null);
@@ -54,7 +48,6 @@ Thank you!`
 
   const handleSendAll = async () => {
     if (!queue?.length) return;
-
     setIsSending(true);
     setSendSummary(null);
 
@@ -68,10 +61,7 @@ Thank you!`
       const personalizedMessage = messageTemplate
         .replace(/{clientName}/g, n.clientName ?? '')
         .replace(/{type}/g, n.type ?? '')
-        .replace(
-          /{month}/g,
-          n.month ? n.month.charAt(0).toUpperCase() + n.month.slice(1) : ''
-        )
+        .replace(/{month}/g, n.month ? n.month.charAt(0).toUpperCase() + n.month.slice(1) : '')
         .replace(/{paidAmount}/g, toMoney(n.value))
         .replace(/{duePayment}/g, toMoney(n.duePayment));
 
@@ -85,7 +75,7 @@ Thank you!`
             html: personalizedMessage.replace(/\n/g, '<br>'),
           });
         } else {
-          errorCount++;
+          errorCount++; // no contact info
           continue;
         }
         successCount++;
@@ -101,7 +91,7 @@ Thank you!`
     if (successCount > 0 && typeof clearQueueFromDB === 'function') {
       try {
         await clearQueueFromDB();
-        setQueue([]); // reflect cleared server queue
+        setQueue([]);
       } catch (e) {
         console.error('Failed to clear queue from DB:', e);
       }
@@ -120,28 +110,16 @@ Thank you!`
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold">
-            Send Notifications ({count} pending)
-          </h2>
-          <button
-            onClick={handleClose}
-            className="text-gray-500 hover:text-gray-700"
-            disabled={isSending}
-            aria-label="Close"
-          >
+          <h2 className="text-xl font-semibold">Send Notifications ({count} pending)</h2>
+          <button onClick={handleClose} className="text-gray-500 hover:text-gray-700" disabled={isSending} aria-label="Close">
             ✕
           </button>
         </div>
 
-        {/* Recipients list with remove option */}
         <div className="mb-4 border rounded">
-          <div className="px-3 py-2 bg-gray-50 border-b text-sm text-gray-700">
-            Recipients
-          </div>
+          <div className="px-3 py-2 bg-gray-50 border-b text-sm text-gray-700">Recipients</div>
           {count === 0 ? (
-            <div className="px-3 py-6 text-center text-sm text-gray-500">
-              No recipients in the queue.
-            </div>
+            <div className="px-3 py-6 text-center text-sm text-gray-500">No recipients in the queue.</div>
           ) : (
             <ul className="max-h-56 overflow-y-auto divide-y">
               {queue.map((n) => {
@@ -151,23 +129,12 @@ Thank you!`
                   <li key={n.id} className="px-3 py-2 text-sm">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <div className="font-medium">
-                          {n.clientName || '-'} • {n.type || '-'}
-                        </div>
+                        <div className="font-medium">{n.clientName || '-'} • {n.type || '-'}</div>
                         <div className="text-gray-600">
-                          Month:{' '}
-                          {n.month
-                            ? n.month.charAt(0).toUpperCase() + n.month.slice(1)
-                            : '-'}{' '}
-                          • Paid: ₹{toMoney(n.value)} • Due: ₹
-                          {toMoney(n.duePayment)}
+                          Month: {n.month ? n.month.charAt(0).toUpperCase() + n.month.slice(1) : '-'} • Paid: ₹{toMoney(n.value)} • Due: ₹{toMoney(n.duePayment)}
                         </div>
                         <div className="text-gray-500">
-                          {phone
-                            ? `WhatsApp: ${phone}`
-                            : email
-                            ? `Email: ${email}`
-                            : 'No contact info'}
+                          {phone ? `WhatsApp: ${phone}` : (email ? `Email: ${email}` : 'No contact info')}
                         </div>
                       </div>
                       <button
@@ -187,13 +154,9 @@ Thank you!`
           )}
         </div>
 
-        {/* Template editor */}
         <label className="block text-sm font-medium text-gray-700 mb-1">
           Message template
-          <span className="ml-1 text-xs text-gray-500">
-            (variables: {'{clientName}'}, {'{type}'}, {'{month}'}, {'{paidAmount}'},{' '}
-            {'{duePayment}'})
-          </span>
+          <span className="ml-1 text-xs text-gray-500">(variables: {'{clientName}'}, {'{type}'}, {'{month}'}, {'{paidAmount}'}, {'{duePayment}'})</span>
         </label>
         <textarea
           value={messageTemplate}
@@ -202,33 +165,18 @@ Thank you!`
           disabled={isSending}
         />
 
-        {/* Actions */}
         <div className="flex justify-between items-center">
-          <div className="text-xs text-gray-500">
-            Tip: Use new lines in the template; we convert to HTML for email automatically.
-          </div>
+          <div className="text-xs text-gray-500">Tip: Use new lines in the template; we convert to HTML for email automatically.</div>
           <div className="flex gap-3">
-            <button
-              onClick={handleClose}
-              disabled={isSending}
-              className="px-4 py-2 border rounded"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSendAll}
-              disabled={isSending || count === 0}
-              className="px-4 py-2 bg-green-600 text-white rounded disabled:bg-gray-400"
-            >
+            <button onClick={handleClose} disabled={isSending} className="px-4 py-2 border rounded">Cancel</button>
+            <button onClick={handleSendAll} disabled={isSending || count === 0} className="px-4 py-2 bg-green-600 text-white rounded disabled:bg-gray-400">
               {isSending ? 'Sending...' : `Send All (${count})`}
             </button>
           </div>
         </div>
 
         {sendSummary && (
-          <p className="mt-4 text-sm text-center">
-            Sent: {sendSummary.success}, Failed: {sendSummary.errors}
-          </p>
+          <p className="mt-4 text-sm text-center">Sent: {sendSummary.success}, Failed: {sendSummary.errors}</p>
         )}
       </div>
     </div>
