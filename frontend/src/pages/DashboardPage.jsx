@@ -15,67 +15,100 @@ const months = [
 ];
 
 const DashboardPage = ({ setPage }) => {
+    // --- STATE MANAGEMENT ---
     const csvFileInputRef = useRef(null);
     const { sessionToken } = useAuth();
-    const { 
-        paymentsData, 
-        setPaymentsData, 
-        fetchPayments, 
-        fetchTypes, 
-        handleApiError,
-        fetchClients,
-    } = useData();
+    const { paymentsData, setPaymentsData, fetchPayments, fetchTypes, handleApiError } = useData();
     
+    // Year State
     const [currentYear, setCurrentYear] = useState(() => localStorage.getItem("currentYear") || new Date().getFullYear().toString());
     const [availableYears, setAvailableYears] = useState([currentYear]);
     const [isLoadingYears, setIsLoadingYears] = useState(false);
+
+    // Table Interaction State
     const [localInputValues, setLocalInputValues] = useState({});
     const [pendingUpdates, setPendingUpdates] = useState({});
     const saveTimeoutsRef = useRef({});
+    
+    // Modal & UI State
     const [remarkPopup, setRemarkPopup] = useState({ isOpen: false });
-
     const [isImporting, setIsImporting] = useState(false);
     const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
     const [newType, setNewType] = useState("");
     const [typeError, setTypeError] = useState("");
-
     const [notificationQueue, setNotificationQueue] = useState([]);
-    const notificationQueueRef = useRef([]);
     const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
-    
+
+    // Filtering & Pagination State
     const [searchQuery, setSearchQuery] = useState("");
     const [monthFilter, setMonthFilter] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const entriesPerPage = 10;
 
-    // --- FIX #1: This function's only job is to get all available years ---
+        // --- DATA FETCHING AND STATE LOGIC ---
+
+    // This is the single function responsible for changing the active year.
+    const handleYearChange = useCallback((year) => {
+        if (year && year.toString() !== currentYear.toString()) {
+            setCurrentYear(year.toString());
+            localStorage.setItem("currentYear", year.toString());
+        }
+    }, [currentYear]);
+
+    // Fetches the list of all available years from the backend.
     const fetchUserYears = useCallback(async (forceRefresh = false) => {
         if (!sessionToken) return;
         setIsLoadingYears(true);
         try {
             const yearsData = await api.payments.getUserYears(forceRefresh);
-            const sortedYears = (yearsData || []).map(String).sort((a, b) => a.localeCompare(b));
-            
+            const sortedYears = (yearsData || []).map(String).sort((a, b) => b.localeCompare(a)); // Descending
+
             if (sortedYears.length > 0) {
                 setAvailableYears(sortedYears);
                 const storedYear = localStorage.getItem("currentYear");
-                // If the stored year isn't valid, update it to the latest available one.
                 if (!sortedYears.includes(storedYear)) {
-                    const latestYear = sortedYears[sortedYears.length - 1];
-                    // Directly call the state update logic here
-                    setCurrentYear(latestYear);
-                    localStorage.setItem("currentYear", latestYear);
+                    handleYearChange(sortedYears[0]); // Default to the latest year
                 }
             } else {
-                setAvailableYears([new Date().getFullYear().toString()]);
+                 handleYearChange(new Date().getFullYear().toString());
             }
         } catch (error) {
             handleApiError(error);
         } finally {
             setIsLoadingYears(false);
         }
-    }, [sessionToken, handleApiError]); // Dependency array is now stable.
+    }, [sessionToken, handleApiError, handleYearChange]);
+
+    // 1. On initial load, fetch the list of years.
+    useEffect(() => {
+        if (sessionToken) {
+            fetchUserYears(true);
+        }
+    }, [sessionToken]);
+
+    // 2. Whenever `currentYear` is updated, fetch the payment data for that year.
+    useEffect(() => {
+        if (sessionToken && currentYear) {
+            fetchPayments(currentYear, true);
+        }
+    }, [currentYear, sessionToken, fetchPayments]);
+
+        // --- USEEFFECT HOOKS FOR DATA FETCHING ---
+
+    // 1. Fetch the list of available years ONLY on initial component load.
+    useEffect(() => {
+        if (sessionToken) {
+            fetchAndValidateYears(true);
+        }
+    }, [sessionToken]);
+
+    // 2. Fetch payment data whenever `currentYear` changes. This is the key to updating the table.
+    useEffect(() => {
+        if (sessionToken && currentYear) {
+            fetchPayments(currentYear, true);
+        }
+    }, [currentYear, fetchPayments, sessionToken]);
 
     // --- FIX #2: Fetch years ONCE on initial load or login ---
     useEffect(() => {
@@ -130,52 +163,9 @@ const DashboardPage = ({ setPage }) => {
             setLocalInputValues(prev => ({ ...prev, ...initialValues }));
         }
     }, [paymentsData]);
-    
-    const clearQueueFromDB = async () => {
-        try {
-            await api.notifications.clearQueue();
-            setNotificationQueue([]);
-            notificationQueueRef.current = [];
-        } catch (error) { handleApiError(error); }
-    };
-
-    const filteredData = useMemo(() => {
-        return (paymentsData || [])
-            .filter(row => {
-                if (!searchQuery) return true;
-                const query = searchQuery.toLowerCase();
-                return row.Client_Name?.toLowerCase().includes(query) || row.Type?.toLowerCase().includes(query);
-            })
-            .filter(row => {
-                if (!monthFilter || !statusFilter) return true;
-                const amountToBePaid = parseFloat(row.Amount_To_Be_Paid || 0);
-                if (amountToBePaid <= 0) return statusFilter === 'Paid';
-                const paidInMonth = parseFloat(row[monthFilter] || 0);
-                let currentStatus = "Unpaid";
-                if (paidInMonth >= amountToBePaid) currentStatus = "Paid";
-                else if (paidInMonth > 0) currentStatus = "PartiallyPaid";
-                return currentStatus === statusFilter;
-            });
-    }, [paymentsData, searchQuery, monthFilter, statusFilter]);
-
-    const paginatedData = useMemo(() => {
-        const startIndex = (currentPage - 1) * entriesPerPage;
-        return filteredData.slice(startIndex, startIndex + entriesPerPage);
-    }, [filteredData, currentPage, entriesPerPage]);
-
-    const totalEntries = filteredData.length;
-    const totalPages = Math.ceil(totalEntries / entriesPerPage);
-
-    // --- FIX #4: This function's only job is to update the state and localStorage ---
-    const handleYearChange = (year) => {
-        if (year !== currentYear) {
-            setCurrentYear(year);
-            localStorage.setItem("currentYear", year);
-        }
-    };
 
     const handleAddNewYear = async () => {
-        const latestYear = Math.max(...availableYears.map(y => parseInt(y, 10))) || parseInt(currentYear, 10);
+        const latestYear = Math.max(...availableYears.map(y => parseInt(y, 10))) || new Date().getFullYear();
         const newYear = (latestYear + 1).toString();
         
         setIsLoadingYears(true);
@@ -186,14 +176,50 @@ const DashboardPage = ({ setPage }) => {
             const errorMessage = error.response?.data?.error || `Failed to add year ${newYear}.`;
             alert(errorMessage);
         } finally {
-            // This block runs for BOTH success and failure (e.g., "already exists")
-            await fetchUserYears(true); // Get the latest list of years
-            handleYearChange(newYear);  // ALWAYS switch to the year you tried to add
+            // After the API call, refresh the year list and switch to the target year.
+            await fetchUserYears(true); 
+            handleYearChange(newYear);  
             setIsLoadingYears(false);
         }
     };
 
-    const handleRemarkSaved = (clientName, type, month, newRemark) => {
+        // This function fetches the list of years and validates the current selection.
+    const fetchAndValidateYears = useCallback(async (forceRefresh = false) => {
+        if (!sessionToken) return;
+        setIsLoadingYears(true);
+        try {
+            const yearsData = await api.payments.getUserYears(forceRefresh);
+            const sortedYears = (yearsData || []).map(String).sort((a, b) => b.localeCompare(a)); // Descending sort for latest year first
+
+            if (sortedYears.length > 0) {
+                setAvailableYears(sortedYears);
+                const storedYear = localStorage.getItem("currentYear");
+                if (!sortedYears.includes(storedYear)) {
+                    // If the stored year is invalid, switch to the latest available one.
+                    handleYearChange(sortedYears[0]);
+                }
+            } else {
+                handleYearChange(new Date().getFullYear().toString());
+            }
+        } catch (error) {
+            handleApiError(error);
+        } finally {
+            setIsLoadingYears(false);
+        }
+    }, [sessionToken, handleApiError, handleYearChange]);
+
+
+
+    
+    const clearQueueFromDB = async () => {
+        try {
+            await api.notifications.clearQueue();
+            setNotificationQueue([]);
+            notificationQueueRef.current = [];
+        } catch (error) { handleApiError(error); }
+    };
+
+        const handleRemarkSaved = (clientName, type, month, newRemark) => {
         const monthKey = month.charAt(0).toUpperCase() + month.slice(1);
         const newPaymentsData = paymentsData.map(row => {
             if (row.Client_Name === clientName && row.Type === type) {
@@ -266,9 +292,7 @@ const DashboardPage = ({ setPage }) => {
         return isPending ? `${baseColor} ring-2 ring-blue-300` : baseColor;
     }, [localInputValues, pendingUpdates]);
     
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [searchQuery, monthFilter, statusFilter, currentYear]);
+    
 
     const handleAddType = async () => {
         if (!newType.trim()) { setTypeError("Type cannot be empty."); return; }
@@ -303,6 +327,37 @@ const DashboardPage = ({ setPage }) => {
             if (csvFileInputRef.current) csvFileInputRef.current.value = "";
         }
     };
+
+    const filteredData = useMemo(() => {
+        return (paymentsData || [])
+            .filter(row => {
+                if (!searchQuery) return true;
+                const query = searchQuery.toLowerCase();
+                return row.Client_Name?.toLowerCase().includes(query) || row.Type?.toLowerCase().includes(query);
+            })
+            .filter(row => {
+                if (!monthFilter || !statusFilter) return true;
+                const amountToBePaid = parseFloat(row.Amount_To_Be_Paid || 0);
+                if (amountToBePaid <= 0) return statusFilter === 'Paid';
+                const paidInMonth = parseFloat(row[monthFilter] || 0);
+                let currentStatus = "Unpaid";
+                if (paidInMonth >= amountToBePaid) currentStatus = "Paid";
+                else if (paidInMonth > 0) currentStatus = "PartiallyPaid";
+                return currentStatus === statusFilter;
+            });
+    }, [paymentsData, searchQuery, monthFilter, statusFilter]);
+
+    const paginatedData = useMemo(() => {
+        const startIndex = (currentPage - 1) * entriesPerPage;
+        return filteredData.slice(startIndex, startIndex + entriesPerPage);
+    }, [filteredData, currentPage, entriesPerPage]);
+
+    const totalEntries = filteredData.length;
+    const totalPages = Math.ceil(totalEntries / entriesPerPage);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery, monthFilter, statusFilter, currentYear]);
     
     return (
         <div className="p-6 bg-gray-50 min-h-screen">

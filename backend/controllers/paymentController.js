@@ -97,6 +97,8 @@ exports.getUserYears = async (req, res) => {
         .filter(year => !isNaN(year))
         .sort((a, b) => a - b);
 
+console.log(`[getUserYears] Sending years for user ${req.user.username}:`, allYears);
+
     res.json(allYears);
 };
 
