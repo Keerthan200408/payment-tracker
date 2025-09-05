@@ -31,7 +31,6 @@ const DashboardPage = ({ setPage }) => {
     const [isLoadingYears, setIsLoadingYears] = useState(false);
     const [localInputValues, setLocalInputValues] = useState({});
     const [pendingUpdates, setPendingUpdates] = useState({});
-    const [searchQuery, setSearchQuery] = useState("");
     const saveTimeoutsRef = useRef({});
     const [remarkPopup, setRemarkPopup] = useState({ isOpen: false });
 
@@ -41,8 +40,14 @@ const DashboardPage = ({ setPage }) => {
     const [typeError, setTypeError] = useState("");
 
     const [notificationQueue, setNotificationQueue] = useState([]);
-    const notificationQueueRef = useRef([]);
     const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
+    
+    // --- NEW: State for Filtering & Pagination ---
+    const [searchQuery, setSearchQuery] = useState("");
+    const [monthFilter, setMonthFilter] = useState(''); // <-- ADDED THIS LINE
+    const [statusFilter, setStatusFilter] = useState(''); // <-- ADDED THIS LINE
+    const [currentPage, setCurrentPage] = useState(1);
+    const entriesPerPage = 10;
     
     // 👇 THIS IS THE FIX 👇
     // This hook runs when the page loads. It fetches the payment
@@ -122,6 +127,34 @@ const DashboardPage = ({ setPage }) => {
             notificationQueueRef.current = [];
         } catch (error) { handleApiError(error); }
     };
+
+    // --- MEMOIZED CALCULATIONS for Filtering and Pagination ---
+    const filteredData = useMemo(() => {
+        return (paymentsData || [])
+            .filter(row => {
+                if (!searchQuery) return true;
+                const query = searchQuery.toLowerCase();
+                return row.Client_Name?.toLowerCase().includes(query) || row.Type?.toLowerCase().includes(query);
+            })
+            .filter(row => {
+                if (!monthFilter || !statusFilter) return true;
+                const amountToBePaid = parseFloat(row.Amount_To_Be_Paid || 0);
+                if (amountToBePaid <= 0) return statusFilter === 'Paid';
+                const paidInMonth = parseFloat(row[monthFilter] || 0);
+                let currentStatus = "Unpaid";
+                if (paidInMonth >= amountToBePaid) currentStatus = "Paid";
+                else if (paidInMonth > 0) currentStatus = "PartiallyPaid";
+                return currentStatus === statusFilter;
+            });
+    }, [paymentsData, searchQuery, monthFilter, statusFilter]);
+
+    const paginatedData = useMemo(() => {
+        const startIndex = (currentPage - 1) * entriesPerPage;
+        return filteredData.slice(startIndex, startIndex + entriesPerPage);
+    }, [filteredData, currentPage, entriesPerPage]);
+
+    const totalEntries = filteredData.length;
+    const totalPages = Math.ceil(totalEntries / entriesPerPage);
 
     const handleYearChange = (year) => {
         setCurrentYear(year);
@@ -218,13 +251,11 @@ const DashboardPage = ({ setPage }) => {
         return isPending ? `${baseColor} ring-2 ring-blue-300` : baseColor;
     }, [localInputValues, pendingUpdates]);
     
-    const filteredData = useMemo(() => {
-        return (paymentsData || []).filter((row) => {
-            return !searchQuery ||
-                row?.Client_Name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                row?.Type?.toLowerCase().includes(searchQuery.toLowerCase());
-        });
-    }, [paymentsData, searchQuery]);
+    
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery, monthFilter, statusFilter, currentYear]);
 
     const handleAddType = async () => {
         if (!newType.trim()) { setTypeError("Type cannot be empty."); return; }
