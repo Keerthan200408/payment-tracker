@@ -437,7 +437,7 @@ const DashboardPage = ({ setPage }) => {
       // Add new types to the system if any are found
       if (newTypesToAdd.length > 0) {
         console.log('[importCsv] Adding new types:', newTypesToAdd);
-        
+       
         // Add each new type
         for (const newType of newTypesToAdd) {
           try {
@@ -562,16 +562,52 @@ const DashboardPage = ({ setPage }) => {
                row.Type?.toLowerCase().includes(query);
       })
       .filter(row => {
-        if (!monthFilter || !statusFilter) return true;
         const amountToBePaid = parseFloat(row.Amount_To_Be_Paid || 0);
-        if (amountToBePaid <= 0) return statusFilter === 'Paid';
-
-        const paidInMonth = parseFloat(row[monthFilter] || 0);
-        let currentStatus = 'Unpaid';
-        if (paidInMonth >= amountToBePaid) currentStatus = 'Paid';
-        else if (paidInMonth > 0) currentStatus = 'PartiallyPaid';
-
-        return currentStatus === statusFilter;
+       
+        // If both filters are applied, use intersection logic
+        if (monthFilter && statusFilter) {
+          const paidInMonth = parseFloat(row[monthFilter] || 0);
+          let currentStatus = 'Unpaid';
+          if (amountToBePaid <= 0) {
+            currentStatus = 'Paid';
+          } else if (paidInMonth >= amountToBePaid) {
+            currentStatus = 'Paid';
+          } else if (paidInMonth > 0) {
+            currentStatus = 'PartiallyPaid';
+          }
+          return currentStatus === statusFilter;
+        }
+       
+        // If only month filter is applied, show clients with data (non-zero values) in that month
+        if (monthFilter && !statusFilter) {
+          const paidInMonth = parseFloat(row[monthFilter] || 0);
+          return paidInMonth > 0;
+        }
+       
+        // If only status filter is applied, show clients with that status in any month
+        if (!monthFilter && statusFilter) {
+          if (amountToBePaid <= 0) {
+            return statusFilter === 'Paid';
+          }
+         
+          // Check if client has the specified status in any month
+          for (const month of months) {
+            const paidInMonth = parseFloat(row[month] || 0);
+            let currentStatus = 'Unpaid';
+            if (paidInMonth >= amountToBePaid) {
+              currentStatus = 'Paid';
+            } else if (paidInMonth > 0) {
+              currentStatus = 'PartiallyPaid';
+            }
+            if (currentStatus === statusFilter) {
+              return true;
+            }
+          }
+          return false;
+        }
+       
+        // If no filters are applied, show all clients
+        return true;
       });
   }, [paymentsData, searchQuery, monthFilter, statusFilter]);
 
@@ -733,7 +769,6 @@ const DashboardPage = ({ setPage }) => {
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
           className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
-          disabled={!monthFilter}
         >
           <option value="">Status</option>
           <option value="Paid">Paid</option>

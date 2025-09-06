@@ -86,7 +86,6 @@ const DataTable = ({
                                                     }
                                                     onChange={(e) => handleInputChange(globalRowIndex, month, e.target.value)}
                                                     className={`w-20 p-1 border border-gray-300 rounded text-right focus:ring-2 focus:ring-gray-500 focus:border-gray-500 text-sm ${getInputBackgroundColor(row, month, globalRowIndex)}`}
-                                                    placeholder="0.00"
                                                 />
                                                 <button
                                                     onClick={(e) => {
