@@ -16,6 +16,10 @@ const ClientsPage = ({ setPage, setEditClient }) => {
     const entriesPerPage = 10;
     const clientsCsvFileInputRef = useRef(null);
 
+    // NEW: State for bulk selection
+    const [selectedClients, setSelectedClients] = useState(new Set());
+    const [bulkDeleteInProgress, setBulkDeleteInProgress] = useState(false);
+
     // --- API HANDLERS (Updated for new UI) ---
     const handleEdit = (client) => {
         setEditClient(client);
@@ -32,12 +36,101 @@ const ClientsPage = ({ setPage, setEditClient }) => {
         try {
             await api.clients.deleteClient({ Client_Name: client.Client_Name, Type: client.Type });
             setSuccessMessage(`Client "${client.Client_Name}" was deleted successfully.`);
+            // Remove from selected if it was selected
+            setSelectedClients(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(`${client.Client_Name}-${client.Type}`);
+                return newSet;
+            });
             await fetchClients(true); // Force refresh
         } catch (error) {
             setErrorMessage(error.response?.data?.error || "Failed to delete client.");
         } finally {
             setDeleteInProgress(false);
         }
+    };
+
+    // NEW: Bulk delete handler
+    const handleBulkDelete = async () => {
+        if (selectedClients.size === 0) return;
+        
+        const clientCount = selectedClients.size;
+        if (!window.confirm(`Are you sure you want to delete ${clientCount} client${clientCount > 1 ? 's' : ''}? This cannot be undone.`)) {
+            return;
+        }
+
+        setBulkDeleteInProgress(true);
+        setSuccessMessage('');
+        setErrorMessage('');
+        
+        try {
+            // Parse selected client IDs back to client objects
+            const clientsToDelete = Array.from(selectedClients).map(id => {
+                const [clientName, type] = id.split('-TYPE-');
+                return { Client_Name: clientName, Type: type };
+            });
+
+            // Delete clients one by one (or you can implement bulk delete endpoint)
+            const deletePromises = clientsToDelete.map(client => 
+                api.clients.deleteClient({ Client_Name: client.Client_Name, Type: client.Type })
+            );
+            
+            await Promise.all(deletePromises);
+            
+            setSuccessMessage(`Successfully deleted ${clientCount} client${clientCount > 1 ? 's' : ''}.`);
+            setSelectedClients(new Set()); // Clear selection
+            await fetchClients(true); // Force refresh
+        } catch (error) {
+            setErrorMessage(`Failed to delete some clients. ${error.response?.data?.error || error.message}`);
+        } finally {
+            setBulkDeleteInProgress(false);
+        }
+    };
+
+    // NEW: Toggle single client selection
+    const toggleClientSelection = (client) => {
+        const clientId = `${client.Client_Name}-TYPE-${client.Type}`;
+        setSelectedClients(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(clientId)) {
+                newSet.delete(clientId);
+            } else {
+                newSet.add(clientId);
+            }
+            return newSet;
+        });
+    };
+
+    // NEW: Toggle all clients on current page
+    const toggleSelectAllCurrentPage = () => {
+        const currentPageClientIds = paginatedClients.map(c => `${c.Client_Name}-TYPE-${c.Type}`);
+        const allSelected = currentPageClientIds.every(id => selectedClients.has(id));
+        
+        setSelectedClients(prev => {
+            const newSet = new Set(prev);
+            if (allSelected) {
+                // Deselect all on current page
+                currentPageClientIds.forEach(id => newSet.delete(id));
+            } else {
+                // Select all on current page
+                currentPageClientIds.forEach(id => newSet.add(id));
+            }
+            return newSet;
+        });
+    };
+
+    // NEW: Check if client is selected
+    const isClientSelected = (client) => {
+        const clientId = `${client.Client_Name}-TYPE-${client.Type}`;
+        return selectedClients.has(clientId);
+    };
+
+    // NEW: Check if all clients on current page are selected
+    const isAllCurrentPageSelected = () => {
+        if (paginatedClients.length === 0) return false;
+        return paginatedClients.every(client => 
+            selectedClients.has(`${client.Client_Name}-TYPE-${client.Type}`)
+        );
     };
     
     // Placeholder for CSV import functionality
@@ -69,6 +162,21 @@ const ClientsPage = ({ setPage, setEditClient }) => {
         setCurrentPage(1);
     }, [searchQuery]);
 
+    // Clear selections when clients data changes (after delete/refresh)
+    useEffect(() => {
+        // Remove any selected clients that no longer exist in the data
+        setSelectedClients(prev => {
+            const newSet = new Set();
+            prev.forEach(id => {
+                const [clientName, type] = id.split('-TYPE-');
+                const exists = clientsData.some(c => 
+                    c.Client_Name === clientName && c.Type === type
+                );
+                if (exists) newSet.add(id);
+            });
+            return newSet;
+        });
+    }, [clientsData]);
 
     return (
         <div className="p-6 bg-gray-50 min-h-screen">
@@ -86,10 +194,36 @@ const ClientsPage = ({ setPage, setEditClient }) => {
                 </div>
             )}
 
+            {/* --- NEW: Selected Items Bar --- */}
+            {selectedClients.size > 0 && (
+                <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200 flex justify-between items-center">
+                    <span className="text-blue-800">
+                        <i className="fas fa-check-square mr-2"></i>
+                        {selectedClients.size} client{selectedClients.size > 1 ? 's' : ''} selected
+                    </span>
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={() => setSelectedClients(new Set())} 
+                            className="text-blue-600 hover:text-blue-800 px-3 py-1 rounded hover:bg-blue-100"
+                        >
+                            Clear Selection
+                        </button>
+                        <button 
+                            onClick={handleBulkDelete} 
+                            className="bg-red-600 text-white px-4 py-1 rounded hover:bg-red-700 flex items-center"
+                            disabled={bulkDeleteInProgress}
+                        >
+                            <i className="fas fa-trash mr-2"></i>
+                            Delete Selected
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* --- NEW: Top Control Bar (matches template) --- */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
                 <div className="flex gap-3 mb-4 sm:mb-0">
-                    <button onClick={() => setPage("addClient")} className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition duration-200 flex items-center" disabled={deleteInProgress}>
+                    <button onClick={() => setPage("addClient")} className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition duration-200 flex items-center" disabled={deleteInProgress || bulkDeleteInProgress}>
                         <i className="fas fa-plus mr-2"></i> Add Client
                     </button>
                     <input type="file" accept=".csv" ref={clientsCsvFileInputRef} onChange={handleImportCsv} className="hidden" id="csv-import-clients" disabled={isImporting} />
@@ -99,16 +233,18 @@ const ClientsPage = ({ setPage, setEditClient }) => {
                 </div>
                 <div className="relative flex-1 sm:flex-none sm:w-64">
                     <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                    <input type="text" placeholder="Search clients..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500" disabled={deleteInProgress} />
+                    <input type="text" placeholder="Search clients..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500" disabled={deleteInProgress || bulkDeleteInProgress} />
                 </div>
             </div>
 
             {/* --- NEW: Deleting Modal --- */}
-            {deleteInProgress && (
+            {(deleteInProgress || bulkDeleteInProgress) && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                     <div className="bg-white p-6 rounded-lg shadow-xl flex items-center">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-500 mr-3"></div>
-                        <p className="text-gray-700">Deleting client...</p>
+                        <p className="text-gray-700">
+                            {bulkDeleteInProgress ? `Deleting ${selectedClients.size} client${selectedClients.size > 1 ? 's' : ''}...` : 'Deleting client...'}
+                        </p>
                     </div>
                 </div>
             )}
@@ -119,7 +255,13 @@ const ClientsPage = ({ setPage, setEditClient }) => {
                     clients={paginatedClients}
                     onEdit={handleEdit}
                     onDelete={handleDelete}
-                    deleteInProgress={deleteInProgress}
+                    deleteInProgress={deleteInProgress || bulkDeleteInProgress}
+                    // NEW: Props for bulk selection
+                    selectedClients={selectedClients}
+                    onToggleSelect={toggleClientSelection}
+                    onToggleSelectAll={toggleSelectAllCurrentPage}
+                    isClientSelected={isClientSelected}
+                    isAllSelected={isAllCurrentPageSelected()}
                 />
             </div>
 
@@ -131,7 +273,6 @@ const ClientsPage = ({ setPage, setEditClient }) => {
                     </p>
                     <div className="flex flex-wrap justify-center gap-2">
                         <button onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1} className="px-4 py-2 border rounded-md disabled:opacity-50 hover:bg-gray-50">Previous</button>
-                        {/* Add advanced pagination logic here if needed */}
                         <span className="p-2 text-sm">Page {currentPage} of {totalPages}</span>
                         <button onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages} className="px-4 py-2 border rounded-md disabled:opacity-50 hover:bg-gray-50">Next</button>
                     </div>

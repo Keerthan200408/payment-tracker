@@ -93,6 +93,7 @@ const apiService = {
     addClient: (clientData) => api.post("/clients/add-client", clientData),
     updateClient: (clientData) => api.put("/clients/update-client", clientData),
     deleteClient: (clientData) => api.delete("/clients/delete-client", { data: clientData }),
+    bulkDeleteClients: (clientsArray) => api.post("/clients/bulk-delete", { clients: clientsArray })
   },
 
   payments: {
