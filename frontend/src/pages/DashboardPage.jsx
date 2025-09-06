@@ -645,16 +645,13 @@ const DashboardPage = ({ setPage }) => {
                     <li><strong>Client_Name</strong> - Client's name</li>
                     <li><strong>Type</strong> - Service type (e.g., GST, IT)</li>
                     <li><strong>Monthly_Payment</strong> - Payment amount</li>
-                  </ul>
-                  <div className="mt-2">Optional columns:</div>
-                  <ul className="list-disc list-inside ml-2">
                     <li><strong>Phone_Number</strong> - Contact number</li>
                     <li><strong>Email</strong> - Email address</li>
                   </ul>
                 </div>
-                <div className="mt-2 text-xs text-gray-300">
-                  Note: New types found in CSV will be automatically added to your types list.
-                </div>
+                {/* <div className="mt-2 text-xs text-gray-300">
+                  Note: Atleast One Contact Info is Mandatory.
+                </div> */}
                 <button
                   onClick={(e) => {
                     e.preventDefault();
@@ -808,6 +805,7 @@ const DashboardPage = ({ setPage }) => {
         isOpen={remarkPopup.isOpen}
         onClose={() => setRemarkPopup({ isOpen: false })}
         onRemarkSaved={handleRemarkSaved}
+        year = {currentYear}
         {...remarkPopup}
       />
 
