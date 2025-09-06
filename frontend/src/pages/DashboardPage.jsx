@@ -41,6 +41,7 @@ const DashboardPage = ({ setPage }) => {
   const [notificationQueue, setNotificationQueue] = useState([]);
   const notificationQueueRef = useRef([]);
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
+  const [showImportTooltip, setShowImportTooltip] = useState(false);
 
   // Filtering & Pagination State
   const [searchQuery, setSearchQuery] = useState('');
@@ -372,188 +373,183 @@ const DashboardPage = ({ setPage }) => {
   };
 
   const importCsv = async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
+    const file = e.target.files[0];
+    if (!file) return;
 
-  setIsImporting(true);
-  try {
-    const text = await file.text();
-    const rows = text
-      .split('\n')
-      .filter(row => row.trim())
-      .map(row => {
-        const cols = row
-          .split(',')
-          .map(cell => cell.trim().replace(/^"|"$/g, ''));
-        return cols.filter(col => col.trim());
+    setIsImporting(true);
+    try {
+      const text = await file.text();
+      const rows = text
+        .split('\n')
+        .filter(row => row.trim())
+        .map(row => {
+          const cols = row
+            .split(',')
+            .map(cell => cell.trim().replace(/^"|"$/g, ''));
+          return cols.filter(col => col.trim());
+        });
+
+      if (rows.length === 0) {
+        throw new Error('CSV file is empty.');
+      }
+
+      // Get current types for validation
+      const typesResponse = await api.types.getTypes(true);
+      let types = typesResponse.types || [];
+      let capitalizedTypes = types.map(type => type.toUpperCase());
+
+      // First row should be headers
+      const headers = rows[0].map(header => header.trim().toLowerCase());
+      const dataRows = rows.slice(1); // Skip header row
+     
+      // Find column indices
+      const clientNameIndex = headers.findIndex(h => h.includes('client') && h.includes('name'));
+      const typeIndex = headers.findIndex(h => h.includes('type') && !h.includes('client'));
+      const amountIndex = headers.findIndex(h => h.includes('payment') || h.includes('amount'));
+      const emailIndex = headers.findIndex(h => h.includes('email'));
+      const phoneIndex = headers.findIndex(h => h.includes('phone'));
+     
+      // Validate required columns exist
+      if (clientNameIndex === -1) {
+        throw new Error('CSV must have a "Client_Name" column');
+      }
+      if (typeIndex === -1) {
+        throw new Error('CSV must have a "Type" column');
+      }
+      if (amountIndex === -1) {
+        throw new Error('CSV must have a "Monthly_Payment" or "Amount" column');
+      }
+
+      // First pass: collect all unique types from CSV
+      const csvTypes = new Set();
+      const newTypesToAdd = [];
+
+      dataRows.forEach((row) => {
+        const type = row[typeIndex]?.trim().toUpperCase() || "";
+        if (type) {
+          csvTypes.add(type);
+          if (!capitalizedTypes.includes(type)) {
+            newTypesToAdd.push(type);
+          }
+        }
       });
 
-    if (rows.length === 0) {
-      throw new Error('CSV file is empty.');
-    }
-
-    // Get current types for validation
-    const typesResponse = await api.types.getTypes(true);
-    let types = typesResponse.types || [];
-    let capitalizedTypes = types.map(type => type.toUpperCase());
-
-    // First row should be headers
-    const headers = rows[0].map(header => header.trim().toLowerCase());
-    const dataRows = rows.slice(1); // Skip header row
-   
-    // Find column indices
-    const clientNameIndex = headers.findIndex(h => h.includes('client') && h.includes('name'));
-    const typeIndex = headers.findIndex(h => h.includes('type'));
-    const amountIndex = headers.findIndex(h => h.includes('payment') || h.includes('amount'));
-    const emailIndex = headers.findIndex(h => h.includes('email'));
-    const phoneIndex = headers.findIndex(h => h.includes('phone'));
-   
-    // Validate required columns exist
-    if (clientNameIndex === -1) {
-      throw new Error('CSV must have a "Client_Name" column');
-    }
-    if (typeIndex === -1) {
-      throw new Error('CSV must have a "Type" column');
-    }
-    if (amountIndex === -1) {
-      throw new Error('CSV must have a "Monthly_Payment" or "Amount" column');
-    }
-
-    // First pass: collect all unique types from CSV
-    const csvTypes = new Set();
-    const newTypesToAdd = [];
-
-    dataRows.forEach((row) => {
-      const type = row[typeIndex]?.trim().toUpperCase() || "";
-      if (type) {
-        csvTypes.add(type);
-        if (!capitalizedTypes.includes(type)) {
-          newTypesToAdd.push(type);
+      // Add new types to the system if any are found
+      if (newTypesToAdd.length > 0) {
+        console.log('[importCsv] Adding new types:', newTypesToAdd);
+        
+        // Add each new type
+        for (const newType of newTypesToAdd) {
+          try {
+            await api.types.addType({ type: newType });
+            capitalizedTypes.push(newType);
+          } catch (error) {
+            console.warn(`[importCsv] Failed to add type "${newType}":`, error);
+            // Continue with other types even if one fails
+          }
         }
-      }
-    });
 
-    // Add new types to the system if any are found
-    if (newTypesToAdd.length > 0) {
-      console.log('[importCsv] Adding new types:', newTypesToAdd);
-      
-      // Add each new type
-      for (const newType of newTypesToAdd) {
+        // Refresh types list after adding new ones
         try {
-          await api.types.addType({ type: newType });
-          capitalizedTypes.push(newType);
+          const updatedTypesResponse = await api.types.getTypes(true);
+          types = updatedTypesResponse.types || [];
+          capitalizedTypes = types.map(type => type.toUpperCase());
         } catch (error) {
-          console.warn(`[importCsv] Failed to add type "${newType}":`, error);
-          // Continue with other types even if one fails
+          console.warn('[importCsv] Failed to refresh types list:', error);
         }
       }
+     
+      // Process data rows
+      const records = [];
+      const parseErrors = [];
 
-      // Refresh types list after adding new ones
-      try {
-        const updatedTypesResponse = await api.types.getTypes(true);
-        types = updatedTypesResponse.types || [];
-        capitalizedTypes = types.map(type => type.toUpperCase());
-      } catch (error) {
-        console.warn('[importCsv] Failed to refresh types list:', error);
+      dataRows.forEach((row, index) => {
+        const clientName = row[clientNameIndex]?.trim() || "";
+        const type = row[typeIndex]?.trim().toUpperCase() || "";
+        const amountStr = row[amountIndex]?.trim() || "";
+        const email = row[emailIndex]?.trim() || "";
+        const phone = row[phoneIndex]?.trim() || "";
+       
+        // Validate required fields
+        if (!clientName) {
+          parseErrors.push(`Row ${index + 2}: Client Name is required`);
+          return;
+        }
+       
+        if (!type) {
+          parseErrors.push(`Row ${index + 2}: Type is required`);
+          return;
+        }
+       
+        // Since we've added new types above, this check should now pass for all valid types
+        if (!capitalizedTypes.includes(type)) {
+          parseErrors.push(`Row ${index + 2}: Type "${type}" could not be processed`);
+          return;
+        }
+       
+        const amount = parseFloat(amountStr);
+        if (isNaN(amount) || amount <= 0) {
+          parseErrors.push(`Row ${index + 2}: Monthly Payment must be a positive number (got: "${amountStr}")`);
+          return;
+        }
+       
+        // Format as expected by backend: [amount, type, email, clientName, phone]
+        records.push([amount, type, email, clientName, phone]);
+      });
+
+      if (records.length === 0) {
+        throw new Error(`No valid records found. Errors:\n${parseErrors.join('\n')}`);
+      }
+
+      const response = await api.payments.importCsv(records, currentYear);
+     
+      // Show detailed success message
+      const summary = response.data?.summary || response.summary;
+      let message = `CSV import completed!\n\n`;
+      message += `• Total records: ${summary?.totalRecords || 'Unknown'}\n`;
+      message += `• Successfully imported: ${summary?.successfulImports || 'Unknown'}\n`;
+      message += `• Duplicates skipped: ${summary?.skippedDuplicates || 'Unknown'}\n`;
+      message += `• Errors: ${summary?.errors || 'Unknown'}`;
+     
+      if (parseErrors.length > 0) {
+        message += `\n\nParse errors:\n${parseErrors.join('\n')}`;
+      }
+     
+      alert(message);
+
+      // Refresh both years and payments, and also refresh types
+      await fetchUserYears(true);
+      await fetchPayments(currentYear, true);
+      if (newTypesToAdd.length > 0) {
+        await fetchTypes(true);
+      }
+    } catch (error) {
+      handleApiError(error);
+     
+      // Show detailed error message
+      let errorMessage = error?.response?.data?.error || error.message || 'Failed to import CSV.';
+     
+      const errorData = error?.response?.data;
+      if (errorData?.details?.errors?.length > 0) {
+        errorMessage += '\n\nServer validation errors:\n' +
+          errorData.details.errors.join('\n');
+      }
+     
+      if (errorData?.details?.duplicates?.length > 0) {
+        errorMessage += '\n\nDuplicates found:\n' +
+          errorData.details.duplicates.map(d =>
+            `• ${d.clientName} (${d.type}) - ${d.reason}`
+          ).join('\n');
+      }
+     
+      alert(errorMessage);
+    } finally {
+      setIsImporting(false);
+      if (csvFileInputRef.current) {
+        csvFileInputRef.current.value = '';
       }
     }
-   
-    // Process data rows
-    const records = [];
-    const parseErrors = [];
-
-    dataRows.forEach((row, index) => {
-      const clientName = row[clientNameIndex]?.trim() || "";
-      const type = row[typeIndex]?.trim().toUpperCase() || "";
-      const amountStr = row[amountIndex]?.trim() || "";
-      const email = row[emailIndex]?.trim() || "";
-      const phone = row[phoneIndex]?.trim() || "";
-     
-      // Validate required fields
-      if (!clientName) {
-        parseErrors.push(`Row ${index + 2}: Client Name is required`);
-        return;
-      }
-     
-      if (!type) {
-        parseErrors.push(`Row ${index + 2}: Type is required`);
-        return;
-      }
-     
-      // Since we've added new types above, this check should now pass for all valid types
-      if (!capitalizedTypes.includes(type)) {
-        parseErrors.push(`Row ${index + 2}: Type "${type}" could not be processed`);
-        return;
-      }
-     
-      const amount = parseFloat(amountStr);
-      if (isNaN(amount) || amount <= 0) {
-        parseErrors.push(`Row ${index + 2}: Monthly Payment must be a positive number (got: "${amountStr}")`);
-        return;
-      }
-     
-      // Format as expected by backend: [amount, type, email, clientName, phone]
-      records.push([amount, type, email, clientName, phone]);
-    });
-
-    if (records.length === 0) {
-      throw new Error(`No valid records found. Errors:\n${parseErrors.join('\n')}`);
-    }
-
-    const response = await api.payments.importCsv(records, currentYear);
-   
-    // Show detailed success message
-    const summary = response.data?.summary || response.summary;
-    let message = `CSV import completed!\n\n`;
-    message += `• Total records: ${summary?.totalRecords || 'Unknown'}\n`;
-    message += `• Successfully imported: ${summary?.successfulImports || 'Unknown'}\n`;
-    message += `• Duplicates skipped: ${summary?.skippedDuplicates || 'Unknown'}\n`;
-    message += `• Errors: ${summary?.errors || 'Unknown'}`;
-    
-    // Add information about new types that were added
-    if (newTypesToAdd.length > 0) {
-      message += `\n• New types automatically added: ${newTypesToAdd.join(', ')}`;
-    }
-   
-    if (parseErrors.length > 0) {
-      message += `\n\nParse errors:\n${parseErrors.join('\n')}`;
-    }
-   
-    alert(message);
-
-    // Refresh both years and payments, and also refresh types
-    await fetchUserYears(true);
-    await fetchPayments(currentYear, true);
-    if (newTypesToAdd.length > 0) {
-      await fetchTypes(true);
-    }
-  } catch (error) {
-    handleApiError(error);
-   
-    // Show detailed error message
-    let errorMessage = error?.response?.data?.error || error.message || 'Failed to import CSV.';
-   
-    const errorData = error?.response?.data;
-    if (errorData?.details?.errors?.length > 0) {
-      errorMessage += '\n\nServer validation errors:\n' +
-        errorData.details.errors.join('\n');
-    }
-   
-    if (errorData?.details?.duplicates?.length > 0) {
-      errorMessage += '\n\nDuplicates found:\n' +
-        errorData.details.duplicates.map(d =>
-          `• ${d.clientName} (${d.type}) - ${d.reason}`
-        ).join('\n');
-    }
-   
-    alert(errorMessage);
-  } finally {
-    setIsImporting(false);
-    if (csvFileInputRef.current) {
-      csvFileInputRef.current.value = '';
-    }
-  }
-};
+  };
 
   // --- FILTERING AND PAGINATION ---
 
@@ -608,32 +604,70 @@ const DashboardPage = ({ setPage }) => {
           >
             <i className="fas fa-plus mr-2"></i> Add Type
           </button>
-          <input
-            type="file"
-            accept=".csv"
-            ref={csvFileInputRef}
-            onChange={importCsv}
-            className="hidden"
-            id="csv-import"
-            disabled={isImporting}
-          />
-          <label
-            htmlFor="csv-import"
-            className={`px-4 py-2 rounded-lg text-gray-700 bg-white border border-gray-300 flex items-center ${
-              isImporting
-                ? "opacity-50 cursor-not-allowed"
-                : "hover:bg-gray-50 cursor-pointer"
-            } transition duration-200`}
-          >
-            <i className="fas fa-upload mr-2"></i>
-            {isImporting ? "Importing..." : "Bulk Import"}
-          </label>
-          <button
-            onClick={() => setPage("reports")}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition duration-200 flex items-center"
-          >
-            <i className="fas fa-chart-bar mr-2"></i> Reports
-          </button>
+          <div className="relative">
+            <input
+              type="file"
+              accept=".csv"
+              ref={csvFileInputRef}
+              onChange={importCsv}
+              className="hidden"
+              id="csv-import"
+              disabled={isImporting}
+            />
+            <label
+              htmlFor="csv-import"
+              className={`px-4 py-2 rounded-lg text-gray-700 bg-white border border-gray-300 flex items-center ${
+                isImporting
+                  ? "opacity-50 cursor-not-allowed"
+                  : "hover:bg-gray-50 cursor-pointer"
+              } transition duration-200 relative`}
+            >
+              <i className="fas fa-upload mr-2"></i>
+              {isImporting ? "Importing..." : "Bulk Import"}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setShowImportTooltip(!showImportTooltip);
+                }}
+                className="ml-2 w-5 h-5 rounded-full bg-gray-600 text-white text-xs flex items-center justify-center hover:bg-gray-700"
+              >
+                i
+              </button>
+            </label>
+            {showImportTooltip && (
+              <div className="absolute top-full mt-2 left-0 z-50 bg-gray-800 text-white p-3 rounded-lg shadow-lg text-sm w-72">
+                <div className="font-semibold mb-2">CSV File Requirements:</div>
+                <div className="space-y-1">
+                  <div>Required columns:</div>
+                  <ul className="list-disc list-inside ml-2">
+                    <li><strong>Client_Name</strong> - Client's name</li>
+                    <li><strong>Type</strong> - Service type (e.g., GST, IT)</li>
+                    <li><strong>Monthly_Payment</strong> - Payment amount</li>
+                  </ul>
+                  <div className="mt-2">Optional columns:</div>
+                  <ul className="list-disc list-inside ml-2">
+                    <li><strong>Phone_Number</strong> - Contact number</li>
+                    <li><strong>Email</strong> - Email address</li>
+                  </ul>
+                </div>
+                <div className="mt-2 text-xs text-gray-300">
+                  Note: New types found in CSV will be automatically added to your types list.
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowImportTooltip(false);
+                  }}
+                  className="absolute top-1 right-1 text-gray-400 hover:text-white"
+                >
+                  <i className="fas fa-times"></i>
+                </button>
+              </div>
+            )}
+          </div>
           <button
             onClick={handleAddNewYear}
             className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition duration-200 flex items-center"
