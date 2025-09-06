@@ -578,10 +578,11 @@ const DashboardPage = ({ setPage }) => {
           return currentStatus === statusFilter;
         }
        
-        // If only month filter is applied, show clients with data (non-zero values) in that month
+        // If only month filter is applied, show clients with 0 entered in that month
         if (monthFilter && !statusFilter) {
           const paidInMonth = parseFloat(row[monthFilter] || 0);
-          return paidInMonth > 0;
+          // Show clients who have 0 entered in that month (not empty boxes)
+          return paidInMonth === 0 && row[monthFilter] !== undefined && row[monthFilter] !== null && row[monthFilter] !== '';
         }
        
         // If only status filter is applied, show clients with that status in any month
@@ -599,8 +600,16 @@ const DashboardPage = ({ setPage }) => {
             } else if (paidInMonth > 0) {
               currentStatus = 'PartiallyPaid';
             }
-            if (currentStatus === statusFilter) {
-              return true;
+           
+            // For unpaid status, only show if the value is exactly 0 (not empty/undefined)
+            if (statusFilter === 'Unpaid') {
+              if (currentStatus === 'Unpaid' && row[month] !== undefined && row[month] !== null && row[month] !== '') {
+                return true;
+              }
+            } else {
+              if (currentStatus === statusFilter) {
+                return true;
+              }
             }
           }
           return false;
