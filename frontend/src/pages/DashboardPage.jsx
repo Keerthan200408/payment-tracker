@@ -564,10 +564,11 @@ const DashboardPage = ({ setPage }) => {
       .filter(row => {
         const amountToBePaid = parseFloat(row.Amount_To_Be_Paid || 0);
        
-        // If both filters are applied, use intersection logic
+        // If both filters are applied, use intersection logic for that specific month
         if (monthFilter && statusFilter) {
           const paidInMonth = parseFloat(row[monthFilter] || 0);
           let currentStatus = 'Unpaid';
+         
           if (amountToBePaid <= 0) {
             currentStatus = 'Paid';
           } else if (paidInMonth >= amountToBePaid) {
@@ -575,14 +576,20 @@ const DashboardPage = ({ setPage }) => {
           } else if (paidInMonth > 0) {
             currentStatus = 'PartiallyPaid';
           }
+         
+          // For unpaid status, only show if the value is exactly 0 (not empty/undefined)
+          if (statusFilter === 'Unpaid') {
+            return currentStatus === 'Unpaid' && row[monthFilter] !== undefined && row[monthFilter] !== null && row[monthFilter] !== '';
+          }
+         
           return currentStatus === statusFilter;
         }
        
-        // If only month filter is applied, show clients with 0 entered in that month
+        // If only month filter is applied, show clients with any value >= 0 in that month
         if (monthFilter && !statusFilter) {
           const paidInMonth = parseFloat(row[monthFilter] || 0);
-          // Show clients who have 0 entered in that month (not empty boxes)
-          return paidInMonth === 0 && row[monthFilter] !== undefined && row[monthFilter] !== null && row[monthFilter] !== '';
+          // Show clients who have any value >= 0 in that month (not empty boxes)
+          return paidInMonth >= 0 && row[monthFilter] !== undefined && row[monthFilter] !== null && row[monthFilter] !== '';
         }
        
         // If only status filter is applied, show clients with that status in any month
