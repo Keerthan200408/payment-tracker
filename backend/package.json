@@ -23,7 +23,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongodb": "^6.17.0",
     "mongoose": "^8.0.0",
-    "nodemailer": "^7.0.3",
+    "nodemailer": "^7.0.5",
     "sanitize-html": "^2.13.0"
   },
   "devDependencies": {
