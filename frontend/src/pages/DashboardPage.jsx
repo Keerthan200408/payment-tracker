@@ -192,8 +192,9 @@ const DashboardPage = ({ setPage }) => {
 
           return {
             ...queueItem,
-            email: updatedEmail || queueItem.email,
-            phone: updatedPhone || queueItem.phone,
+            // Always use the latest contact info from paymentsData, regardless of what was in queue before
+            email: updatedEmail || null,
+            phone: updatedPhone || null,
           };
         }
         return queueItem;

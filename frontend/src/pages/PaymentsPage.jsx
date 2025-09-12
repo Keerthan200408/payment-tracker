@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useData } from '../contexts/DataContext';
+import { useAuth } from '../contexts/AuthContext';
 import api from '../api';
 
 // CORRECTED: Define months array directly in the frontend.
@@ -10,29 +11,52 @@ const months = [
 
 const PaymentsPage = () => {
     const { paymentsData, fetchPayments, handleApiError } = useData();
+    const { sessionToken } = useAuth();
     const [currentYear, setCurrentYear] = useState(() => localStorage.getItem("currentYear") || new Date().getFullYear().toString());
-    const [availableYears, setAvailableYears] = useState([currentYear]);
+    const [availableYears, setAvailableYears] = useState([]);
     const [isLoadingYears, setIsLoadingYears] = useState(false);
 
-    // Fetch available years
+    // Fetch available years - same logic as Dashboard
     const fetchUserYears = useCallback(async (forceRefresh = false) => {
+        if (!sessionToken) return;
+
+        setIsLoadingYears(true);
         try {
-            setIsLoadingYears(true);
-            const response = await api.payments.getUserYears(forceRefresh);
-            const years = response?.data?.years || [];
-            const sortedYears = years.sort((a, b) => parseInt(b) - parseInt(a));
+            const yearsData = await api.payments.getUserYears(forceRefresh);
+            const sortedYears = (yearsData || [])
+                .map(String)
+                .sort((a, b) => b.localeCompare(a)); // Desc order
+
             setAvailableYears(sortedYears);
+
+            // Validate current year selection
+            if (sortedYears.length > 0) {
+                const storedYear = localStorage.getItem('currentYear');
+                if (!sortedYears.includes(storedYear)) {
+                    const newYear = sortedYears[0];
+                    setCurrentYear(newYear);
+                    localStorage.setItem('currentYear', newYear);
+                }
+            }
         } catch (error) {
             handleApiError(error);
         } finally {
             setIsLoadingYears(false);
         }
-    }, [handleApiError]);
+    }, [sessionToken, handleApiError]);
+
+    // Initial load - fetch years when component mounts and when sessionToken is available
+    useEffect(() => {
+        if (sessionToken) {
+            fetchUserYears(true);
+        }
+    }, [sessionToken, fetchUserYears]);
 
     useEffect(() => {
-        fetchPayments(currentYear);
-        fetchUserYears();
-    }, [currentYear, fetchPayments, fetchUserYears]);
+        if (sessionToken && currentYear) {
+            fetchPayments(currentYear);
+        }
+    }, [currentYear, sessionToken, fetchPayments]);
 
     const handleYearChange = useCallback((year) => {
         const yearString = year.toString();
@@ -40,57 +64,10 @@ const PaymentsPage = () => {
         localStorage.setItem('currentYear', yearString);
     }, []);
 
-    // Handle adding a new year
-    const handleAddNewYear = useCallback(async () => {
-        if (availableYears.length === 0) {
-            alert('Please wait for years to load before adding a new year.');
-            return;
-        }
-
-        const latestYear = Math.max(...availableYears.map(y => parseInt(y, 10))) || new Date().getFullYear();
-        const newYear = (latestYear + 1).toString();
-
-        setIsLoadingYears(true);
-        try {
-            await api.payments.addNewYear(newYear);
-
-            // Success - refresh years and switch to the new year
-            await fetchUserYears(true);
-            setCurrentYear(newYear);
-            localStorage.setItem('currentYear', newYear);
-
-            alert(`Year ${newYear} added successfully!`);
-        } catch (error) {
-            const errorMessage = error?.response?.data?.error || `Failed to add year ${newYear}.`;
-
-            if (errorMessage.includes('already exists')) {
-                await fetchUserYears(true);
-                setCurrentYear(newYear);
-                localStorage.setItem('currentYear', newYear);
-                alert(`Year ${newYear} already exists. Switched to that year.`);
-            } else {
-                alert(errorMessage);
-            }
-        } finally {
-            setIsLoadingYears(false);
-        }
-    }, [availableYears, fetchUserYears]);
-
     return (
         <div>
-            {/* Header with Add New Year button and Year dropdown - matching dashboard style */}
+            {/* Header with Year dropdown - removed Add New Year button */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-                <div className="flex items-center gap-3">
-                    <button
-                        onClick={handleAddNewYear}
-                        className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition duration-200 flex items-center"
-                        disabled={isLoadingYears}
-                    >
-                        <i className="fas fa-calendar-plus mr-2"></i>
-                        {isLoadingYears ? "Loading..." : "Add New Year"}
-                    </button>
-                </div>
-
                 <div className="flex items-center gap-3">
                     <select
                         value={currentYear}
@@ -104,6 +81,12 @@ const PaymentsPage = () => {
                             </option>
                         ))}
                     </select>
+                    {isLoadingYears && (
+                        <div className="flex items-center text-sm text-gray-500">
+                            <i className="fas fa-spinner fa-spin mr-1"></i>
+                            Loading years...
+                        </div>
+                    )}
                 </div>
             </div>
 
