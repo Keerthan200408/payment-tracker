@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { useData } from './contexts/DataContext';
 
-// ASSUMPTION: These page components exist in the 'src/pages/' directory.
+// Page components
 import SignInPage from './pages/SignInPage';
 import DashboardPage from './pages/DashboardPage';
 import AddClientPage from './pages/AddClientPage';
@@ -10,10 +10,27 @@ import ClientsPage from './pages/ClientsPage';
 import PaymentsPage from './pages/PaymentsPage';
 import ReportsPage from './pages/ReportsPage';
 
-// ASSUMPTION: These common components exist in 'src/components/common/'.
+// Common components
 import LoadingSkeleton from './components/common/LoadingSkeleton';
 import SessionTimer from './components/common/SessionTimer';
 
+/**
+ * Main Application Component
+ * 
+ * The root component that manages the entire payment tracker application.
+ * Handles authentication state, navigation, and renders appropriate pages
+ * based on user authentication status.
+ * 
+ * Features:
+ * - Google OAuth authentication integration
+ * - Dynamic page navigation and routing
+ * - Session management and automatic logout
+ * - Responsive sidebar and mobile menu
+ * - Client data editing capabilities
+ * - Persistent UI state management
+ * 
+ * @returns {JSX.Element} The main application interface
+ */
 const App = () => {
     const { sessionToken, setSessionToken, currentUser, setCurrentUser, isInitialized, logout } = useAuth();
     const { fetchClients, fetchPayments, fetchTypes } = useData();

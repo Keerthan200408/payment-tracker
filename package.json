@@ -1,10 +1,26 @@
 {
   "name": "payment-tracker",
   "version": "1.0.0",
+  "description": "A comprehensive full-stack payment tracking application for managing client payments and automated notifications",
   "license": "MIT",
+  "author": "Keerthan <your-email@example.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Keerthan200408/payment-tracker"
+  },
+  "keywords": [
+    "payment-tracker",
+    "client-management",
+    "payment-notifications",
+    "react",
+    "nodejs",
+    "mongodb"
+  ],
   "scripts": {
-    "start": "cd backend && yarn install && node server.js",
-    "dev": "cd backend && yarn dev"
+    "start": "cd backend && npm install && node server.js",
+    "dev": "cd backend && npm run dev",
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "build": "cd frontend && npm run build"
   },
   "devDependencies": {
     "tailwindcss": "^4.1.8"

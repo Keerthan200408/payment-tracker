@@ -1,7 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../../api';
 
-/* --------------------- helpers: normalization + formatting --------------------- */
+/**
+ * Utility Functions for Data Normalization and Formatting
+ */
+
+/**
+ * Picks the first non-empty value from a list of candidates
+ * @param {...any} cands - Candidate values to check
+ * @returns {string|null} First non-empty value or null
+ */
 const pickFirst = (...cands) => {
   for (const v of cands) {
     if (v !== undefined && v !== null) {
@@ -12,6 +20,11 @@ const pickFirst = (...cands) => {
   return null;
 };
 
+/**
+ * Normalizes phone number from various object field variations
+ * @param {Object} o - Object containing phone number data
+ * @returns {string|null} Normalized phone number
+ */
 const normPhoneFromObj = (o) =>
   pickFirst(
     o?.phone, o?.Phone, o?.Phone_Number, o?.['Phone Number'],
@@ -20,6 +33,11 @@ const normPhoneFromObj = (o) =>
     o?.contact_number, o?.Contact
   );
 
+/**
+ * Normalizes email address from various object field variations
+ * @param {Object} o - Object containing email data
+ * @returns {string|null} Normalized email address
+ */
 const normEmailFromObj = (o) =>
   pickFirst(
     o?.email, o?.Email, o?.['E-mail'],
@@ -27,12 +45,33 @@ const normEmailFromObj = (o) =>
     o?.Mail, o?.contactEmail
   );
 
+/**
+ * Formats number as currency with 2 decimal places
+ * @param {number|string} x - Value to format
+ * @returns {string} Formatted currency string
+ */
 const money = (x) => {
   const n = Number(x);
   return Number.isFinite(n) ? n.toFixed(2) : '0.00';
 };
-/* ----------------------------------------------------------------------------- */
 
+/**
+ * NotificationModal - Component for managing and sending payment notifications
+ * 
+ * Provides functionality to:
+ * - Customize notification templates
+ * - Send bulk notifications to clients
+ * - Track notification queue and status
+ * - Handle both email and WhatsApp notifications
+ * 
+ * @param {Object} props - Component properties
+ * @param {boolean} props.isOpen - Modal visibility state
+ * @param {Function} props.onClose - Function to close the modal
+ * @param {Array} props.queue - Notification queue array
+ * @param {Function} props.setQueue - Function to update notification queue
+ * @param {Function} props.clearQueueFromDB - Function to clear queue from database
+ * @param {Array} props.paymentsData - Payment data for template processing
+ */
 const NotificationModal = ({ isOpen, onClose, queue, setQueue, clearQueueFromDB, paymentsData }) => {
   const [messageTemplate, setMessageTemplate] = useState('');
   const [isSending, setIsSending] = useState(false);
