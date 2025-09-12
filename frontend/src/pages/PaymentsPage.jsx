@@ -1,8 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useData } from '../contexts/DataContext';
-
-// ASSUMPTION: This component exists in the specified path.
-import YearSelector from '../components/dashboard/YearSelector';
+import api from '../api';
 
 // CORRECTED: Define months array directly in the frontend.
 const months = [
@@ -11,27 +9,105 @@ const months = [
 ];
 
 const PaymentsPage = () => {
-    const { paymentsData, fetchPayments } = useData();
+    const { paymentsData, fetchPayments, handleApiError } = useData();
     const [currentYear, setCurrentYear] = useState(() => localStorage.getItem("currentYear") || new Date().getFullYear().toString());
-    const [availableYears, setAvailableYears] = useState([currentYear]); // This should be populated from API
+    const [availableYears, setAvailableYears] = useState([currentYear]);
+    const [isLoadingYears, setIsLoadingYears] = useState(false);
+
+    // Fetch available years
+    const fetchUserYears = useCallback(async (forceRefresh = false) => {
+        try {
+            setIsLoadingYears(true);
+            const response = await api.payments.getUserYears(forceRefresh);
+            const years = response?.data?.years || [];
+            const sortedYears = years.sort((a, b) => parseInt(b) - parseInt(a));
+            setAvailableYears(sortedYears);
+        } catch (error) {
+            handleApiError(error);
+        } finally {
+            setIsLoadingYears(false);
+        }
+    }, [handleApiError]);
 
     useEffect(() => {
         fetchPayments(currentYear);
-    }, [currentYear, fetchPayments]);
+        fetchUserYears();
+    }, [currentYear, fetchPayments, fetchUserYears]);
 
-    const handleYearChange = (year) => {
-        setCurrentYear(year);
-        // fetchPayments is called by the useEffect above
-    };
+    const handleYearChange = useCallback((year) => {
+        const yearString = year.toString();
+        setCurrentYear(yearString);
+        localStorage.setItem('currentYear', yearString);
+    }, []);
+
+    // Handle adding a new year
+    const handleAddNewYear = useCallback(async () => {
+        if (availableYears.length === 0) {
+            alert('Please wait for years to load before adding a new year.');
+            return;
+        }
+
+        const latestYear = Math.max(...availableYears.map(y => parseInt(y, 10))) || new Date().getFullYear();
+        const newYear = (latestYear + 1).toString();
+
+        setIsLoadingYears(true);
+        try {
+            await api.payments.addNewYear(newYear);
+
+            // Success - refresh years and switch to the new year
+            await fetchUserYears(true);
+            setCurrentYear(newYear);
+            localStorage.setItem('currentYear', newYear);
+
+            alert(`Year ${newYear} added successfully!`);
+        } catch (error) {
+            const errorMessage = error?.response?.data?.error || `Failed to add year ${newYear}.`;
+
+            if (errorMessage.includes('already exists')) {
+                await fetchUserYears(true);
+                setCurrentYear(newYear);
+                localStorage.setItem('currentYear', newYear);
+                alert(`Year ${newYear} already exists. Switched to that year.`);
+            } else {
+                alert(errorMessage);
+            }
+        } finally {
+            setIsLoadingYears(false);
+        }
+    }, [availableYears, fetchUserYears]);
 
     return (
         <div>
-            <YearSelector 
-                currentYear={currentYear}
-                availableYears={availableYears}
-                onYearChange={handleYearChange}
-            />
-            <div className="bg-white rounded-lg shadow-sm overflow-hidden mt-6">
+            {/* Header with Add New Year button and Year dropdown - matching dashboard style */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={handleAddNewYear}
+                        className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition duration-200 flex items-center"
+                        disabled={isLoadingYears}
+                    >
+                        <i className="fas fa-calendar-plus mr-2"></i>
+                        {isLoadingYears ? "Loading..." : "Add New Year"}
+                    </button>
+                </div>
+
+                <div className="flex items-center gap-3">
+                    <select
+                        value={currentYear}
+                        onChange={(e) => handleYearChange(e.target.value)}
+                        className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500 w-full sm:w-auto text-sm sm:text-base"
+                        disabled={isLoadingYears}
+                    >
+                        {availableYears.map((year) => (
+                            <option key={year} value={year}>
+                                {year}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full">
                         <thead className="bg-gray-50">

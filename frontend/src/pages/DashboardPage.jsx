@@ -146,6 +146,66 @@ const DashboardPage = ({ setPage }) => {
     }
   }, [availableYears, fetchUserYears]);
 
+  // Update notification queue when client details change
+  const updateNotificationQueueForClient = useCallback((oldClientName, oldType, newClientData) => {
+    setNotificationQueue(prev => 
+      prev.map(item => {
+        if (item.clientName === oldClientName && item.type === oldType) {
+          return {
+            ...item,
+            clientName: newClientData.Client_Name || item.clientName,
+            type: newClientData.Type || item.type,
+            email: newClientData.Email || item.email,
+            phone: newClientData.Phone_Number || item.phone,
+          };
+        }
+        return item;
+      })
+    );
+  }, []);
+
+  // Sync notification queue with latest client data from paymentsData
+  const syncNotificationQueueWithClientData = useCallback(() => {
+    if (notificationQueue.length === 0 || paymentsData.length === 0) return;
+
+    setNotificationQueue(prev => 
+      prev.map(queueItem => {
+        // Find the corresponding client in paymentsData
+        const currentClientData = paymentsData.find(payment => 
+          payment.Client_Name === queueItem.clientName && payment.Type === queueItem.type
+        );
+
+        if (currentClientData) {
+          // Update with latest client contact info
+          const updatedEmail = pickFirst(
+            currentClientData.email, currentClientData.Email, 
+            currentClientData['E-mail'], currentClientData.Email_Address, 
+            currentClientData['Email Address'], currentClientData.Mail
+          );
+          const updatedPhone = pickFirst(
+            currentClientData.phone, currentClientData.Phone, 
+            currentClientData.Phone_Number, currentClientData['Phone Number'], 
+            currentClientData.whatsapp, currentClientData.WhatsApp, 
+            currentClientData.Mobile, currentClientData.Mobile_Number, 
+            currentClientData['Mobile Number']
+          );
+
+          return {
+            ...queueItem,
+            email: updatedEmail || queueItem.email,
+            phone: updatedPhone || queueItem.phone,
+          };
+        }
+        return queueItem;
+      })
+    );
+  }, [notificationQueue, paymentsData, pickFirst]);
+
+  // Sync notification queue when paymentsData changes
+  useEffect(() => {
+    syncNotificationQueueWithClientData();
+  }, [paymentsData]); // Removed syncNotificationQueueWithClientData from dependencies to avoid infinite loop
+
   // --- USEEFFECT HOOKS FOR DATA FETCHING ---
 
   // 1. Initial load: Fetch years when user logs in
