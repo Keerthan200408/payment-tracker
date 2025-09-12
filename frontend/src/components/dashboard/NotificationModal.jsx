@@ -100,7 +100,8 @@ Thank you!`
         if (phone) {
           await api.messages.sendWhatsApp({ to: phone, message: msg });
           ok++;
-        } else if (email) {
+        } 
+        if (email) {
           await api.messages.sendEmail({
             to: email,
             subject: `Payment Reminder: ${n.type ?? ''}`,
