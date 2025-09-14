@@ -60,7 +60,7 @@ Create a `.env` file in the backend directory:
 
 ```env
 # Server Configuration
-PORT=5173
+PORT=5000
 NODE_ENV=development
 
 # Database

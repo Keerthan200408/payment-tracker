@@ -18,7 +18,7 @@ const months = [
 ];
 
 const config = {
-  PORT: process.env.PORT || 5173,
+  PORT: process.env.PORT || 5000,
   NODE_ENV: process.env.NODE_ENV || 'development',
   MONGODB_URI: process.env.MONGODB_URI,
   SECRET_KEY: process.env.SECRET_KEY,

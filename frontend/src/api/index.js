@@ -1,10 +1,13 @@
 import axios from "axios";
 
 /* --------------------------------- Config --------------------------------- */
-const BASE_URL =
-  process.env.REACT_APP_API_BASE ||
-  process.env.VITE_API_BASE ||
-  "https://payment-tracker-aswa.onrender.com/api";
+// Auto-detect environment and use appropriate API URL
+const isDevelopment = import.meta.env.MODE === 'development' || window.location.hostname === 'localhost';
+const BASE_URL = isDevelopment 
+  ? (import.meta.env.VITE_API_BASE_URL || "http://localhost:5000") + "/api"
+  : (import.meta.env.VITE_API_BASE_URL_PRODUCTION || "https://payment-tracker-aswa.onrender.com") + "/api";
+
+console.log("API Base URL:", BASE_URL); // For debugging
 
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
